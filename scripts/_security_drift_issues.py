@@ -2,7 +2,7 @@
 """Rolling per-family drift-issue reconcile IO (#1726).
 
 Split out of ``scripts/security_drift_report.py`` to keep that module within its
-maintainability size budget (``.gitapex/module-size-distribution.toml``),
+maintainability size budget (``.gitapex/snapshots/module-size-distribution.toml``),
 mirroring the ``_security_drift_families.py`` split (#1488).
 
 This module owns the GitHub-issue lifecycle that maintains exactly ONE rolling

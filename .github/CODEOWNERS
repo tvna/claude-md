@@ -3,3 +3,9 @@
 .github/CODEOWNERS                     @tvna
 docs/runbooks/rulesets.md              @tvna
 /.gitapex/                             @tvna
+# The module-size snapshot under snapshots/ is machine-written by the post-merge
+# automation (scripts/scan_module_size_distribution.py) and published via the
+# chore/update-generated-docs bot PR. An owner-less pattern removes the
+# code-owner requirement so bot_pr_automerge.py can reach a clean mergeable_state
+# (require_code_owner_review in .github/rulesets/main.json). Refs #2364.
+/.gitapex/snapshots/

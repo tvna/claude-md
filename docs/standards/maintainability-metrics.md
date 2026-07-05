@@ -64,7 +64,7 @@ The hard limit and the warning band are per-run signals: they describe a
 single CI run, not the trend. A ceiling clustering effect (Goodhart's
 law) is only visible *over time*, so `scripts/scan_module_size_distribution.py`
 persists the distribution as a committed snapshot,
-`.gitapex/module-size-distribution.toml`, and the git history of
+`.gitapex/snapshots/module-size-distribution.toml`, and the git history of
 that one file is the time series.
 
 The snapshot is an aggregate histogram plus warn-band and over-budget

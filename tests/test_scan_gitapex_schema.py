@@ -1,11 +1,12 @@
 """Tests for ``scripts/scan_gitapex_schema.py``.
 
-Covers the happy path (the real ``.gitapex/*.toml`` files validate against
-their sibling schemas), a missing-sibling-schema violation, an unparseable
-TOML/schema file, a non-object schema root (``SchemaError``), a genuine shape
-violation, and the ``main`` CLI contract (exit 0/1/64).
+Covers the happy path (the real ``.gitapex/**/*.toml`` files validate against
+their sibling schemas), recursive discovery into subdirectories (``snapshots/``
+since #2364), a missing-sibling-schema violation, an unparseable TOML/schema
+file, a non-object schema root (``SchemaError``), a genuine shape violation, and
+the ``main`` CLI contract (exit 0/1/64).
 
-Refs #2342, #2252.
+Refs #2342, #2252, #2364.
 """
 
 from __future__ import annotations
@@ -38,6 +39,14 @@ class TestDiscoverTomlFiles:
 
     def test_empty_dir_returns_empty(self, tmp_path: Path) -> None:
         assert gate.discover_toml_files(tmp_path) == []
+
+    def test_discovers_recursively(self, tmp_path: Path) -> None:
+        # #2364: the machine-written snapshot lives under .gitapex/snapshots/,
+        # so discovery must recurse rather than glob only the top level.
+        _write(tmp_path / "root.toml", "")
+        _write(tmp_path / "snapshots" / "snap.toml", "")
+        rels = [p.relative_to(tmp_path).as_posix() for p in gate.discover_toml_files(tmp_path)]
+        assert rels == ["root.toml", "snapshots/snap.toml"]
 
 
 class TestVerifyFile:
@@ -90,9 +99,8 @@ class TestRealGitapexFiles:
         gitapex_dir = _REPO_ROOT / ".gitapex"
         errors: list[str] = []
         for toml_path in gate.discover_toml_files(gitapex_dir):
-            errors.extend(
-                gate.verify_file(toml_path, display=f".gitapex/{toml_path.name}")
-            )
+            rel = toml_path.relative_to(gitapex_dir).as_posix()
+            errors.extend(gate.verify_file(toml_path, display=f".gitapex/{rel}"))
         assert errors == []
 
 
@@ -193,6 +201,17 @@ class TestMainCli:
         _write(tmp_path / "name.toml", "a = 1\n")
         _write(
             tmp_path / "name.schema.json",
+            json.dumps({"type": "object", "properties": {"a": {"type": "integer"}}}),
+        )
+        assert gate.main(["verify", "--gitapex-dir", str(tmp_path)]) == 0
+
+    def test_valid_subdir_toml_exits_zero(self, tmp_path: Path) -> None:
+        # #2364: a TOML with its sibling schema inside a subdirectory validates,
+        # exercising recursive discovery and the subdirectory-aware display path.
+        sub = tmp_path / "snapshots"
+        _write(sub / "name.toml", "a = 1\n")
+        _write(
+            sub / "name.schema.json",
             json.dumps({"type": "object", "properties": {"a": {"type": "integer"}}}),
         )
         assert gate.main(["verify", "--gitapex-dir", str(tmp_path)]) == 0

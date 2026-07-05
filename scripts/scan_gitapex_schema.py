@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CI gate: validate every ``.gitapex/*.toml`` against its sibling JSON Schema.
+"""CI gate: validate every ``.gitapex/**/*.toml`` against its sibling JSON Schema.
 
 Issue #2342 moved five repo-specific config TOMLs from ``docs/`` into
 ``.gitapex/`` and added a JSON Schema per file (owner's schema-at-migration
@@ -55,8 +55,15 @@ _GITAPEX_DIR = ".gitapex"
 
 
 def discover_toml_files(gitapex_dir: Path) -> list[Path]:
-    """Return every ``*.toml`` file directly under *gitapex_dir*, sorted."""
-    return sorted(gitapex_dir.glob("*.toml"))
+    """Return every ``*.toml`` file recursively under *gitapex_dir*, sorted.
+
+    Recursive (``rglob``) since #2364 split the machine-written size snapshot
+    into ``.gitapex/snapshots/``: both the root policy TOMLs and the snapshot
+    under ``snapshots/`` must be discovered. Each file's sibling
+    ``NAME.schema.json`` still lives in the same directory, so :func:`verify_file`
+    keeps its single-directory sibling lookup.
+    """
+    return sorted(gitapex_dir.rglob("*.toml"))
 
 
 def verify_file(toml_path: Path, *, display: str) -> list[str]:
@@ -103,8 +110,9 @@ def cmd_verify(args: argparse.Namespace) -> int:
     errors: list[str] = []
     for toml_path in toml_files:
         try:
+            rel = toml_path.relative_to(gitapex_dir).as_posix()
             errors.extend(
-                verify_file(toml_path, display=f"{args.gitapex_dir}/{toml_path.name}")
+                verify_file(toml_path, display=f"{args.gitapex_dir}/{rel}")
             )
         except SchemaError as exc:
             errors.append(str(exc))
@@ -115,7 +123,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
         return 1
 
     print(
-        f"OK: {_SCRIPT}: {len(toml_files)} {args.gitapex_dir}/*.toml file(s) validate "
+        f"OK: {_SCRIPT}: {len(toml_files)} {args.gitapex_dir}/**/*.toml file(s) validate "
         "against their sibling schema.",
         file=sys.stderr,
     )
@@ -135,7 +143,7 @@ def main(argv: list[str] | None = None) -> int:
         return 64
 
     parser = argparse.ArgumentParser(
-        description="Validate every .gitapex/*.toml against its sibling JSON Schema."
+        description="Validate every .gitapex/**/*.toml against its sibling JSON Schema."
     )
     parser.add_argument("command", help="Must be 'verify'.")
     parser.add_argument("--gitapex-dir", default=_GITAPEX_DIR)

@@ -130,7 +130,7 @@ jobs:
             --body-file "$body_file"
 
       - name: Forbid hand edits to generated script docs
-        # docs/generated/ and the .gitapex/module-size-distribution.toml
+        # docs/generated/ and the .gitapex/snapshots/module-size-distribution.toml
         # size snapshot are owned by the post-merge automation (#1540, #2013).
         # This gate fails a non-bot PR whose diff touches them. The post-merge
         # bot branch (chore/update-generated-docs) is exempt; it is resolved
