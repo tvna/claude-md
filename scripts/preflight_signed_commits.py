@@ -91,13 +91,14 @@ from pathlib import Path
 
 from _commit_signing import is_unsigned
 from _git import (
+    _PUSH_REFS_ENV_VAR,  # noqa: F401  re-exported for tests (subject._PUSH_REFS_ENV_VAR)
+    _PUSH_REMOTE_ENV_VAR,  # noqa: F401  re-exported for tests (subject._PUSH_REMOTE_ENV_VAR)
     PushRef,
     Runner,
     commits_for_pushed_refs,
+    commits_in_range,
     make_runner,
-    parse_push_refs,  # noqa: F401  re-exported for callers/tests
     read_push_refs,
-    rev_list,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -110,13 +111,6 @@ _GIT_TIMEOUT_SECONDS = 30
 # text (a sibling control for the same category; see the module docstring).
 _ACK_ENV_VAR = "PREFLIGHT_SIGNED_COMMITS_ACK"
 _ACK_MARKER_RE = re.compile(r"(?m)^# unsigned-ack\r?$")
-
-# Re-exported so ``preflight_signed_commits.PushRef`` / ``.parse_push_refs`` /
-# ``.read_push_refs`` keep resolving for existing callers and tests; the
-# canonical definitions and the env var names live in ``_git`` (shared with
-# every pre-push gate that inspects the commits actually being pushed, #2307).
-_PUSH_REFS_ENV_VAR = "PREFLIGHT_PUSH_REFS"
-_PUSH_REMOTE_ENV_VAR = "PREFLIGHT_PUSH_REMOTE"
 
 
 @dataclass(frozen=True)
@@ -137,17 +131,6 @@ def ack_present(env: Mapping[str, str] | None = None) -> bool:
     """
     value = (os.environ if env is None else env).get(_ACK_ENV_VAR, "")
     return _ACK_MARKER_RE.search(value) is not None
-
-
-def commits_in_range(runner: Runner, base_ref: str) -> list[str] | None:
-    """Return the shas in ``<base_ref>..HEAD``, or None when undeterminable.
-
-    Delegates to the shared :func:`_git.rev_list`: None signals the range could
-    not be resolved (the base ref is missing, or a git error occurred) and the
-    caller treats it as a skip; an empty list means the range resolved with
-    nothing to inspect (HEAD already contains the base), which is a pass.
-    """
-    return rev_list(runner, [f"{base_ref}..HEAD"])
 
 
 def check_signed_commits(*, runner: Runner, base_ref: str) -> SignedCommitsResult:

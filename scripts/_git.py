@@ -238,6 +238,19 @@ def read_push_refs(env: Mapping[str, str] | None = None) -> tuple[list[PushRef],
     return refs, remote
 
 
+def commits_in_range(runner: Runner, base_ref: str) -> list[str] | None:
+    """Return the shas in ``<base_ref>..HEAD``, or None when undeterminable.
+
+    Delegates to :func:`rev_list`: None signals the range could not be
+    resolved (the base ref is missing, or a git error occurred) so a caller
+    can fail open; an empty list means the range resolved with nothing to
+    inspect (HEAD already contains the base). Shared by every pre-push gate
+    that falls back to a fixed base-ref range when no pushed-ref payload is
+    present (``preflight_coauthor_trailer.py``, ``preflight_signed_commits.py``).
+    """
+    return rev_list(runner, [f"{base_ref}..HEAD"])
+
+
 def commits_for_pushed_refs(
     runner: Runner, refs: list[PushRef], remote: str
 ) -> tuple[list[str], bool]:
