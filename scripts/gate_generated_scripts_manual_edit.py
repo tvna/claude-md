@@ -78,6 +78,20 @@ PROTECTED_PREFIXES = (
 # exists to relocate.
 _PROTECTED_EXACT_FILES = frozenset(p for p in PROTECTED_PREFIXES if not p.endswith("/"))
 
+# The folder-prefix (non-exact-file) subset of PROTECTED_PREFIXES, for use with
+# str.startswith(). Kept separate from _PROTECTED_EXACT_FILES so exact files are
+# matched by equality (``in``), not by prefix: plain startswith() has no path
+# boundary, so ``.gitapex/module-size-distribution.toml.bak`` would otherwise
+# also satisfy startswith(".gitapex/module-size-distribution.toml") and be
+# misclassified as a hand-edit of the protected snapshot.
+_PROTECTED_FOLDER_PREFIXES = tuple(p for p in PROTECTED_PREFIXES if p.endswith("/"))
+
+
+def _is_protected(path: str) -> bool:
+    """Return True when *path* is a protected folder member or exact file."""
+    return path.startswith(_PROTECTED_FOLDER_PREFIXES) or path in _PROTECTED_EXACT_FILES
+
+
 # The post-merge bot branches that legitimately regenerate the folder, each a
 # fixed PR_BRANCH used by a post-merge job:
 # - chore/update-generated-docs: the ``decision-tree`` job (AST docs + diagrams).
@@ -161,15 +175,12 @@ def changed_generated_docs(
         status = parts[0]
         if status.startswith("R") and len(parts) == 3:
             old_path, new_path = parts[1], parts[2]
-            if (
-                not old_path.startswith(PROTECTED_PREFIXES)
-                and new_path in _PROTECTED_EXACT_FILES
-            ):
+            if not _is_protected(old_path) and new_path in _PROTECTED_EXACT_FILES:
                 continue
-            touched.update(p for p in (old_path, new_path) if p.startswith(PROTECTED_PREFIXES))
+            touched.update(p for p in (old_path, new_path) if _is_protected(p))
         elif len(parts) == 2:
             path = parts[1]
-            if path.startswith(PROTECTED_PREFIXES):
+            if _is_protected(path):
                 touched.add(path)
     return frozenset(touched)
 
