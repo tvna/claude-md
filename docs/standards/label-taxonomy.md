@@ -41,8 +41,14 @@ The TOML policy records target labels, family cardinality, rename sources,
 retired labels, and area-to-path mappings. The JSON catalog now carries the
 five final rename names (#972 renames batch, #2139); `labels_apply.py` reads the
 `rename_from` map from this TOML to rename the live labels in place so existing
-assignments are preserved. Retirements and area additions are deferred to later
-#972 batches and must not be applied to the catalog before then.
+assignments are preserved. Retirements and area additions are otherwise
+deferred to later #972 batches and must not be applied to the catalog before
+then. The one exception: `area:ci-ops`, `area:governance`, and
+`area:security-intel` were added to the live catalog ahead of that batch, per
+the owner's `layer:meta` successor decision (#1041 comment 4882932274, #2313)
+and the scoped `[rollout].area_addition_exception` entry in
+`.github/label-policy.toml`. No other area label is affected; the remaining
+#972 area batch stays deferred.
 
 ## Final Label Families
 
