@@ -22,10 +22,27 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["_identity_labels(...)"]
-    N002["identity = [label for label in _resolve_registry_labels() if not label.endswith('<str>')]"]
-    N003["if not identity"]
+    N002["retired = retired_label_names(...)"]
+    N003["identity = [label for label in _resolve_registry_labels() if not label.endswith('<str>') and label not in retired]"]
+    N004["if not identity"]
+    N005["raise RuntimeError('<str>')"]
+    N006["return identity"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 -->|"true"| N005
+    N004 -->|"false"| N006
+```
+
+## _discovery_labels(...)
+
+```mermaid
+flowchart TD
+    N001["_discovery_labels(...)"]
+    N002["stable = [label for label in _resolve_registry_labels() if not label.endswith('<str>') and (not label.startswith('<str>'))]"]
+    N003["if not stable"]
     N004["raise RuntimeError('<str>')"]
-    N005["return identity"]
+    N005["return _ssot.group_labels_by_family(stable)"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
@@ -674,31 +691,32 @@ flowchart TD
     N089["return 0"]
     N090["title = build_retro_title(...)"]
     N091["body = build_retro_body(...)"]
-    N092["labels = issue_labels(...)"]
-    N093["_terminal_labels(...)"]
-    N094["created = create_issue(...)"]
-    N095["new_number = get(...)"]
-    N096["new_url = created.get('<str>') or '<str>'"]
-    N097["back_link_status = '<str>'"]
-    N098["terminal_label_status = '<str>'"]
-    N099["if isinstance(new_number, int)"]
-    N100["if not _pr_comments_enabled()"]
-    N101["back_link_status = '<str>'"]
-    N102["try"]
-    N103["back_link_status = post_back_link_comment(...)"]
-    N104["except GitHubApiError"]
-    N105["print(...)"]
-    N106["back_link_status = '<str>'"]
-    N107["try"]
-    N108["apply_terminal_label(...)"]
-    N109["terminal_label_status = '<str>'"]
-    N110["except GitHubApiError"]
-    N111["print(...)"]
-    N112["terminal_label_status = '<str>'"]
-    N113["msg = f'<str>{new_number}<str>{new_url}<str>{back_link_status}<str>{terminal_label_status}'"]
-    N114["print(...)"]
-    N115["_append_summary(...)"]
-    N116["return 0"]
+    N092["inherited_layers = tuple(...)"]
+    N093["labels = issue_labels(...)"]
+    N094["_terminal_labels(...)"]
+    N095["created = create_issue(...)"]
+    N096["new_number = get(...)"]
+    N097["new_url = created.get('<str>') or '<str>'"]
+    N098["back_link_status = '<str>'"]
+    N099["terminal_label_status = '<str>'"]
+    N100["if isinstance(new_number, int)"]
+    N101["if not _pr_comments_enabled()"]
+    N102["back_link_status = '<str>'"]
+    N103["try"]
+    N104["back_link_status = post_back_link_comment(...)"]
+    N105["except GitHubApiError"]
+    N106["print(...)"]
+    N107["back_link_status = '<str>'"]
+    N108["try"]
+    N109["apply_terminal_label(...)"]
+    N110["terminal_label_status = '<str>'"]
+    N111["except GitHubApiError"]
+    N112["print(...)"]
+    N113["terminal_label_status = '<str>'"]
+    N114["msg = f'<str>{new_number}<str>{new_url}<str>{back_link_status}<str>{terminal_label_status}'"]
+    N115["print(...)"]
+    N116["_append_summary(...)"]
+    N117["return 0"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
@@ -806,27 +824,28 @@ flowchart TD
     N096 --> N097
     N097 --> N098
     N098 --> N099
-    N099 -->|"true"| N100
+    N099 --> N100
     N100 -->|"true"| N101
-    N100 -->|"false"| N102
-    N102 -->|"try"| N103
-    N102 -->|"raises"| N104
-    N104 --> N105
+    N101 -->|"true"| N102
+    N101 -->|"false"| N103
+    N103 -->|"try"| N104
+    N103 -->|"raises"| N105
     N105 --> N106
-    N101 --> N107
-    N103 --> N107
     N106 --> N107
-    N107 -->|"try"| N108
-    N108 --> N109
-    N107 -->|"raises"| N110
-    N110 --> N111
+    N102 --> N108
+    N104 --> N108
+    N107 --> N108
+    N108 -->|"try"| N109
+    N109 --> N110
+    N108 -->|"raises"| N111
     N111 --> N112
-    N109 --> N113
     N112 --> N113
-    N099 -->|"false"| N113
+    N110 --> N114
     N113 --> N114
+    N100 -->|"false"| N114
     N114 --> N115
     N115 --> N116
+    N116 --> N117
 ```
 
 ## _now_utc_iso(...)

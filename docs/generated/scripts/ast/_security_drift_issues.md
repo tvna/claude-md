@@ -38,38 +38,40 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["list_open_family_issues(...)"]
-    N002["query = urlencode(...)"]
-    N003["(code, response) = apply(...)"]
-    N004["if not 200 <= code < 300"]
-    N005["print(...)"]
-    N006["return None"]
-    N007["try"]
-    N008["entries = loads(...)"]
-    N009["except json.JSONDecodeError"]
-    N010["print(...)"]
-    N011["return None"]
-    N012["if not isinstance(entries, list)"]
-    N013["print(...)"]
-    N014["return None"]
-    N015["result = []"]
-    N016["for entry in entries:     if not isinstance(entry, dict) or '<str>' in entry:         continue     number, title = (entry.get('<str>'), entry.get('<str>'))     if isinstance(number, int) and isinstance(title, str):         result.append((number, title))"]
-    N017["return result"]
+    N002["type_labels = [label for label in issue_labels() if label.startswith('<str>')]"]
+    N003["query = urlencode(...)"]
+    N004["(code, response) = apply(...)"]
+    N005["if not 200 <= code < 300"]
+    N006["print(...)"]
+    N007["return None"]
+    N008["try"]
+    N009["entries = loads(...)"]
+    N010["except json.JSONDecodeError"]
+    N011["print(...)"]
+    N012["return None"]
+    N013["if not isinstance(entries, list)"]
+    N014["print(...)"]
+    N015["return None"]
+    N016["result = []"]
+    N017["for entry in entries:     if not isinstance(entry, dict) or '<str>' in entry:         continue     number, title = (entry.get('<str>'), entry.get('<str>'))     if isinstance(number, int) and isinstance(title, str):         result.append((number, title))"]
+    N018["return result"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
-    N004 -->|"true"| N005
-    N005 --> N006
-    N004 -->|"false"| N007
-    N007 -->|"try"| N008
-    N007 -->|"raises"| N009
-    N009 --> N010
+    N004 --> N005
+    N005 -->|"true"| N006
+    N006 --> N007
+    N005 -->|"false"| N008
+    N008 -->|"try"| N009
+    N008 -->|"raises"| N010
     N010 --> N011
-    N008 --> N012
-    N012 -->|"true"| N013
-    N013 --> N014
-    N012 -->|"false"| N015
-    N015 --> N016
+    N011 --> N012
+    N009 --> N013
+    N013 -->|"true"| N014
+    N014 --> N015
+    N013 -->|"false"| N016
     N016 --> N017
+    N017 --> N018
 ```
 
 ## close_family_issue(...)
@@ -102,7 +104,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["create_family_issue(...)"]
-    N002["payload = {'<str>': render_family_issue_title(family), '<str>': render_family_issue_body(family, run_url=run_url, run_date=run_date), '<str>': list(ISSUE_LABELS)}"]
+    N002["payload = {'<str>': render_family_issue_title(family), '<str>': render_family_issue_body(family, run_url=run_url, run_date=run_date), '<str>': list(issue_labels())}"]
     N003["(code, response) = apply(...)"]
     N004["if not 200 <= code < 300"]
     N005["print(...)"]
