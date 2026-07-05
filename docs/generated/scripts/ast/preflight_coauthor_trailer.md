@@ -2,13 +2,21 @@
 
 This file is generated from `scripts/preflight_coauthor_trailer.py` by `python3 scripts/script_ast_graph.py all-doc`. Do not edit it by hand: content under `docs/generated/scripts/` is owned by the post-merge automation (refs #1540); update the source script instead.
 
-## commits_in_range(...)
+## _emails_in_segment(...)
 
 ```mermaid
 flowchart TD
-    N001["commits_in_range(...)"]
-    N002["return rev_list(runner, [f'{base_ref}<str>'])"]
+    N001["_emails_in_segment(...)"]
+    N002["angle_match = search(...)"]
+    N003["if angle_match"]
+    N004["return [m.group('<str>') for m in _EMAIL_BARE_RE.finditer(angle_match.group('<str>'))]"]
+    N005["bare_match = search(...)"]
+    N006["return [bare_match.group('<str>')] if bare_match else []"]
     N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"true"| N004
+    N003 -->|"false"| N005
+    N005 --> N006
 ```
 
 ## _commit_author_and_body(...)
@@ -40,7 +48,7 @@ flowchart TD
 flowchart TD
     N001["find_redundant_trailers(...)"]
     N002["violations = []"]
-    N003["for sha in shas:     parsed = _commit_author_and_body(runner, sha)     if parsed is None:         continue     author_email, body = parsed     for match in _TRAILER_RE.finditer(body):         trailer_email = (match.group('<str>') or match.group('<str>') or '<str>').strip()         if trailer_email and trailer_email.casefold() == author_email.casefold():             violations.append(Violation(sha=sha, author_email=author_email, trailer_email=trailer_email))"]
+    N003["for sha in shas:     parsed = _commit_author_and_body(runner, sha)     if parsed is None:         continue     author_email, body = parsed     for line_match in _TRAILER_LINE_RE.finditer(body):         rest = line_match.group('<str>')         seen_emails: set[str] = set()         for segment in _SEGMENT_SPLIT_RE.split(rest):             for trailer_email in _emails_in_segment(segment):                 key = trailer_email.casefold()                 if key in seen_emails:                     continue                 seen_emails.add(key)                 if key == author_email.casefold():                     violations.append(Violation(sha=sha, author_email=author_email, trailer_email=trailer_email))"]
     N004["return violations"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -161,7 +169,7 @@ flowchart TD
     N002["if argv is None"]
     N003["argv = sys.argv[1:]"]
     N004["command = argv[0] if argv else None"]
-    N005["if command != 'verify'"]
+    N005["if command not in ('verify', '-h', '--help')"]
     N006["print(...)"]
     N007["return 64"]
     N008["args = parse_args(...)"]

@@ -9,7 +9,7 @@ flowchart TD
     N001["workflow_targets_pull_request(...)"]
     N002["in_on_block = False"]
     N003["on_block_indent = -1"]
-    N004["for raw_line in yaml_text.splitlines():     stripped = raw_line.lstrip()     indent = len(raw_line) - len(stripped)     if not stripped or stripped.startswith('<str>'):         continue     if not in_on_block:         if stripped.startswith('<str>'):             tail = stripped[3:].strip()             if tail.startswith('<str>') and '<str>' in tail and ('<str>' not in tail.replace('<str>', '<str>')):                 tokens = re.findall('<str>', tail)                 if '<str>' in tokens:                     return True             in_on_block = True             on_block_indent = indent         continue     if indent <= on_block_indent:         return False     head = stripped.split('<str>', 1)[0]     if head == '<str>':         return True"]
+    N004["for raw_line in yaml_text.splitlines():     stripped = raw_line.lstrip()     indent = len(raw_line) - len(stripped)     if not stripped or stripped.startswith('<str>'):         continue     if not in_on_block:         if stripped.startswith('<str>'):             tail = stripped[3:].strip()             if tail.startswith('<str>') and '<str>' in tail:                 tokens = re.findall('<str>', tail)                 if '<str>' in tokens:                     return True             in_on_block = True             on_block_indent = indent         continue     if indent <= on_block_indent:         return False     head = stripped.split('<str>', 1)[0]     if head == '<str>':         return True"]
     N005["return False"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -45,7 +45,7 @@ flowchart TD
 flowchart TD
     N001["diff_steps_vs_workflows(...)"]
     N002["ci_scripts = {ref.script for ref in workflow_refs}"]
-    N003["missing = [ref for ref in workflow_refs if ref.script not in declared and ref.script not in allowlist]"]
+    N003["missing = [ref for ref in workflow_refs if ref.script not in declared and ref.script not in excluded]"]
     N004["extra = frozenset(declared) - ci_scripts"]
     N005["return (missing, extra)"]
     N001 -->|"start"| N002
@@ -92,7 +92,7 @@ flowchart TD
     N001["steps_manifest(...)"]
     N002["scripts = set(...)"]
     N003["unmapped = set(...)"]
-    N004["for step in steps:     matched = None     for token in step.argv:         m = _SCRIPT_REF.search(token)         if m:             matched = m.group(1)             break     if matched:         scripts.add(matched)     elif step.name not in STEPS_NO_SCRIPT_ALLOWLIST:         unmapped.add(step.name)"]
+    N004["for step in steps:     matched = {m.group(1) for token in step.argv if (m := _SCRIPT_REF.search(token))}     if matched:         scripts.update(matched)     elif step.name not in STEPS_NO_SCRIPT_ALLOWLIST:         unmapped.add(step.name)"]
     N005["return (frozenset(scripts), frozenset(unmapped))"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -117,15 +117,22 @@ flowchart TD
     N005 --> N006
 ```
 
+## _ci_scripts(...)
+
+```mermaid
+flowchart TD
+    N001["_ci_scripts(...)"]
+    N002["return frozenset({ref.script for ref in workflow_refs}) - CI_RUNNER_EXCLUDE"]
+    N001 -->|"start"| N002
+```
+
 ## ci_manifest(...)
 
 ```mermaid
 flowchart TD
     N001["ci_manifest(...)"]
-    N002["refs = collect_workflow_refs(...)"]
-    N003["return frozenset({r.script for r in refs} - CI_RUNNER_EXCLUDE)"]
+    N002["return _ci_scripts(collect_workflow_refs(workflows_dir))"]
     N001 -->|"start"| N002
-    N002 --> N003
 ```
 
 ## server_native_rules(...)
@@ -171,6 +178,19 @@ flowchart TD
     N002["result = {}"]
     N003["for gate in _as_list(registry.get('<str>')):     gate_d = _as_dict(gate)     cluster = gate_d.get('<str>')     if isinstance(cluster, str):         result.setdefault(cluster, set()).update((p for p in _as_list(gate_d.get('<str>')) if isinstance(p, str)))"]
     N004["return result"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+```
+
+## registry_ci_only_scripts(...)
+
+```mermaid
+flowchart TD
+    N001["registry_ci_only_scripts(...)"]
+    N002["result = set(...)"]
+    N003["for gate in _as_list(registry.get('<str>')):     gate_d = _as_dict(gate)     if gate_d.get('<str>') != '<str>':         continue     script = gate_d.get('<str>')     planes = _as_list(gate_d.get('<str>'))     if isinstance(script, str) and '<str>' in planes and ('<str>' not in planes):         result.add(script.removeprefix('<str>').removesuffix('<str>'))"]
+    N004["return frozenset(result)"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -238,17 +258,21 @@ flowchart TD
     N002["warnings = []"]
     N003["pretooluse_scripts = pretooluse_manifest(...)"]
     N004["warnings += diff_plane(pretooluse_scripts, registry_scripts_for_plane(registry, '<str>'), manifest_label=_AGENT_HOOKS_PATH, plane='<str>')"]
-    N005["(push_scripts, push_unmapped) = steps_manifest(...)"]
-    N006["warnings += diff_plane(push_scripts, registry_scripts_for_plane(registry, '<str>'), manifest_label='<str>', plane='<str>')"]
-    N007["warnings += diff_unmapped(push_unmapped, manifest_label='<str>')"]
-    N008["(commit_scripts, commit_unmapped) = pre_commit_manifest(...)"]
-    N009["warnings += diff_plane(commit_scripts, registry_scripts_for_plane(registry, '<str>'), manifest_label=_PRE_COMMIT_CONFIG_PATH, plane='<str>')"]
-    N010["warnings += diff_unmapped(commit_unmapped, manifest_label=_PRE_COMMIT_CONFIG_PATH)"]
-    N011["ci_scripts = ci_manifest(...)"]
-    N012["warnings += diff_plane(ci_scripts, registry_scripts_for_plane(registry, '<str>'), manifest_label='<str>', plane='<str>')"]
-    N013["warnings += diff_native(server_native_rules(rulesets), registry_native_rules_for_plane(registry, '<str>'))"]
-    N014["warnings += diff_clusters(registry)"]
-    N015["return warnings"]
+    N005["warnings += diff_plane(push_scripts, registry_scripts_for_plane(registry, '<str>'), manifest_label='<str>', plane='<str>')"]
+    N006["warnings += diff_unmapped(push_unmapped, manifest_label='<str>')"]
+    N007["(commit_scripts, commit_unmapped) = pre_commit_manifest(...)"]
+    N008["warnings += diff_plane(commit_scripts, registry_scripts_for_plane(registry, '<str>'), manifest_label=_PRE_COMMIT_CONFIG_PATH, plane='<str>')"]
+    N009["warnings += diff_unmapped(commit_unmapped, manifest_label=_PRE_COMMIT_CONFIG_PATH)"]
+    N010["ci_scripts = _ci_scripts(...)"]
+    N011["warnings += diff_plane(ci_scripts, registry_scripts_for_plane(registry, '<str>'), manifest_label='<str>', plane='<str>')"]
+    N012["warnings += diff_native(server_native_rules(rulesets), registry_native_rules_for_plane(registry, '<str>'))"]
+    N013["warnings += diff_clusters(registry)"]
+    N014["blocking = [DriftWarning(message=message) for message in warnings]"]
+    N015["excluded = registry_ci_only_scripts(registry) | frozenset(STEPS_VS_WORKFLOW_RESIDUAL_ALLOWLIST) | CI_RUNNER_EXCLUDE"]
+    N016["(missing_steps, extra_declared) = diff_steps_vs_workflows(...)"]
+    N017["blocking += [DriftWarning(message=f'<str>{ref.script}<str>{ref.workflow!r}<str>', workflow=ref.workflow) for ref in missing_steps]"]
+    N018["advisory = [f'<str>{name!r}<str>{name}<str>' for name in sorted(extra_declared)]"]
+    N019["return VerifyResult(blocking=blocking, advisory=advisory)"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -263,6 +287,10 @@ flowchart TD
     N012 --> N013
     N013 --> N014
     N014 --> N015
+    N015 --> N016
+    N016 --> N017
+    N017 --> N018
+    N018 --> N019
 ```
 
 ## _load_json(...)
@@ -322,18 +350,16 @@ flowchart TD
     N033["if not isinstance(registry, dict)"]
     N034["print(...)"]
     N035["return 1"]
-    N036["warnings = verify_registry(...)"]
-    N037["workflow_refs = collect_workflow_refs(...)"]
-    N038["(push_scripts, _) = steps_manifest(...)"]
-    N039["(missing_steps, extra_declared) = diff_steps_vs_workflows(...)"]
-    N040["warnings += [f'<str>{ref.script}<str>{ref.workflow!r}<str>' for ref in missing_steps]"]
-    N041["for name in sorted(extra_declared):     print(f'<str>{_SCRIPT}<str>{name!r}<str>{name}<str>', file=sys.stderr)"]
-    N042["if warnings"]
-    N043["for message in warnings:     print(f'<str>{_SCRIPT}<str>{message}', file=sys.stderr)"]
+    N036["workflow_refs = collect_workflow_refs(...)"]
+    N037["(push_scripts, push_unmapped) = steps_manifest(...)"]
+    N038["result = verify_registry(...)"]
+    N039["for message in result.advisory:     print(f'<str>{_SCRIPT}<str>{message}', file=sys.stderr)"]
+    N040["if result.blocking"]
+    N041["for warning in result.blocking:     if warning.workflow:         print(f'<str>{warning.workflow}<str>{_SCRIPT}<str>{warning.message}', file=sys.stderr)     else:         print(f'<str>{_SCRIPT}<str>{warning.message}', file=sys.stderr)"]
+    N042["print(...)"]
+    N043["return 1"]
     N044["print(...)"]
-    N045["return 1"]
-    N046["print(...)"]
-    N047["return 0"]
+    N045["return 0"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N003 --> N004
@@ -374,11 +400,9 @@ flowchart TD
     N037 --> N038
     N038 --> N039
     N039 --> N040
-    N040 --> N041
+    N040 -->|"true"| N041
     N041 --> N042
-    N042 -->|"true"| N043
-    N043 --> N044
+    N042 --> N043
+    N040 -->|"false"| N044
     N044 --> N045
-    N042 -->|"false"| N046
-    N046 --> N047
 ```
