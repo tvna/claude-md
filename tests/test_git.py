@@ -257,3 +257,143 @@ class TestCommitsToPush:
             return subprocess.CompletedProcess(["git"], 128, stdout="", stderr="boom")
 
         assert _git.commits_to_push(run, local_sha="L", remote_sha="R", remote="origin") is None
+
+
+_OTHER_TIP = "3333333333333333333333333333333333333333"
+_REMOTE_OID = "4444444444444444444444444444444444444444"
+_ZEROS = "0" * 40
+
+
+class TestParsePushRefs:
+    def test_reads_four_fields(self) -> None:
+        payload = f"refs/heads/feat {_OTHER_TIP} refs/heads/feat {_REMOTE_OID}\n"
+        refs = _git.parse_push_refs(payload)
+        assert refs == [_git.PushRef("refs/heads/feat", _OTHER_TIP, "refs/heads/feat", _REMOTE_OID)]
+
+    def test_skips_blank_and_malformed(self) -> None:
+        payload = f"\nnot enough fields\nrefs/heads/a {_OTHER_TIP} refs/heads/a {_REMOTE_OID}\n   \n"
+        refs = _git.parse_push_refs(payload)
+        assert [r.local_ref for r in refs] == ["refs/heads/a"]
+
+    def test_delete_line(self) -> None:
+        # A deletion line is "(delete) <zeros> <remote-ref> <remote-oid>": four fields.
+        refs = _git.parse_push_refs(f"(delete) {_ZEROS} refs/heads/old {_REMOTE_OID}")
+        assert refs == [_git.PushRef("(delete)", _ZEROS, "refs/heads/old", _REMOTE_OID)]
+
+
+class TestReadPushRefs:
+    def test_defaults_remote_to_origin(self) -> None:
+        env = {_git._PUSH_REFS_ENV_VAR: f"refs/heads/a {_OTHER_TIP} refs/heads/a {_REMOTE_OID}"}
+        refs, remote = _git.read_push_refs(env)
+        assert len(refs) == 1
+        assert remote == "origin"
+
+    def test_uses_named_remote(self) -> None:
+        env = {
+            _git._PUSH_REFS_ENV_VAR: f"refs/heads/a {_OTHER_TIP} refs/heads/a {_REMOTE_OID}",
+            _git._PUSH_REMOTE_ENV_VAR: "upstream",
+        }
+        _refs, remote = _git.read_push_refs(env)
+        assert remote == "upstream"
+
+    def test_empty_when_unset(self) -> None:
+        refs, _remote = _git.read_push_refs({})
+        assert refs == []
+
+
+class TestCommitsForPushedRefs:
+    _SIGNED = "1111111111111111111111111111111111111111"
+    _UNSIGNED = "2222222222222222222222222222222222222222"
+
+    def _ref(self, local_oid: str, remote_oid: str, name: str = "refs/heads/feat") -> _git.PushRef:
+        return _git.PushRef(name, local_oid, name, remote_oid)
+
+    def _runner(
+        self, rev_list_map: dict[str, list[str]], calls: list[list[str]], *, rc: int = 0
+    ) -> _git.Runner:
+        def run(args: list[str]) -> subprocess.CompletedProcess[str]:
+            calls.append(args)
+            if args[0] == "remote":
+                return subprocess.CompletedProcess(
+                    ["git"],
+                    0,
+                    stdout="origin\thttps://example.test/repo.git (fetch)\n"
+                    "origin\thttps://example.test/repo.git (push)\n",
+                    stderr="",
+                )
+            if args[0] == "rev-list":
+                if rc != 0:
+                    return subprocess.CompletedProcess(["git"], rc, stdout="", stderr="")
+                key = args[1].rsplit("..", 1)[-1]
+                commits = rev_list_map.get(key, [])
+                return subprocess.CompletedProcess(["git"], 0, stdout="\n".join(commits) + "\n", stderr="")
+            return subprocess.CompletedProcess(["git"], 0, stdout="", stderr="")
+
+        return run
+
+    def test_existing_branch_uses_range(self) -> None:
+        calls: list[list[str]] = []
+        runner = self._runner({_OTHER_TIP: [self._SIGNED]}, calls)
+        commits, undeterminable = _git.commits_for_pushed_refs(
+            runner, [self._ref(_OTHER_TIP, _REMOTE_OID)], "origin"
+        )
+        assert commits == [self._SIGNED]
+        assert undeterminable is False
+        rev_list_calls = [c for c in calls if c[0] == "rev-list"]
+        assert rev_list_calls == [["rev-list", f"{_REMOTE_OID}..{_OTHER_TIP}"]]
+
+    def test_new_branch_scopes_to_remote(self) -> None:
+        calls: list[list[str]] = []
+        runner = self._runner({_OTHER_TIP: [self._UNSIGNED]}, calls)
+        commits, undeterminable = _git.commits_for_pushed_refs(
+            runner, [self._ref(_OTHER_TIP, _ZEROS)], "origin"
+        )
+        assert commits == [self._UNSIGNED]
+        assert undeterminable is False
+        rev_list_calls = [c for c in calls if c[0] == "rev-list"]
+        assert rev_list_calls == [["rev-list", _OTHER_TIP, "--not", "--remotes=origin"]]
+
+    def test_delete_refspec_ships_nothing(self) -> None:
+        calls: list[list[str]] = []
+        runner = self._runner({}, calls)
+        commits, undeterminable = _git.commits_for_pushed_refs(
+            runner, [self._ref(_ZEROS, _REMOTE_OID)], "origin"
+        )
+        assert commits == []
+        assert undeterminable is False
+        assert [c for c in calls if c[0] == "rev-list"] == []
+
+    def test_dedups_commits_across_refs_preserving_order(self) -> None:
+        calls: list[list[str]] = []
+        runner = self._runner({_OTHER_TIP: [self._UNSIGNED, self._SIGNED]}, calls)
+        refs = [
+            self._ref(_OTHER_TIP, _REMOTE_OID, "refs/heads/a"),
+            self._ref(_OTHER_TIP, _REMOTE_OID, "refs/heads/b"),
+        ]
+        commits, _undeterminable = _git.commits_for_pushed_refs(runner, refs, "origin")
+        assert commits == [self._UNSIGNED, self._SIGNED]
+
+    def test_all_undeterminable(self) -> None:
+        calls: list[list[str]] = []
+        runner = self._runner({}, calls, rc=128)
+        commits, undeterminable = _git.commits_for_pushed_refs(
+            runner, [self._ref(_OTHER_TIP, _REMOTE_OID)], "origin"
+        )
+        assert commits == []
+        assert undeterminable is True
+
+    def test_undeterminable_ref_does_not_drop_resolvable_one(self) -> None:
+        def run(args: list[str]) -> subprocess.CompletedProcess[str]:
+            if args[0] == "rev-list" and args[1].endswith(_OTHER_TIP):
+                return subprocess.CompletedProcess(["git"], 128, stdout="", stderr="")
+            if args[0] == "rev-list":
+                return subprocess.CompletedProcess(["git"], 0, stdout=self._SIGNED + "\n", stderr="")
+            return subprocess.CompletedProcess(["git"], 0, stdout="", stderr="")
+
+        refs = [
+            self._ref(_OTHER_TIP, _REMOTE_OID, "refs/heads/a"),
+            self._ref(_REMOTE_OID, _OTHER_TIP, "refs/heads/b"),
+        ]
+        commits, undeterminable = _git.commits_for_pushed_refs(run, refs, "origin")
+        assert commits == [self._SIGNED]
+        assert undeterminable is True
