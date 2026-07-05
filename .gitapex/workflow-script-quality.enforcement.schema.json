@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tvna/claude-md/.gitapex/workflow-script-quality.enforcement.schema.json",
+  "title": "Workflow-script-quality standard enforcement registry",
+  "description": "Shape-only schema for .gitapex/workflow-script-quality.enforcement.toml. The must-have key set (M1-M10) and its enforced/backing referential integrity are owned by scripts/scan_quality_standard_drift.py (the normative validator); the key set is intentionally not duplicated here as an enum so a new must-have needs no schema edit. Refs #1089, #196, #197, #2342.",
+  "type": "object",
+  "additionalProperties": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["status", "backing"],
+    "properties": {
+      "status": {"type": "string"},
+      "backing": {"type": "array", "items": {"type": "string"}}
+    }
+  }
+}

@@ -133,6 +133,23 @@ class TestRevList:
         assert _git.rev_list(runner, ["base..HEAD"]) is None
 
 
+class TestCommitsInRange:
+    def test_strips_blanks(self) -> None:
+        calls: list[list[str]] = []
+        runner = TestRevList._runner(
+            subprocess.CompletedProcess(["git"], 0, stdout="a\n\n b \n", stderr=""), calls
+        )
+        assert _git.commits_in_range(runner, "origin/main") == ["a", "b"]
+        assert calls == [["rev-list", "origin/main..HEAD"]]
+
+    def test_unresolvable_returns_none(self) -> None:
+        calls: list[list[str]] = []
+        runner = TestRevList._runner(
+            subprocess.CompletedProcess(["git"], 128, stdout="", stderr="no"), calls
+        )
+        assert _git.commits_in_range(runner, "origin/nope") is None
+
+
 class TestIsAllZeros:
     def test_sha1_all_zeros(self) -> None:
         assert _git.is_all_zeros("0" * 40) is True

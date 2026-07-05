@@ -100,7 +100,8 @@ that conclusion as a constraint.
   named `ssot.json` explicitly. See Considered Alternatives for the TOML
   trade-off.
 - Assumption: CODEOWNERS coverage of `.gitapex/` by `@tvna` is the intended
-  governance gate, in the same class as `docs/graph/**`.
+  governance gate, in the same class as the (since-retired; #2342 folded it
+  into `.gitapex/**`) former `docs/graph/**` entry.
 - Assumption: implementation happens in follow-up sessions; this document
   plus the handoff prompt is the complete input those sessions need.
 
@@ -510,7 +511,7 @@ no compensating benefit (C, D). Details below.
 Design-stage (this issue, #2246):
 
 - [ ] This document exists under `docs/prd/`, is registered in
-  `docs/prd/README.md` and `docs/graph/doc-dependencies.toml`, and passes
+  `docs/prd/README.md` and `.gitapex/doc-dependencies.toml`, and passes
   the repository text gates.
 - [ ] A handoff prompt for the phase 0 implementation session exists under
   `docs/next-session/`.

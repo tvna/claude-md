@@ -4,7 +4,7 @@ Use this template for every new design-stage document so reviewers find the
 problem, the decision, and the rationale in the same order. Copy the body
 below the divider into a new `docs/prd/<name>.md`, fill each section, and
 register the file in [`../INDEX.md`](../INDEX.md) (and in
-[`../graph/doc-dependencies.toml`](../graph/doc-dependencies.toml) when the
+[`../../.gitapex/doc-dependencies.toml`](../../.gitapex/doc-dependencies.toml) when the
 document is a node other documents or gates depend on).
 
 ## Two profiles

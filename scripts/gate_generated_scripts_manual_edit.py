@@ -6,7 +6,7 @@ owned by the post-merge automation (refs #1540, #1545): the ``decision-tree``
 job in ``.github/workflows/post-merge.yml`` regenerates the per-script AST docs
 and the workflow if-branch diagrams after a merge to ``main`` and opens the bot
 branch ``chore/update-generated-docs`` to publish them. The same job also writes
-the ``docs/standards/module-size-distribution.toml`` size snapshot, which joined
+the ``.gitapex/module-size-distribution.toml`` size snapshot, which joined
 the single-producer model in #2013 and is published through that same bot PR.
 Neither the pre-push gate nor any pre-merge drift gate regenerates or
 drift-checks those paths, so this gate is the inverse control: a non-bot branch
@@ -18,6 +18,20 @@ The post-merge bot branches (``chore/update-generated-docs`` for the AST docs
 and diagrams, ``chore/refresh-auto-retro-triage-report`` for the triage-report
 snapshot) are exempt: they are the legitimate producers, and their diffs are
 exactly the regenerated content.
+
+A byte-identical (100%-similarity) rename INTO one of the exact-file entries
+of :data:`PROTECTED_PREFIXES` (currently only the module-size snapshot) from
+a path that was not itself protected is also let through: it is a one-time
+infrastructure relocation of the artifact's tracked path (e.g. #2342 moving
+the module-size snapshot to ``.gitapex/``), not an edit of its content, so it
+is not the drift class this gate exists to prevent. The exemption is scoped
+to exact-file entries only, never to the folder-prefix entries
+(``docs/generated/scripts/`` etc.): a folder prefix accepts any filename
+underneath it, so exempting renames into it would let a hand-authored
+``git mv docs/foo.md docs/generated/scripts/foo.md`` bypass the single-producer
+gate entirely, which is not a relocation this gate should ever wave through.
+Any content change during the move (git then reports it as a plain add, not a
+rename), or a rename between two already-protected paths, still fails loud.
 
 Architecture: pure functions on top (:func:`resolve_base`,
 :func:`changed_generated_docs`, :func:`evaluate`), a single subprocess
@@ -47,13 +61,22 @@ import sys
 # scripts/doc_graph_viz.py (wired into post-merge.yml). Refs #1754.
 # The module-size snapshot is a single file, not a folder; it matches by exact
 # path under the same ``startswith`` filter, joining the single-producer model
-# the post-merge decision-tree job already owns. Refs #2013.
+# the post-merge decision-tree job already owns. Refs #2013, #2342.
 PROTECTED_PREFIXES = (
     "docs/generated/scripts/",
     "docs/generated/workflows/",
     "docs/generated/graph/",
-    "docs/standards/module-size-distribution.toml",
+    ".gitapex/module-size-distribution.toml",
 )
+
+# The exact-file (non-folder-prefix) subset of PROTECTED_PREFIXES: entries
+# that name one specific tracked path rather than a whole folder. Only these
+# are eligible for the pure-rename-in exemption below (refs #2342, Codex
+# review on PR #2347): a folder prefix accepts any filename placed under it,
+# so exempting a rename INTO one would let an arbitrary hand-authored file
+# bypass the single-producer gate, not just the one artifact this exemption
+# exists to relocate.
+_PROTECTED_EXACT_FILES = frozenset(p for p in PROTECTED_PREFIXES if not p.endswith("/"))
 
 # The post-merge bot branches that legitimately regenerate the folder, each a
 # fixed PR_BRANCH used by a post-merge job:
@@ -117,13 +140,38 @@ def changed_generated_docs(
     #1703 (repair 4). Three-dot is anchored at the merge-base, so base-only
     commits never appear; a genuine hand-edit on the branch still does.
 
-    Uses ``git diff --name-only`` so renames and deletes also surface.
+    Uses ``git diff --name-status -M100%`` (not ``--name-only``) so a
+    byte-identical rename is distinguishable from an add/modify/delete: at the
+    ``100%`` similarity threshold, git reports a rename only when the content
+    is unchanged, so a rename from a not-yet-protected path into one of
+    :data:`_PROTECTED_EXACT_FILES` is excluded (a one-time relocation, refs
+    #2342), while a rename with any content change falls back to a plain add
+    at the new path and still surfaces here. A rename into a folder-prefix
+    entry is never exempted, regardless of similarity (see module docstring).
     """
     result = _run(
-        ["git", "diff", "--name-only", f"{base_ref}...{head}"], runner=runner
+        ["git", "diff", "--name-status", "-M100%", f"{base_ref}...{head}"],
+        runner=runner,
     )
-    touched = {line.strip() for line in result.stdout.splitlines() if line.strip()}
-    return frozenset(path for path in touched if path.startswith(PROTECTED_PREFIXES))
+    touched: set[str] = set()
+    for line in result.stdout.splitlines():
+        if not line.strip():
+            continue
+        parts = line.split("\t")
+        status = parts[0]
+        if status.startswith("R") and len(parts) == 3:
+            old_path, new_path = parts[1], parts[2]
+            if (
+                not old_path.startswith(PROTECTED_PREFIXES)
+                and new_path in _PROTECTED_EXACT_FILES
+            ):
+                continue
+            touched.update(p for p in (old_path, new_path) if p.startswith(PROTECTED_PREFIXES))
+        elif len(parts) == 2:
+            path = parts[1]
+            if path.startswith(PROTECTED_PREFIXES):
+                touched.add(path)
+    return frozenset(touched)
 
 
 def is_exempt(branch: str) -> bool:
@@ -140,7 +188,7 @@ def evaluate(changed: frozenset[str], branch: str) -> tuple[int, list[str]]:
     pretty = ", ".join(sorted(changed))
     return 1, [
         "::error::Post-merge-owned generated artifacts (docs/generated/ and the "
-        "docs/standards/module-size-distribution.toml size snapshot; refs "
+        ".gitapex/module-size-distribution.toml size snapshot; refs "
         "#1540, #1545, #2013) must not be edited by hand. The following files "
         f"were changed on branch {branch or '(unknown)'!r}: {pretty}. Revert "
         "them; the post-merge `decision-tree` job regenerates them and opens "
