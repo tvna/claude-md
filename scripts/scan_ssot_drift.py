@@ -26,15 +26,20 @@ toolchain binaries such as ruff/mypy/pytest/prek/actionlint, and the
 preflight_all.py runner itself) and are excluded via an inline,
 rationale-carrying allowlist.
 
-Phase 3 (child 3c, #2301) folds in the bespoke STEPS-vs-workflow reconciler
+Phase 3 (child 3c, #2301) folded in the bespoke STEPS-vs-workflow reconciler
 formerly at ``scripts/scan_preflight_drift.py``: :func:`collect_workflow_refs`,
 :func:`extract_script_refs`, and :func:`diff_steps_vs_workflows` are that
-module's logic moved here so the two-plane reconciliation does not persist as
-a duplicate of the registry gate. ``STEPS_VS_WORKFLOW_ALLOWLIST`` preserves
-its exclusion list verbatim.
+module's logic moved here. #2340 (follow-up cleanup from that fold-in's
+/code-review) then removed the second copy of the check's plane-exclusion
+data: :func:`registry_ci_only_scripts` derives the CI-only exclusion set from
+the registry's own ``planes`` field, and ``STEPS_VS_WORKFLOW_RESIDUAL_ALLOWLIST``
+keeps only the handful of cases the registry cannot express.
 
 Architecture: pure extraction functions per manifest, pure comparison
-functions producing warning strings, a single IO boundary in :func:`main`.
+functions producing warning strings (or, for the STEPS-vs-workflow check,
+:class:`DriftWarning`/:class:`VerifyResult` so a missing-step warning can
+still carry a workflow-file GitHub annotation), a single IO boundary in
+:func:`main`.
 
 Contract:
 - Inputs: the ``verify`` subcommand; ``--registry`` (default
@@ -49,7 +54,8 @@ Contract:
   also fails loud (exit 1) on a hard configuration error, an input file
   missing or unparseable; exit 64 on an unrecognised subcommand.
 
-Tested by ``tests/test_scan_ssot_drift.py``. Refs #2256, #2246, #2262, #2301.
+Tested by ``tests/test_scan_ssot_drift.py``. Refs #2256, #2246, #2262, #2301,
+#2340.
 """
 
 from __future__ import annotations
@@ -99,58 +105,53 @@ PRE_COMMIT_NO_SCRIPT_ALLOWLIST: dict[str, str] = {
 }
 
 # scripts/preflight_all.py is the STEPS/collect_workflow_refs runner itself;
-# mirroring it as a gate would recurse. Excluded from the ci-plane manifest
-# only (it is not a STEPS or pre-commit entry either).
+# mirroring it as a gate would recurse. This is the single source of truth
+# for that exclusion: it covers both the ci-plane manifest (ci_manifest())
+# and the STEPS-vs-workflow residual allowlist (verify_registry()), so the
+# "preflight_all is a runner, not a gate" rationale is not duplicated.
 CI_RUNNER_EXCLUDE = frozenset({"preflight_all"})
 
-# Scripts CI invokes from ``pull_request:`` workflows but that
-# ``preflight_steps.STEPS`` intentionally does NOT mirror. Each entry pairs
-# the script name with the reason and the client-side equivalent (if any), so
-# the exclusion is auditable. Folded in verbatim from the former
-# ``scan_preflight_drift.ALLOWLIST`` (#2301).
-STEPS_VS_WORKFLOW_ALLOWLIST: dict[str, str] = {
-    "title_policy": (
-        "Input is the PR / issue title from the webhook payload, not the "
-        "working tree. Client gate: scripts/preflight_title_policy.py "
-        "(MCP PreToolUse)."
-    ),
-    "body_policy": (
-        "Input is the PR / issue body from the webhook payload, not the "
-        "working tree. Client gate: "
-        "scripts/preflight_pr_body_required_sections.py (MCP PreToolUse)."
-    ),
-    "issue_link": (
-        "Input is the PR body plus a GitHub API call rate-limited without "
-        "GH_TOKEN. Client gate: scripts/pr_body_close_keyword_gate.py and "
-        "scripts/preflight_pr_template_shape.py (MCP PreToolUse)."
-    ),
-    "verify_linked_issue_titles": (
-        "Input is the PR body plus GitHub API calls (one per linked issue) "
-        "that require GH_TOKEN. No local equivalent: the title of a remote "
-        "issue cannot be checked without network access and a valid token. "
-        "Tracked by #941."
-    ),
-    "scan_review_in_progress_marker": (
-        "Input is a live PR's reaction state via a GitHub API call that "
-        "requires GH_TOKEN and a real PR number. No local equivalent: there "
-        "is no PR to react to before one is opened, so this gate is CI-only. "
-        "Refs #2312."
-    ),
+# The STEPS-vs-workflow check (verify_registry(), below) excludes scripts a
+# `pull_request:` workflow invokes that `preflight_steps.STEPS` intentionally
+# does not mirror. Most such scripts are already registered in
+# .gitapex/ssot.json with planes: ["ci"] and no "pre-push", so
+# registry_ci_only_scripts() derives them at runtime instead of duplicating
+# that plane data by hand here (#2340). This dict keeps only the cases the
+# registry's per-gate planes field cannot express:
+STEPS_VS_WORKFLOW_RESIDUAL_ALLOWLIST: dict[str, str] = {
     "uv_pin": (
         "Used twice: ``uv_pin read`` is an output helper (no gate), "
-        "``uv_pin drift`` IS a gate and is mirrored as a preflight step."
-    ),
-    "preflight_all": (
-        "Runner, not a gate. Mirroring itself would recurse; the drift "
-        "gate is `scan_ssot_drift` which IS mirrored as a step."
-    ),
-    "verify_shard_coverage": (
-        "Input is the per-leg JUnit XML artifacts produced by the "
-        "lint-scripts-pytest matrix legs, which only exist in CI. The "
-        "static counterpart `verify_test_shard_markers` IS mirrored as a "
-        "preflight step. Refs #545."
+        "``uv_pin drift`` IS a gate and is mirrored as a preflight step. "
+        "The registry's uv-pin gate spans the pre-commit/pre-push/ci planes "
+        "at the script level, so it cannot express this subcommand split."
     ),
 }
+
+# Rationale for the scripts registry_ci_only_scripts() excludes at runtime
+# (each is registered in .gitapex/ssot.json with planes: ["ci"] only), kept
+# here as auditable documentation since the registry's own "rule" field does
+# not carry the client-side-equivalent detail below:
+#   title_policy: input is the PR/issue title from the webhook payload, not
+#     the working tree. Client gate: scripts/preflight_title_policy.py
+#     (MCP PreToolUse).
+#   body_policy: input is the PR/issue body from the webhook payload, not
+#     the working tree. Client gate:
+#     scripts/preflight_pr_body_required_sections.py (MCP PreToolUse).
+#   issue_link: input is the PR body plus a GitHub API call rate-limited
+#     without GH_TOKEN. Client gate: scripts/pr_body_close_keyword_gate.py
+#     and scripts/preflight_pr_template_shape.py (MCP PreToolUse).
+#   verify_linked_issue_titles: input is the PR body plus GitHub API calls
+#     (one per linked issue) that require GH_TOKEN. No local equivalent: the
+#     title of a remote issue cannot be checked without network access and a
+#     valid token. Tracked by #941.
+#   scan_review_in_progress_marker: input is a live PR's reaction state via a
+#     GitHub API call that requires GH_TOKEN and a real PR number. No local
+#     equivalent: there is no PR to react to before one is opened, so this
+#     gate is CI-only. Refs #2312.
+#   verify_shard_coverage: input is the per-leg JUnit XML artifacts produced
+#     by the lint-scripts-pytest matrix legs, which only exist in CI. The
+#     static counterpart `verify_test_shard_markers` IS mirrored as a
+#     preflight step. Refs #545.
 
 
 @dataclass(frozen=True)
@@ -159,6 +160,27 @@ class WorkflowReference:
 
     workflow: str
     script: str
+
+
+@dataclass(frozen=True)
+class DriftWarning:
+    """One blocking reconciliation warning.
+
+    ``workflow`` is set only for the STEPS-vs-workflow missing-step case, so
+    :func:`main` can attach a GitHub ``file=`` annotation anchoring the error
+    to the offending workflow YAML.
+    """
+
+    message: str
+    workflow: str | None = None
+
+
+@dataclass(frozen=True)
+class VerifyResult:
+    """Blocking and advisory-only output of :func:`verify_registry`."""
+
+    blocking: list[DriftWarning]
+    advisory: list[str]
 
 
 def workflow_targets_pull_request(yaml_text: str) -> bool:
@@ -185,7 +207,7 @@ def workflow_targets_pull_request(yaml_text: str) -> bool:
         if not in_on_block:
             if stripped.startswith("on:"):
                 tail = stripped[3:].strip()
-                if tail.startswith("[") and "pull_request" in tail and "pull_request_target" not in tail.replace("pull_request_target", ""):
+                if tail.startswith("[") and "pull_request" in tail:
                     # List form: detect ``pull_request`` as its own token.
                     tokens = re.findall(r"[\w_]+", tail)
                     if "pull_request" in tokens:
@@ -227,12 +249,12 @@ def collect_workflow_refs(workflows_dir: Path) -> list[WorkflowReference]:
 def diff_steps_vs_workflows(
     workflow_refs: list[WorkflowReference],
     declared: frozenset[str],
-    allowlist: dict[str, str],
+    excluded: frozenset[str],
 ) -> tuple[list[WorkflowReference], frozenset[str]]:
     """Return (missing_in_steps, extra_in_steps) for the STEPS-vs-workflow check.
 
     ``missing_in_steps`` lists CI references whose script is not declared in
-    ``preflight_steps.STEPS`` and is not in *allowlist*; each is a blocking
+    ``preflight_steps.STEPS`` and is not in *excluded*; each is a blocking
     divergence. ``extra_in_steps`` lists scripts STEPS declares that no
     ``pull_request:`` workflow invokes; an advisory-only condition, since the
     local set may legitimately pre-empt a future CI gate.
@@ -241,7 +263,7 @@ def diff_steps_vs_workflows(
     missing = [
         ref
         for ref in workflow_refs
-        if ref.script not in declared and ref.script not in allowlist
+        if ref.script not in declared and ref.script not in excluded
     ]
     extra = frozenset(declared) - ci_scripts
     return missing, extra
@@ -285,18 +307,19 @@ def pretooluse_manifest(agent_hooks: object) -> frozenset[str]:
 def steps_manifest(
     steps: tuple[Step, ...] = STEPS,
 ) -> tuple[frozenset[str], frozenset[str]]:
-    """Return (script basenames, unmapped step names) from ``preflight_steps.STEPS``."""
+    """Return (script basenames, unmapped step names) from ``preflight_steps.STEPS``.
+
+    Every ``scripts/*.py`` token across a step's argv contributes to the
+    result, not just the first match: a future step invoking two scripts in
+    one argv (for example a wrapper calling two gates in sequence) must not
+    silently under-report the second one.
+    """
     scripts: set[str] = set()
     unmapped: set[str] = set()
     for step in steps:
-        matched = None
-        for token in step.argv:
-            m = _SCRIPT_REF.search(token)
-            if m:
-                matched = m.group(1)
-                break
+        matched = {m.group(1) for token in step.argv if (m := _SCRIPT_REF.search(token))}
         if matched:
-            scripts.add(matched)
+            scripts.update(matched)
         elif step.name not in STEPS_NO_SCRIPT_ALLOWLIST:
             unmapped.add(step.name)
     return frozenset(scripts), frozenset(unmapped)
@@ -322,10 +345,14 @@ def pre_commit_manifest(pre_commit_config: object) -> tuple[frozenset[str], froz
     return frozenset(scripts), frozenset(unmapped)
 
 
+def _ci_scripts(workflow_refs: list[WorkflowReference]) -> frozenset[str]:
+    """Return script basenames referenced by *workflow_refs*, minus the runner."""
+    return frozenset({ref.script for ref in workflow_refs}) - CI_RUNNER_EXCLUDE
+
+
 def ci_manifest(workflows_dir: Path) -> frozenset[str]:
     """Return script basenames referenced by ``pull_request:``-triggered workflows."""
-    refs = collect_workflow_refs(workflows_dir)
-    return frozenset({r.script for r in refs} - CI_RUNNER_EXCLUDE)
+    return _ci_scripts(collect_workflow_refs(workflows_dir))
 
 
 def server_native_rules(rulesets: object) -> frozenset[str]:
@@ -383,6 +410,28 @@ def registry_cluster_planes(registry: dict[str, object]) -> dict[str, set[str]]:
                 p for p in _as_list(gate_d.get("planes")) if isinstance(p, str)
             )
     return result
+
+
+def registry_ci_only_scripts(registry: dict[str, object]) -> frozenset[str]:
+    """Return script basenames whose registry gate fires on 'ci' but not 'pre-push'.
+
+    A gate the registry itself declares CI-only has no local equivalent by
+    definition, so ``preflight_steps.STEPS`` correctly omits it. This is the
+    STEPS-vs-workflow check's derivable exclusion set (#2340): most of
+    ``STEPS_VS_WORKFLOW_RESIDUAL_ALLOWLIST``'s former entries are provably
+    redundant with this projection and were removed rather than hand-kept in
+    sync with it.
+    """
+    result: set[str] = set()
+    for gate in _as_list(registry.get("gates")):
+        gate_d = _as_dict(gate)
+        if gate_d.get("kind") != "script":
+            continue
+        script = gate_d.get("script")
+        planes = _as_list(gate_d.get("planes"))
+        if isinstance(script, str) and "ci" in planes and "pre-push" not in planes:
+            result.add(script.removeprefix("scripts/").removesuffix(".py"))
+    return frozenset(result)
 
 
 # ---------------------------------------------------------------------------
@@ -464,9 +513,18 @@ def verify_registry(
     agent_hooks: object,
     pre_commit_config: object,
     rulesets: object,
-    workflows_dir: Path,
-) -> list[str]:
-    """Return every drift warning between *registry* and the four manifests."""
+    workflow_refs: list[WorkflowReference],
+    push_scripts: frozenset[str],
+    push_unmapped: frozenset[str],
+) -> VerifyResult:
+    """Return every drift warning between *registry* and the four manifests.
+
+    ``workflow_refs``, ``push_scripts``, and ``push_unmapped`` are computed
+    once by the caller (:func:`main`) via :func:`collect_workflow_refs` and
+    :func:`steps_manifest`, and threaded in here rather than recomputed, so a
+    single ``verify`` invocation parses the workflow YAML and the STEPS
+    tuple exactly once each (#2340).
+    """
     warnings: list[str] = []
 
     pretooluse_scripts = pretooluse_manifest(agent_hooks)
@@ -477,7 +535,6 @@ def verify_registry(
         plane="pretooluse",
     )
 
-    push_scripts, push_unmapped = steps_manifest()
     warnings += diff_plane(
         push_scripts,
         registry_scripts_for_plane(registry, "pre-push"),
@@ -495,7 +552,7 @@ def verify_registry(
     )
     warnings += diff_unmapped(commit_unmapped, manifest_label=_PRE_COMMIT_CONFIG_PATH)
 
-    ci_scripts = ci_manifest(workflows_dir)
+    ci_scripts = _ci_scripts(workflow_refs)
     warnings += diff_plane(
         ci_scripts,
         registry_scripts_for_plane(registry, "ci"),
@@ -509,7 +566,34 @@ def verify_registry(
 
     warnings += diff_clusters(registry)
 
-    return warnings
+    blocking = [DriftWarning(message=message) for message in warnings]
+
+    excluded = (
+        registry_ci_only_scripts(registry)
+        | frozenset(STEPS_VS_WORKFLOW_RESIDUAL_ALLOWLIST)
+        | CI_RUNNER_EXCLUDE
+    )
+    missing_steps, extra_declared = diff_steps_vs_workflows(
+        workflow_refs, push_scripts, excluded
+    )
+    blocking += [
+        DriftWarning(
+            message=(
+                f"preflight_steps.STEPS is missing a step for 'scripts/{ref.script}.py' "
+                f"(invoked by pull_request: workflow {ref.workflow!r})."
+            ),
+            workflow=ref.workflow,
+        )
+        for ref in missing_steps
+    ]
+
+    advisory = [
+        f"preflight_steps.STEPS declares step {name!r} but no pull_request: workflow "
+        f"invokes scripts/{name}.py."
+        for name in sorted(extra_declared)
+    ]
+
+    return VerifyResult(blocking=blocking, advisory=advisory)
 
 
 # ---------------------------------------------------------------------------
@@ -580,40 +664,35 @@ def main(argv: list[str] | None = None) -> int:
         print(f"::error::{_SCRIPT}: {args.registry} root is not a JSON object.", file=sys.stderr)
         return 1
 
-    warnings = verify_registry(
+    workflow_refs = collect_workflow_refs(workflows_dir)
+    push_scripts, push_unmapped = steps_manifest()
+
+    result = verify_registry(
         registry,
         agent_hooks=agent_hooks,
         pre_commit_config=pre_commit_config,
         rulesets=rulesets,
-        workflows_dir=workflows_dir,
+        workflow_refs=workflow_refs,
+        push_scripts=push_scripts,
+        push_unmapped=push_unmapped,
     )
 
-    # Phase 3 child 3c (#2301): the former scan_preflight_drift.py STEPS-vs-CI
-    # reconciliation, folded in with its allowlist preserved verbatim. A
-    # missing step is a blocking divergence (joins ``warnings``); a step
-    # declared locally with no CI counterpart is advisory-only, since the
-    # local set may legitimately pre-empt a future CI gate.
-    workflow_refs = collect_workflow_refs(workflows_dir)
-    push_scripts, _ = steps_manifest()
-    missing_steps, extra_declared = diff_steps_vs_workflows(
-        workflow_refs, push_scripts, STEPS_VS_WORKFLOW_ALLOWLIST
-    )
-    warnings += [
-        f"preflight_steps.STEPS is missing a step for 'scripts/{ref.script}.py' "
-        f"(invoked by pull_request: workflow {ref.workflow!r})."
-        for ref in missing_steps
-    ]
-    for name in sorted(extra_declared):
+    for message in result.advisory:
+        print(f"::warning::{_SCRIPT}: {message}", file=sys.stderr)
+
+    if result.blocking:
+        for warning in result.blocking:
+            if warning.workflow:
+                print(
+                    f"::error file={warning.workflow}::{_SCRIPT}: {warning.message}",
+                    file=sys.stderr,
+                )
+            else:
+                print(f"::error::{_SCRIPT}: {warning.message}", file=sys.stderr)
         print(
-            f"::warning::{_SCRIPT}: preflight_steps.STEPS declares step {name!r} but "
-            f"no pull_request: workflow invokes scripts/{name}.py.",
+            f"BLOCKING: {_SCRIPT}: {len(result.blocking)} divergence(s) reported above.",
             file=sys.stderr,
         )
-
-    if warnings:
-        for message in warnings:
-            print(f"::error::{_SCRIPT}: {message}", file=sys.stderr)
-        print(f"BLOCKING: {_SCRIPT}: {len(warnings)} divergence(s) reported above.", file=sys.stderr)
         return 1
 
     print(f"OK: {_SCRIPT}: registry and manifests agree.", file=sys.stderr)

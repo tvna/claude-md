@@ -104,7 +104,8 @@ class TestStepsRegistry:
 class TestReexport:
     def test_preflight_all_reexports_steps(self) -> None:
         # Existing references rely on preflight_all.STEPS / preflight_all.Step
-        # resolving after the extraction (scan_preflight_drift.py,
-        # scan_devcontainer_tool_drift.py, tests/test_preflight_all.py).
+        # resolving after the extraction (scan_devcontainer_tool_drift.py,
+        # tests/test_preflight_all.py); scan_ssot_drift.py imports STEPS/Step
+        # directly via `from preflight_steps import STEPS, Step` instead.
         assert preflight_all.STEPS is preflight_steps.STEPS
         assert preflight_all.Step is preflight_steps.Step
