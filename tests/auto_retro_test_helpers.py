@@ -12,11 +12,20 @@ from _github_api import GitHubApiError
 # The label set the .gitapex/ssot.json registry entry for scripts/auto_retro.py
 # carries, mirrored here so orchestrator tests inject a known set via
 # _ssot.consumer_labels instead of depending on (or asserting against) the
-# live registry file. REGISTRY_LABELS is the full entry (registry order);
+# live registry file. REGISTRY_LABELS is the full entry (registry order):
+# the create-time identity labels, the retired layer:meta kept only for
+# discovery (#1041, #2313), then the terminal open-state labels.
 # TERMINAL_PRIMARY / TERMINAL_LEGACY are the terminal open-state labels the code
 # derives from it. Derivation-specific tests override the mock with synthetic
 # labels to prove the code reads the registry rather than a hardcoded literal.
-REGISTRY_LABELS = ("type:docs", "layer:meta", "ops:retro-opened", "harness:retro-opened")
+REGISTRY_LABELS = (
+    "type:docs",
+    "layer:p3-harness",
+    "area:ci-ops",
+    "layer:meta",
+    "ops:retro-opened",
+    "harness:retro-opened",
+)
 TERMINAL_PRIMARY = "ops:retro-opened"
 TERMINAL_LEGACY = "harness:retro-opened"
 

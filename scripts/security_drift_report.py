@@ -46,7 +46,6 @@ from _github_api import apply_call as github_apply_call
 # for callers/tests.
 from _security_drift_families import (
     FAMILY_ISSUE_SPEC,  # noqa: F401  re-exported for callers/tests
-    ISSUE_LABELS,  # noqa: F401  re-exported for callers/tests
     STATUS_COVERED,
     STATUS_DRIFT,
     STATUS_ERROR,

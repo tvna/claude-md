@@ -706,6 +706,42 @@ class TestBoundaryFunctions:
         assert "label%3Aretro%3Afp" not in query_path
         assert "label%3Aretro%3Afp-candidate" not in query_path
 
+    def test_search_retro_issues_same_family_labels_or_together(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Two same-family registry labels (a migration transition, e.g.
+        layer:meta/layer:p3-harness) must OR via GitHub's comma syntax
+        within one label: qualifier, not AND as two separate qualifiers,
+        or a retro from either era would stop being discoverable."""
+        calls: list[tuple[Any, ...]] = []
+
+        def fake_gh_api(method: str, path: str, *a: Any, **kw: Any) -> str:
+            calls.append((method, path))
+            return '{"items":[]}'
+
+        monkeypatch.setattr(srfd, "gh_api", fake_gh_api)
+        monkeypatch.setattr(
+            srfd._ssot,
+            "consumer_labels",
+            lambda path: (
+                "retro:tp",
+                "retro:fp",
+                "retro:fp-candidate",
+                "type:docs",
+                "layer:meta",
+                "layer:p3-harness",
+            ),
+        )
+
+        srfd.search_retro_issues("owner/repo")
+
+        query_path = calls[0][1]
+        assert "label%3Atype%3Adocs" in query_path
+        assert "label%3Alayer%3Ameta%2Clayer%3Ap3-harness" in query_path
+        # Exactly one label: qualifier for the layer family: the two labels
+        # are comma-joined into it, not repeated as two ANDed qualifiers.
+        assert query_path.count("label%3Alayer") == 1
+
     def test_search_retro_issues_key_error_wrapped_as_runtime_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

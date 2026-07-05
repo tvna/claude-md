@@ -16,6 +16,29 @@ import pytest
 pytestmark = pytest.mark.shard_ci_ops
 
 
+# ---------------------------------------------------------------------------
+# issue_labels
+# ---------------------------------------------------------------------------
+
+
+class TestIssueLabels:
+    def test_resolves_from_the_ssot_registry(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            ci_budget_issue._ssot,
+            "consumer_labels",
+            lambda path: ("type:tracking", "layer:p3-harness"),
+        )
+        assert ci_budget_issue.issue_labels() == ("type:tracking", "layer:p3-harness")
+
+    def test_wraps_drifted_registry_as_runtime_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def _raise_key_error(path: str) -> tuple[str, ...]:
+            raise KeyError(f"no label_consumers entry for path {path!r}")
+
+        monkeypatch.setattr(ci_budget_issue._ssot, "consumer_labels", _raise_key_error)
+        with pytest.raises(RuntimeError, match="ci-budget-issue registry labels"):
+            ci_budget_issue.issue_labels()
+
+
 class _FakeApply:
     """Record apply_call invocations and return scripted (code, body) pairs."""
 
@@ -205,7 +228,7 @@ class TestOpenOrUpdateIssue:
         assert create["method"] == "POST"
         assert create["url"] == "https://api.github.com/repos/o/r/issues"
         assert create["payload"]["title"] == ci_budget_issue.ISSUE_TITLE
-        assert create["payload"]["labels"] == list(ci_budget_issue.ISSUE_LABELS)
+        assert create["payload"]["labels"] == list(ci_budget_issue.issue_labels())
 
     def test_comments_when_present(self) -> None:
         items = {"items": [{"number": 55, "body": ci_budget_issue.ISSUE_MARKER}]}

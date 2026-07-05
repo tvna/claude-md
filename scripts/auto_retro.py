@@ -323,27 +323,61 @@ def _resolve_registry_labels() -> tuple[str, ...]:
 
 
 def _identity_labels() -> list[str]:
-    """Return the retro-issue identity / discovery labels, in registry order.
+    """Return the labels applied to a NEWLY opened retro issue, in registry order.
 
     These are the resolved labels that are NOT the terminal ``*retro-opened``
-    signals; the labels every auto-opened retro carries and both discovery
-    searches filter on. ``scan_ssot_schema.py`` only requires ``labels`` to be
-    an array, so a registry edit that leaves only the terminal labels is
-    schema-valid; without the emptiness guard the discovery query would drop
-    every ``label:`` qualifier and scan every issue titled ``retro`` repo-wide,
-    a widening the old hardcoded query could never drift into (mirrors #2283).
+    signals and are NOT a retired label (per :func:`_ssot.retired_label_names`)
+    kept in the registry entry only to keep pre-migration retros discoverable
+    (see :func:`_discovery_labels`); a retired label must never be re-applied to
+    a new issue. ``scan_ssot_schema.py`` only requires ``labels`` to be an
+    array, so a registry edit that leaves only the terminal/retired labels is
+    schema-valid; without the emptiness guard a newly opened retro would carry
+    no identity label at all, a widening the old hardcoded query could never
+    drift into (mirrors #2283).
     """
+    retired = _ssot.retired_label_names()
     identity = [
         label for label in _resolve_registry_labels()
-        if not label.endswith("retro-opened")
+        if not label.endswith("retro-opened") and label not in retired
     ]
     if not identity:
         raise RuntimeError(
             "auto-retro registry labels: registry entry for scripts/auto_retro.py "
             "has no identity labels left after excluding the terminal "
-            "*retro-opened labels"
+            "*retro-opened labels and any retired label"
         )
     return identity
+
+
+def _discovery_labels() -> list[str]:
+    """Return the labels used to SEARCH for an existing retro issue.
+
+    Unlike :func:`_identity_labels` (which labels a newly opened retro), this
+    keeps any retired label the registry entry still carries (e.g. the
+    successor decided at #1041 comment 4882932274) so a retro filed before
+    that migration stays discoverable, and drops the ``area:`` family
+    entirely: an area label is new to that migration with no old-era
+    counterpart, so requiring it here would exclude every pre-migration
+    retro from the search. Same-family labels (a retired label and its
+    successor) are grouped so they OR together via
+    :func:`_ssot.group_labels_by_family` (GitHub's search API ORs
+    comma-separated values within one ``label:`` qualifier); distinct
+    families still AND. Mirrors the identical technique in
+    ``scripts/scan_retro_followup_drift.py``, the sibling scanner this
+    function's callers are documented to observe the same retro population
+    as. Refs #2313, #1041.
+    """
+    stable = [
+        label for label in _resolve_registry_labels()
+        if not label.endswith("retro-opened") and not label.startswith("area:")
+    ]
+    if not stable:
+        raise RuntimeError(
+            "auto-retro registry labels: registry entry for scripts/auto_retro.py "
+            "has no discovery labels left after excluding the terminal "
+            "*retro-opened labels and the area: family"
+        )
+    return _ssot.group_labels_by_family(stable)
 
 
 def _terminal_labels() -> tuple[str, str]:
@@ -622,10 +656,11 @@ def fetch_past_retro_labels(
 ) -> list[PastRetro]:
     """Return up to *limit* past retros as :class:`PastRetro` records.
 
-    Uses a single search query matching the
-    ``auto_retro.issue_labels`` convention (the retro-issue identity
-    labels resolved from the SSoT registry via :func:`_identity_labels`
-    + title contains ``retro``), then parses each item's body for the
+    Uses a single search query matching the retro-issue discovery labels
+    resolved from the SSoT registry via :func:`_discovery_labels` (both the
+    current identity labels and any retired label kept in the registry
+    entry for discoverability, OR'd by family) + title contains ``retro``,
+    then parses each item's body for the
     ``- Signals fired:`` line. Soft-fails on search errors and on
     per-item JSON shape errors; the prior degrades to empty (no skip,
     no tentative) rather than aborting the retro flow. A drifted
@@ -638,7 +673,7 @@ def fetch_past_retro_labels(
     retro population.
     Refs #582.
     """
-    label_clause = " ".join(f"label:{label}" for label in _identity_labels())
+    label_clause = " ".join(f"label:{label}" for label in _discovery_labels())
     query = f"repo:{repo} is:issue {label_clause} in:title retro"
     encoded = quote(query, safe="")
     per_page = min(max(limit, 1), 100)
@@ -1029,9 +1064,10 @@ def _post_skip_comment_soft(repo: str, pr_number: int, reason: str) -> None:
 def search_open_retro_issues(repo: str) -> list[dict[str, Any]]:
     """Return open retro issues for *repo* (paginated to one page).
 
-    Filter: the retro-issue identity labels every auto-opened retro carries
-    (resolved from the SSoT registry via :func:`_identity_labels`, the same
-    set :func:`issue_labels` applies) AND a retro issue title (see
+    Filter: the retro-issue discovery labels (resolved from the SSoT
+    registry via :func:`_discovery_labels`, which additionally keeps any
+    retired label the registry entry still carries so pre-migration
+    retros stay discoverable) AND a retro issue title (see
     :func:`is_retro_issue_title`), filtered client-side because the GitHub
     search API does not honor leading parens in ``in:title``.
 
@@ -1040,7 +1076,7 @@ def search_open_retro_issues(repo: str) -> list[dict[str, Any]]:
     remainder. Returns the raw search items so the caller can read
     ``number``, ``title``, ``created_at``, and ``body``.
     """
-    label_clause = " ".join(f"label:{label}" for label in _identity_labels())
+    label_clause = " ".join(f"label:{label}" for label in _discovery_labels())
     query = f"repo:{repo} is:issue is:open in:title retro {label_clause}"
     encoded = quote(query, safe="")
     raw = gh_api(
@@ -1355,7 +1391,14 @@ def run(event: dict[str, Any], repo: str) -> int:
         verification_pairs,
         signals=signals,
     )
-    labels = issue_labels(pr.layer_labels, _identity_labels(), tentative=tentative)
+    # A merged PR may itself still carry a retired label (kept live only
+    # until the #1041/#2313 catalog retirement); issue_labels() merges any
+    # inherited layer:* label unconditionally, so it must be filtered out
+    # here rather than resurrected onto a brand-new retro.
+    inherited_layers = tuple(
+        label for label in pr.layer_labels if label not in _ssot.retired_label_names()
+    )
+    labels = issue_labels(inherited_layers, _identity_labels(), tentative=tentative)
 
     # Resolve the terminal labels before the create_issue side effect so a
     # registry that is schema-valid but missing the ops:/harness: terminal

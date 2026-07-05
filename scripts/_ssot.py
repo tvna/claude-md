@@ -182,6 +182,75 @@ def required_issue_axes() -> tuple[str, ...]:
     return tuple(axes)
 
 
+def retired_label_names() -> frozenset[str]:
+    """Return the exact label names declared in label-policy's ``[[retired_labels]]``.
+
+    Used to distinguish a registry entry's CREATE-time labels (applied to a
+    newly filed issue) from its DISCOVERY-time labels (used to search for an
+    already-filed issue): a retired label kept in a ``label_consumers`` entry
+    during a successor migration (#1041, #2313) must still be searchable so
+    pre-migration issues are found, but must never be applied to a new issue.
+    Glob entries with no exact name (e.g. ``agent:*``) contribute nothing;
+    only exact retired names matter here. Fails the same way
+    :func:`required_issue_axes` does on a missing/malformed policy file.
+    """
+    policy_path = policy_source_path("label-policy")
+    try:
+        policy = tomllib.loads(policy_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError) as exc:
+        raise RuntimeError(f"_ssot: cannot read label-policy at {policy_path}: {exc}") from exc
+    except tomllib.TOMLDecodeError as exc:
+        raise RuntimeError(f"_ssot: label-policy at {policy_path} is not valid TOML: {exc}") from exc
+
+    retired = policy.get("retired_labels")
+    if not isinstance(retired, list):
+        raise TypeError(
+            f"_ssot: label-policy at {policy_path} has missing or non-list [[retired_labels]]"
+        )
+    names: set[str] = set()
+    for entry in retired:
+        if not isinstance(entry, dict):
+            raise TypeError(
+                f"_ssot: label-policy [[retired_labels]] entry is not a table: {entry!r}"
+            )
+        name = entry.get("name")
+        if not isinstance(name, str):
+            raise TypeError(
+                f"_ssot: label-policy [[retired_labels]] entry has non-string name: {entry!r}"
+            )
+        if "*" not in name:
+            names.add(name)
+    return frozenset(names)
+
+
+def group_labels_by_family(labels: list[str]) -> list[str]:
+    """Group *labels* by family prefix, comma-joining labels that share one.
+
+    GitHub's search API ANDs separate ``label:`` qualifiers but ORs
+    comma-separated values within a single qualifier. Two labels sharing a
+    family (e.g. a retired label and its successor while a migration like
+    #1041 comment 4882932274 is mid-rollout) are therefore alternatives for
+    that one axis rather than an additional requirement, so an issue filed
+    before or after the registry migration is discoverable either way.
+    Distinct families still AND. Order-preserving by first appearance.
+
+    This groups by textual family prefix only; it does not know whether a
+    label-policy family's cardinality permits multiple simultaneous labels
+    (see ``.github/label-policy.toml``). Callers that need two labels of the
+    same family to be a hard AND requirement (not an either/or) must not
+    route them through this helper.
+    """
+    order: list[str] = []
+    groups: dict[str, list[str]] = {}
+    for label in labels:
+        family = label.split(":", 1)[0]
+        if family not in groups:
+            groups[family] = []
+            order.append(family)
+        groups[family].append(label)
+    return [",".join(groups[family]) for family in order]
+
+
 def _reset_for_tests() -> None:
     """Clear the cached registry so the next ``_load()`` call re-reads disk.
 
