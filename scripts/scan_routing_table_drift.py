@@ -26,8 +26,9 @@ Each row/rule normalizes to a dict with:
 
 Contract:
 - Inputs: the ``verify`` subcommand; ``--runbook`` (default
-  ``docs/runbooks/issue-triage.md``); ``--registry`` (default
-  ``.gitapex/ssot.json``, read through ``scripts/_ssot.py``).
+  ``docs/runbooks/issue-triage.md``). The registry side has no path override:
+  it is always read through ``scripts/_ssot.py``, which owns
+  ``.gitapex/ssot.json``'s path.
 - Outputs: an ``::error::`` annotation on stderr naming the first divergent
   rule; an ``OK:`` line on success.
 - Failure policy: fails loud (exit 1) per CLAUDE.md section 4; exit 64 on an
@@ -51,11 +52,16 @@ _RUNBOOK_PATH = "docs/runbooks/issue-triage.md"
 
 _SECTION_HEADING = "## Agent routing"
 _TABLE_ROW_RE = re.compile(r"^\|(.+)\|\s*$")
+_SEPARATOR_ROW_RE = re.compile(r"^\|[\s:|-]+\|$")
 _BACKTICK_RE = re.compile(r"`([^`]+)`")
+_BARE_NEGATION_RE = re.compile(r"\bNOT\b")
+_TRAILING_PAREN_RE = re.compile(r"\s*\([^()]*\)\s*$")
 
 # The literal condition-cell marker for the catch-all last row: "type:*" is not
 # a concrete family:name label, it is the runbook's way of saying "no type:*
 # label has been applied yet", so it maps to the registry's `default` rule.
+# Matched by membership (not list equality) so a clarifying second label
+# mention in the same cell's prose doesn't defeat the default-row detection.
 _WILDCARD_TYPE_MARKER = "type:*"
 
 _ACTION_PREFIXES: tuple[tuple[str, dict[str, object]], ...] = (
@@ -102,7 +108,11 @@ def extract_table_lines(runbook_text: str) -> list[str]:
     except StopIteration as exc:
         raise TableParseError("no table header row found under the Agent routing heading") from exc
 
-    data_start = header_idx + 2  # skip the header row and the |---|---| separator
+    separator_idx = header_idx + 1
+    if separator_idx >= len(body) or not _SEPARATOR_ROW_RE.match(body[separator_idx].strip()):
+        raise TableParseError("no '|---|---|' separator row found after the table header")
+
+    data_start = separator_idx + 1
     rows: list[str] = []
     for line in body[data_start:]:
         if not _TABLE_ROW_RE.match(line):
@@ -121,24 +131,60 @@ def split_row(row: str) -> tuple[str, str, str]:
     return cells[0], cells[1], cells[2]
 
 
+def _require_combinator_join(tokens: list[str], fragment: str, cell: str, combinator: str) -> None:
+    """Raise unless 2+ *tokens* in *fragment* are joined by exactly ``' <combinator> '``.
+
+    *combinator* must match the group's registry semantics: ``"OR"`` for an
+    ``if_any`` group (any one label matches) and ``"AND"`` for an ``if_all``
+    or ``if_none`` group (every label is required, respectively excluded).
+    Getting this backwards is exactly the bug a Codex review caught on #2329:
+    requiring ``OR`` prose for an ``if_all`` group rejects the semantically
+    correct wording (``` `a` AND `b` ```) and accepts the semantically wrong
+    one (``` `a` OR `b` ```) right before storing it as ``if_all``, which
+    blesses a table that reads "any of a, b" while the registry enforces
+    "both a and b", reintroducing the exact drift this gate exists to catch.
+
+    A single token needs no combinator and always passes. A trailing
+    parenthetical aside (matching the style already used on single-token
+    cells, e.g. ``severity:security`` ``(regardless of other labels)``) is
+    tolerated by stripping it before the comparison, so a clarifying aside
+    does not fail this check; only an actual change in combinator wording
+    does. *cell* is the full condition cell, used only for the error message.
+    """
+    if len(tokens) <= 1:
+        return
+    stripped = _TRAILING_PAREN_RE.sub("", fragment).strip()
+    expected = f" {combinator} ".join(f"`{token}`" for token in tokens)
+    if stripped != expected:
+        raise TableParseError(
+            f"condition cell has {len(tokens)} label tokens but is not "
+            f"joined by ' {combinator} ' (expected {expected!r}): {cell!r}"
+        )
+
+
 def parse_condition(cell: str) -> dict[str, object]:
     """Return the ``if_any``/``if_all``/``if_none``/``default`` shape for *cell*.
 
-    A multi-label cell with no ``AND NOT`` must spell the combinator as ``OR``
-    between every pair of backtick tokens; this is deliberate (Codex review on
-    #2325): silently treating any unrecognised combinator (e.g. a mistaken
-    ``AND``) as ``if_any`` would let the runbook prose drift from its actual
-    ``if_any`` semantics without the gate ever noticing, since both wordings
-    parse to the identical canonical shape.
+    A multi-label group must spell its combinator matching its registry
+    semantics: ``OR`` for a plain multi-label cell (``if_any``), ``AND`` for
+    the labels before ``AND NOT`` (``if_all``) and for the labels after it
+    (``if_none``, each one independently excluded). Silently treating any
+    unrecognised combinator as the same canonical shape would let the runbook
+    prose drift from its actual semantics without the gate ever noticing
+    (Codex review on #2325 and #2329). A single-token cell negated outside an
+    ``AND NOT`` clause (e.g. a bare ``NOT`` `` `label` ``) is unsupported and
+    rejected rather than silently parsed as ``if_any``, for the same reason.
     """
     tokens = _BACKTICK_RE.findall(cell)
-    if tokens == [_WILDCARD_TYPE_MARKER]:
+    if _WILDCARD_TYPE_MARKER in tokens:
         return {"default": True}
     if "AND NOT" in cell:
         before, _, after = cell.partition("AND NOT")
-        result: dict[str, object] = {}
         before_tokens = _BACKTICK_RE.findall(before)
         after_tokens = _BACKTICK_RE.findall(after)
+        _require_combinator_join(before_tokens, before, cell, "AND")
+        _require_combinator_join(after_tokens, after, cell, "AND")
+        result: dict[str, object] = {}
         if before_tokens:
             result["if_all"] = before_tokens
         if after_tokens:
@@ -146,13 +192,12 @@ def parse_condition(cell: str) -> dict[str, object]:
         return result
     if not tokens:
         raise TableParseError(f"condition cell has no label token: {cell!r}")
-    if len(tokens) > 1:
-        expected = " OR ".join(f"`{token}`" for token in tokens)
-        if cell.strip() != expected:
-            raise TableParseError(
-                f"condition cell has {len(tokens)} label tokens but is not "
-                f"joined by ' OR ' (expected {expected!r}): {cell!r}"
-            )
+    if _BARE_NEGATION_RE.search(cell):
+        raise TableParseError(
+            f"condition cell negates a label outside an 'AND NOT' clause, "
+            f"which this parser does not support: {cell!r}"
+        )
+    _require_combinator_join(tokens, cell, cell, "OR")
     return {"if_any": tokens}
 
 
@@ -221,23 +266,36 @@ def diff_rules(
 # ---------------------------------------------------------------------------
 
 
+def _display_path(path: Path) -> str:
+    """Return *path* relative to the repo root when possible, else as given.
+
+    Used for ``::error file=...::`` annotations so a non-default ``--runbook``
+    path is named accurately instead of the module's default-path constant.
+    """
+    try:
+        return path.relative_to(_REPO_ROOT).as_posix()
+    except ValueError:
+        return str(path)
+
+
 def verify(runbook_path: Path) -> list[str]:
     """Return the ``::error::`` lines for the working tree; empty means clean."""
+    display_path = _display_path(runbook_path)
     try:
         runbook_text = runbook_path.read_text(encoding="utf-8")
         runbook_rules = parse_runbook_rules(runbook_text)
-    except (OSError, TableParseError) as exc:
-        return [f"::error file={_RUNBOOK_PATH}::{_SCRIPT}: cannot parse the Agent routing table: {exc}"]
+    except (OSError, UnicodeDecodeError, TableParseError) as exc:
+        return [f"::error file={display_path}::{_SCRIPT}: cannot parse the Agent routing table: {exc}"]
 
     try:
         registry_rules = normalize_registry_rules(_ssot.routing_rules())
-    except TypeError as exc:
+    except (TypeError, ValueError, OSError) as exc:
         return [f"::error file=.gitapex/ssot.json::{_SCRIPT}: cannot read label_routing.rules: {exc}"]
 
     mismatch = diff_rules(runbook_rules, registry_rules)
     if mismatch is not None:
         return [
-            f"::error file={_RUNBOOK_PATH}::{_SCRIPT}: routing table diverges from "
+            f"::error file={display_path}::{_SCRIPT}: routing table diverges from "
             f".gitapex/ssot.json label_routing.rules: {mismatch}"
         ]
     return []
