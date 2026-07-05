@@ -20,6 +20,11 @@ shape. It owns only the semantic rules the schema subset cannot express:
   one of ``max_tokens_per_run`` / ``max_cost_usd_per_run`` (this "at least
   one of" rule has no ``oneOf``/``anyOf`` in the schema subset, the same
   documented limitation as ``scan_ssot_schema.py``'s kind/script XOR rule).
+* Each present budget value must be a finite number of the expected sign
+  (non-negative for ``max_runs_per_day``/``max_retries``, strictly positive
+  for the cost/token keys); the schema subset's ``integer``/``number`` types
+  alone accept ``inf``/``nan``/negative values, which would declare no real
+  ceiling.
 
 Contract:
 - Inputs: the ``verify`` subcommand; ``--repo-root`` (default ``.``);
@@ -37,6 +42,7 @@ Tested by ``tests/test_scan_workflow_llm_budget.py``. Refs #2269.
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 import tomllib
 from collections.abc import Iterator
@@ -96,17 +102,46 @@ def extract_budgets(policy: dict[str, object]) -> dict[str, dict[str, object]]:
     return result
 
 
+def _is_finite_nonnegative(value: object) -> bool:
+    """True if *value* is a finite, non-negative int/float (bool excluded)."""
+    return (
+        isinstance(value, int | float)
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value >= 0
+    )
+
+
+def _is_finite_positive(value: object) -> bool:
+    """True if *value* is a finite, strictly positive int/float (bool excluded)."""
+    return (
+        isinstance(value, int | float)
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value > 0
+    )
+
+
 def missing_budget_keys(budget: dict[str, object] | None) -> list[str]:
-    """Return the required keys *budget* lacks; empty when it is complete.
+    """Return the required keys *budget* lacks or declares with an invalid value.
 
     A missing budget entry (``None``) is reported as lacking every required
-    key. Otherwise: both of :data:`_REQUIRED_BUDGET_KEYS` are required, and
-    at least one of :data:`_COST_KEYS` is required.
+    key. Otherwise: both of :data:`_REQUIRED_BUDGET_KEYS` must be present and
+    a finite number >= 0, and at least one of :data:`_COST_KEYS` must be
+    present and a finite number > 0. The schema subset only constrains these
+    fields to ``integer``/``number``, so a value has to be checked here too:
+    ``inf``, ``nan``, a negative count, or a zero cost/token cap would
+    otherwise pass shape validation while declaring no real ceiling, which
+    defeats the token-blowout guard this gate exists to provide.
     """
     if budget is None:
         return [*_REQUIRED_BUDGET_KEYS, " or ".join(_COST_KEYS)]
-    missing = [key for key in _REQUIRED_BUDGET_KEYS if key not in budget]
-    if not any(key in budget for key in _COST_KEYS):
+    missing = [
+        key
+        for key in _REQUIRED_BUDGET_KEYS
+        if key not in budget or not _is_finite_nonnegative(budget[key])
+    ]
+    if not any(key in budget and _is_finite_positive(budget[key]) for key in _COST_KEYS):
         missing.append(" or ".join(_COST_KEYS))
     return missing
 

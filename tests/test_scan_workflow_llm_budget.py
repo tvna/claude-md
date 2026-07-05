@@ -84,6 +84,69 @@ class TestMissingBudgetKeys:
         budget: dict[str, object] = {"max_tokens_per_run": 1, "max_runs_per_day": 1}
         assert scan_workflow_llm_budget.missing_budget_keys(budget) == ["max_retries"]
 
+    def test_infinite_cost_is_rejected(self) -> None:
+        budget: dict[str, object] = {
+            "max_cost_usd_per_run": float("inf"),
+            "max_runs_per_day": 1,
+            "max_retries": 1,
+        }
+        assert scan_workflow_llm_budget.missing_budget_keys(budget) == [
+            "max_tokens_per_run or max_cost_usd_per_run"
+        ]
+
+    def test_nan_cost_is_rejected(self) -> None:
+        budget: dict[str, object] = {
+            "max_cost_usd_per_run": float("nan"),
+            "max_runs_per_day": 1,
+            "max_retries": 1,
+        }
+        assert scan_workflow_llm_budget.missing_budget_keys(budget) == [
+            "max_tokens_per_run or max_cost_usd_per_run"
+        ]
+
+    def test_zero_cost_is_rejected(self) -> None:
+        """A zero cap declares no real ceiling, same as an absent one."""
+        budget: dict[str, object] = {
+            "max_cost_usd_per_run": 0,
+            "max_runs_per_day": 1,
+            "max_retries": 1,
+        }
+        assert scan_workflow_llm_budget.missing_budget_keys(budget) == [
+            "max_tokens_per_run or max_cost_usd_per_run"
+        ]
+
+    def test_negative_max_tokens_is_rejected(self) -> None:
+        budget: dict[str, object] = {
+            "max_tokens_per_run": -5,
+            "max_runs_per_day": 1,
+            "max_retries": 1,
+        }
+        assert scan_workflow_llm_budget.missing_budget_keys(budget) == [
+            "max_tokens_per_run or max_cost_usd_per_run"
+        ]
+
+    def test_negative_max_runs_per_day_is_rejected(self) -> None:
+        budget: dict[str, object] = {"max_tokens_per_run": 1, "max_runs_per_day": -1, "max_retries": 1}
+        assert scan_workflow_llm_budget.missing_budget_keys(budget) == ["max_runs_per_day"]
+
+    def test_nan_max_retries_is_rejected(self) -> None:
+        budget: dict[str, object] = {
+            "max_tokens_per_run": 1,
+            "max_runs_per_day": 1,
+            "max_retries": float("nan"),
+        }
+        assert scan_workflow_llm_budget.missing_budget_keys(budget) == ["max_retries"]
+
+    def test_zero_max_retries_is_allowed(self) -> None:
+        """Zero retries is a legitimate policy choice, unlike a zero cost/token cap."""
+        budget: dict[str, object] = {"max_tokens_per_run": 1, "max_runs_per_day": 1, "max_retries": 0}
+        assert scan_workflow_llm_budget.missing_budget_keys(budget) == []
+
+    def test_bool_value_is_rejected(self) -> None:
+        """bool is an int subclass in Python; must not silently pass as a count."""
+        budget: dict[str, object] = {"max_tokens_per_run": 1, "max_runs_per_day": True, "max_retries": 1}
+        assert scan_workflow_llm_budget.missing_budget_keys(budget) == ["max_runs_per_day"]
+
 
 # ---------------------------------------------------------------------------
 # scan_line / scan_text
