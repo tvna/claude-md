@@ -276,15 +276,38 @@ def is_404_error(exc: GitHubApiError) -> bool:
 _DISCOVERY_LABEL_EXCLUSIONS = frozenset({RETRO_TP, RETRO_FP, RETRO_FP_CANDIDATE})
 
 
+def _group_discovery_labels_by_family(labels: list[str]) -> list[str]:
+    """Group *labels* by family prefix, comma-joining labels that share one.
+
+    GitHub's search API ANDs separate ``label:`` qualifiers but ORs
+    comma-separated values within a single qualifier. Two registry labels
+    sharing a family (e.g. a retired-and-successor pair while a label
+    decision like #1041 comment 4882932274 is mid-rollout) are therefore
+    alternatives for that one axis rather than an additional
+    requirement, so a retro opened before or after the registry migration
+    is discoverable either way. Distinct families still AND, unchanged from
+    before this grouping existed. Order-preserving by first appearance.
+    """
+    order: list[str] = []
+    groups: dict[str, list[str]] = {}
+    for label in labels:
+        family = label.split(":", 1)[0]
+        if family not in groups:
+            groups[family] = []
+            order.append(family)
+        groups[family].append(label)
+    return [",".join(groups[family]) for family in order]
+
+
 def search_retro_issues(repo: str) -> list[dict[str, Any]]:
     """Search open + closed retro issues in *repo*.
 
     Filters by the labels ``auto_retro.issue_labels`` always applies to a
     retro issue, resolved from the ``.gitapex/ssot.json`` ``label_consumers``
     entry for this script via :func:`_ssot.consumer_labels` rather than
-    hardcoded literals, so a future label rename (e.g. #1041's still-open
-    successor-label decision) is a registry-only edit. That entry also
-    carries the three operator-decision labels (``retro:tp``/``retro:fp``/
+    hardcoded literals, so a future label rename (e.g. the successor
+    decided at #1041 comment 4882932274) is a registry-only edit. That entry
+    also carries the three operator-decision labels (``retro:tp``/``retro:fp``/
     ``retro:fp-candidate``) this script uses elsewhere for label-state
     decisions, not issue discovery, so they are excluded here. The
     combination is narrow enough to avoid scanning the whole repo's issue
@@ -313,7 +336,7 @@ def search_retro_issues(repo: str) -> list[dict[str, Any]]:
             "scripts/scan_retro_followup_drift.py has no labels left after "
             "excluding retro:tp/retro:fp/retro:fp-candidate"
         )
-    label_clause = " ".join(f"label:{label}" for label in discovery_labels)
+    label_clause = " ".join(f"label:{group}" for group in _group_discovery_labels_by_family(discovery_labels))
     query = f"repo:{repo} is:issue {label_clause} in:title retro"
     encoded = quote(query, safe="")
     raw = gh_api("GET", f"/search/issues?q={encoded}&per_page=100")

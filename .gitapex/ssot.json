@@ -1918,9 +1918,10 @@
         "retro:fp",
         "retro:fp-candidate",
         "type:docs",
-        "layer:meta"
+        "layer:meta",
+        "layer:p3-harness"
       ],
-      "note": "retrospective follow-up true/false-positive labels; see #1041"
+      "note": "retrospective follow-up true/false-positive labels; discovery query ORs layer:meta and layer:p3-harness (search_retro_issues groups same-family labels with comma-OR) so retros opened before and after the #1041 comment 4882932274 successor migration both stay discoverable; drop layer:meta once no open retro carries it. See #1041, #2313"
     },
     {
       "path": "scripts/branch_cleanup.py",
