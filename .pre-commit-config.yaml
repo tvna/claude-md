@@ -204,13 +204,14 @@ repos:
         files: ^(\.gitapex/.*\.json|scripts/scan_ssot_schema\.py|\.github/labels\.json|\.github/label-policy\.toml)$
 
       - id: scan-ssot-drift
-        name: scan ssot drift (scripts/scan_ssot_drift.py verify, advisory)
-        # Refs #2256: advisory reconciliation of .gitapex/ssot.json against
+        name: scan ssot drift (scripts/scan_ssot_drift.py verify)
+        # Refs #2256: blocking reconciliation of .gitapex/ssot.json against
         # the four partial gate manifests (agent_hooks_source.json,
         # preflight_steps.py STEPS, .pre-commit-config.yaml, rulesets/main.json
-        # native rules and pull_request: workflow scripts). Always exits 0;
-        # divergence is reported as ::warning:: lines only. Mirrors the
-        # scan-ssot-schema wiring on the same three planes.
+        # native rules and pull_request: workflow scripts), plus (refs #2301,
+        # phase 3 child 3c) the STEPS-vs-workflow reconciliation folded in
+        # from the former scan_preflight_drift.py. Divergence fails the run.
+        # Mirrors the scan-ssot-schema wiring on the same three planes.
         entry: uv run python scripts/scan_ssot_drift.py verify
         language: system
         pass_filenames: false

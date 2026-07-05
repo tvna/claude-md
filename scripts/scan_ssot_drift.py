@@ -14,11 +14,7 @@ names as authoritative for enforcement-plane membership:
 - ``.pre-commit-config.yaml`` local repo hooks (pre-commit plane);
 - ``.github/rulesets/main.json`` ``rules`` (server plane, native rule types)
   and the ``pull_request:``-triggered workflow scripts under
-  ``.github/workflows/`` (ci plane, reusing
-  :func:`scan_preflight_drift.collect_workflow_refs`; this is read-only reuse
-  of a tested pure helper, not folding scan_preflight_drift's own STEPS-vs-CI
-  reconciliation into this gate (that stays a separate, still-green check
-  until phase 3).
+  ``.github/workflows/`` (ci plane, via :func:`collect_workflow_refs`).
 
 Divergence is reported as ``::error::`` lines and fails the run (exit 1).
 Phase 1 first landed this gate advisory (warning-only, always exit 0); this
@@ -28,8 +24,14 @@ restores the advisory contract. A handful of manifest entries have no
 scripts/*.py backing (third-party pre-commit-hooks entry points, bare
 toolchain binaries such as ruff/mypy/pytest/prek/actionlint, and the
 preflight_all.py runner itself) and are excluded via an inline,
-rationale-carrying allowlist, mirroring the pattern in
-:mod:`scan_preflight_drift`.
+rationale-carrying allowlist.
+
+Phase 3 (child 3c, #2301) folds in the bespoke STEPS-vs-workflow reconciler
+formerly at ``scripts/scan_preflight_drift.py``: :func:`collect_workflow_refs`,
+:func:`extract_script_refs`, and :func:`diff_steps_vs_workflows` are that
+module's logic moved here so the two-plane reconciliation does not persist as
+a duplicate of the registry gate. ``STEPS_VS_WORKFLOW_ALLOWLIST`` preserves
+its exclusion list verbatim.
 
 Architecture: pure extraction functions per manifest, pure comparison
 functions producing warning strings, a single IO boundary in :func:`main`.
@@ -47,7 +49,7 @@ Contract:
   also fails loud (exit 1) on a hard configuration error, an input file
   missing or unparseable; exit 64 on an unrecognised subcommand.
 
-Tested by ``tests/test_scan_ssot_drift.py``. Refs #2256, #2246, #2262.
+Tested by ``tests/test_scan_ssot_drift.py``. Refs #2256, #2246, #2262, #2301.
 """
 
 from __future__ import annotations
@@ -56,9 +58,9 @@ import argparse
 import json
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
-import scan_preflight_drift as _preflight_drift
 import yaml
 from preflight_steps import STEPS, Step
 
@@ -100,6 +102,149 @@ PRE_COMMIT_NO_SCRIPT_ALLOWLIST: dict[str, str] = {
 # mirroring it as a gate would recurse. Excluded from the ci-plane manifest
 # only (it is not a STEPS or pre-commit entry either).
 CI_RUNNER_EXCLUDE = frozenset({"preflight_all"})
+
+# Scripts CI invokes from ``pull_request:`` workflows but that
+# ``preflight_steps.STEPS`` intentionally does NOT mirror. Each entry pairs
+# the script name with the reason and the client-side equivalent (if any), so
+# the exclusion is auditable. Folded in verbatim from the former
+# ``scan_preflight_drift.ALLOWLIST`` (#2301).
+STEPS_VS_WORKFLOW_ALLOWLIST: dict[str, str] = {
+    "title_policy": (
+        "Input is the PR / issue title from the webhook payload, not the "
+        "working tree. Client gate: scripts/preflight_title_policy.py "
+        "(MCP PreToolUse)."
+    ),
+    "body_policy": (
+        "Input is the PR / issue body from the webhook payload, not the "
+        "working tree. Client gate: "
+        "scripts/preflight_pr_body_required_sections.py (MCP PreToolUse)."
+    ),
+    "issue_link": (
+        "Input is the PR body plus a GitHub API call rate-limited without "
+        "GH_TOKEN. Client gate: scripts/pr_body_close_keyword_gate.py and "
+        "scripts/preflight_pr_template_shape.py (MCP PreToolUse)."
+    ),
+    "verify_linked_issue_titles": (
+        "Input is the PR body plus GitHub API calls (one per linked issue) "
+        "that require GH_TOKEN. No local equivalent: the title of a remote "
+        "issue cannot be checked without network access and a valid token. "
+        "Tracked by #941."
+    ),
+    "scan_review_in_progress_marker": (
+        "Input is a live PR's reaction state via a GitHub API call that "
+        "requires GH_TOKEN and a real PR number. No local equivalent: there "
+        "is no PR to react to before one is opened, so this gate is CI-only. "
+        "Refs #2312."
+    ),
+    "uv_pin": (
+        "Used twice: ``uv_pin read`` is an output helper (no gate), "
+        "``uv_pin drift`` IS a gate and is mirrored as a preflight step."
+    ),
+    "preflight_all": (
+        "Runner, not a gate. Mirroring itself would recurse; the drift "
+        "gate is `scan_ssot_drift` which IS mirrored as a step."
+    ),
+    "verify_shard_coverage": (
+        "Input is the per-leg JUnit XML artifacts produced by the "
+        "lint-scripts-pytest matrix legs, which only exist in CI. The "
+        "static counterpart `verify_test_shard_markers` IS mirrored as a "
+        "preflight step. Refs #545."
+    ),
+}
+
+
+@dataclass(frozen=True)
+class WorkflowReference:
+    """One ``scripts/<name>.py`` reference discovered in a workflow."""
+
+    workflow: str
+    script: str
+
+
+def workflow_targets_pull_request(yaml_text: str) -> bool:
+    """Return True iff *yaml_text* declares a ``pull_request:`` trigger.
+
+    The check is line-oriented to avoid pulling in a YAML parser for a
+    cheap top-level scan. Matches either the list form
+    ``on: [pull_request, ...]`` or the mapping form
+
+        on:
+          pull_request:
+            ...
+
+    ``pull_request_target:`` is explicitly excluded because its colon
+    follows the ``_target`` suffix.
+    """
+    in_on_block = False
+    on_block_indent = -1
+    for raw_line in yaml_text.splitlines():
+        stripped = raw_line.lstrip()
+        indent = len(raw_line) - len(stripped)
+        if not stripped or stripped.startswith("#"):
+            continue
+        if not in_on_block:
+            if stripped.startswith("on:"):
+                tail = stripped[3:].strip()
+                if tail.startswith("[") and "pull_request" in tail and "pull_request_target" not in tail.replace("pull_request_target", ""):
+                    # List form: detect ``pull_request`` as its own token.
+                    tokens = re.findall(r"[\w_]+", tail)
+                    if "pull_request" in tokens:
+                        return True
+                in_on_block = True
+                on_block_indent = indent
+            continue
+        if indent <= on_block_indent:
+            # Left the on: block without finding pull_request:.
+            return False
+        # Inside the on: block. Match ``pull_request:`` exactly, not
+        # ``pull_request_target:``.
+        head = stripped.split(":", 1)[0]
+        if head == "pull_request":
+            return True
+    return False
+
+
+def extract_script_refs(yaml_text: str) -> set[str]:
+    """Return the set of ``scripts/<name>`` references in *yaml_text*."""
+    return set(_SCRIPT_REF.findall(yaml_text))
+
+
+def collect_workflow_refs(workflows_dir: Path) -> list[WorkflowReference]:
+    """Return every (workflow, script) pair from ``pull_request:`` workflows.
+
+    The result is sorted by (workflow, script) for deterministic output.
+    """
+    refs: list[WorkflowReference] = []
+    for path in sorted(workflows_dir.glob("*.yml")):
+        text = path.read_text(encoding="utf-8")
+        if not workflow_targets_pull_request(text):
+            continue
+        for script in sorted(extract_script_refs(text)):
+            refs.append(WorkflowReference(workflow=path.name, script=script))
+    return refs
+
+
+def diff_steps_vs_workflows(
+    workflow_refs: list[WorkflowReference],
+    declared: frozenset[str],
+    allowlist: dict[str, str],
+) -> tuple[list[WorkflowReference], frozenset[str]]:
+    """Return (missing_in_steps, extra_in_steps) for the STEPS-vs-workflow check.
+
+    ``missing_in_steps`` lists CI references whose script is not declared in
+    ``preflight_steps.STEPS`` and is not in *allowlist*; each is a blocking
+    divergence. ``extra_in_steps`` lists scripts STEPS declares that no
+    ``pull_request:`` workflow invokes; an advisory-only condition, since the
+    local set may legitimately pre-empt a future CI gate.
+    """
+    ci_scripts = {ref.script for ref in workflow_refs}
+    missing = [
+        ref
+        for ref in workflow_refs
+        if ref.script not in declared and ref.script not in allowlist
+    ]
+    extra = frozenset(declared) - ci_scripts
+    return missing, extra
 
 
 def _as_list(value: object) -> list[object]:
@@ -179,7 +324,7 @@ def pre_commit_manifest(pre_commit_config: object) -> tuple[frozenset[str], froz
 
 def ci_manifest(workflows_dir: Path) -> frozenset[str]:
     """Return script basenames referenced by ``pull_request:``-triggered workflows."""
-    refs = _preflight_drift.collect_workflow_refs(workflows_dir)
+    refs = collect_workflow_refs(workflows_dir)
     return frozenset({r.script for r in refs} - CI_RUNNER_EXCLUDE)
 
 
@@ -442,6 +587,28 @@ def main(argv: list[str] | None = None) -> int:
         rulesets=rulesets,
         workflows_dir=workflows_dir,
     )
+
+    # Phase 3 child 3c (#2301): the former scan_preflight_drift.py STEPS-vs-CI
+    # reconciliation, folded in with its allowlist preserved verbatim. A
+    # missing step is a blocking divergence (joins ``warnings``); a step
+    # declared locally with no CI counterpart is advisory-only, since the
+    # local set may legitimately pre-empt a future CI gate.
+    workflow_refs = collect_workflow_refs(workflows_dir)
+    push_scripts, _ = steps_manifest()
+    missing_steps, extra_declared = diff_steps_vs_workflows(
+        workflow_refs, push_scripts, STEPS_VS_WORKFLOW_ALLOWLIST
+    )
+    warnings += [
+        f"preflight_steps.STEPS is missing a step for 'scripts/{ref.script}.py' "
+        f"(invoked by pull_request: workflow {ref.workflow!r})."
+        for ref in missing_steps
+    ]
+    for name in sorted(extra_declared):
+        print(
+            f"::warning::{_SCRIPT}: preflight_steps.STEPS declares step {name!r} but "
+            f"no pull_request: workflow invokes scripts/{name}.py.",
+            file=sys.stderr,
+        )
 
     if warnings:
         for message in warnings:

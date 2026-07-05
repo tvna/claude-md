@@ -96,7 +96,6 @@ import scan_module_size_distribution
 import scan_non_ascii
 import scan_nonexhaustive_invariant_drift
 import scan_pr_body_quality_drift
-import scan_preflight_drift
 import scan_provisioning_hook_serial
 import scan_quality_standard_drift
 import scan_repo_double_hyphen
@@ -269,7 +268,6 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_bypass_lever_doc_drift.py", "verify"): "test_scan_bypass_lever_doc_drift_verify_matches_workflow_args",
     ("scan_input_contract_drift.py", "verify"): "test_scan_input_contract_drift_verify_matches_workflow_args",
     ("scan_issue_anchor_drift.py", "verify"): "test_scan_issue_anchor_drift_verify_matches_workflow_args",
-    ("scan_preflight_drift.py", "verify"): "test_scan_preflight_drift_verify_matches_workflow_args",
     ("scan_provisioning_hook_serial.py", "verify"): "test_scan_provisioning_hook_serial_verify_matches_workflow_args",
     ("scan_pr_body_quality_drift.py", "verify"): "test_scan_pr_body_quality_drift_verify_matches_workflow_args",
     ("scan_quality_standard_drift.py", "verify"): "test_scan_quality_standard_drift_verify_matches_workflow_args",
@@ -3256,12 +3254,6 @@ def test_scan_hook_coverage_drift_verify_matches_workflow_args() -> None:
     """Mirrors the `Verify Claude/Codex hook coverage parity` step in
     `.github/workflows/verify-agents.yml` (issue #615)."""
     assert scan_hook_coverage_drift.main(["verify"]) == 0
-
-
-def test_scan_preflight_drift_verify_matches_workflow_args() -> None:
-    """Mirrors the `Verify preflight set matches CI script invocations`
-    step in `.github/workflows/verify-agents.yml` (issue #493)."""
-    assert scan_preflight_drift.main(["verify"]) == 0
 
 
 def test_scan_provisioning_hook_serial_verify_matches_workflow_args() -> None:

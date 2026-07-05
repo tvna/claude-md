@@ -111,12 +111,6 @@ jobs:
       - name: Assert script maintainability metrics
         run: uv run python scripts/scan_maintainability_metrics.py verify
 
-      - name: Verify preflight set matches CI script invocations
-        # Refs #493: fails when a pull_request: workflow gains a
-        # `python3 scripts/<name>.py` call without a matching step in
-        # `scripts/preflight_all.py`. See docs/runbooks/preflight.md.
-        run: uv run python scripts/scan_preflight_drift.py verify
-
       - name: Verify workflow-script input contracts
         # Refs #1087: every workflow-called script must declare a Contract:
         # docstring block (Inputs / Outputs / Failure policy loud|open),

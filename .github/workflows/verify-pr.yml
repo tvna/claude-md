@@ -241,13 +241,14 @@ jobs:
         run: uv run python scripts/scan_ssot_schema.py verify
 
       - name: Report .gitapex/ssot.json drift (advisory)
-        # Refs #2256: advisory reconciliation of the gate registry against the
+        # Refs #2256: blocking reconciliation of the gate registry against the
         # four partial manifests (agent_hooks_source.json, preflight_steps.py
         # STEPS, .pre-commit-config.yaml, rulesets/main.json native rules and
-        # pull_request: workflow scripts). Always exits 0; divergence is
-        # reported as ::warning:: lines only. Mirrored pre-push by the
-        # scan_ssot_drift STEP and at commit time by the scan-ssot-drift
-        # pre-commit hook.
+        # pull_request: workflow scripts), plus (refs #2301, phase 3 child 3c)
+        # the STEPS-vs-workflow reconciliation folded in from the former
+        # scan_preflight_drift.py. Divergence is reported as ::error:: lines
+        # and fails the run. Mirrored pre-push by the scan_ssot_drift STEP and
+        # at commit time by the scan-ssot-drift pre-commit hook.
         run: uv run python scripts/scan_ssot_drift.py verify
 
       - name: Reject hardcoded label literals in scripts
