@@ -76,23 +76,49 @@ _FIELD_SEP = "\x1f"
 # trailer key spelling is case-insensitive), capturing everything after the
 # key rather than anchoring the email itself to end-of-line: a trailing
 # annotation after the email (e.g. "(paired)") must not prevent a match. The
-# emails are then extracted from the captured tail separately (see
-# `_EMAIL_ANGLE_RE` / `_EMAIL_BARE_RE` below) so every bracketed/bare email on
-# the line is checked, not only the last one a single greedy match would have
-# captured. Anchored to a full line's start so a mention of the phrase in
-# prose text does not false-positive.
+# tail is then split into per-identity segments and scanned by
+# `_emails_in_segment` below. Anchored to a full line's start so a mention of
+# the phrase in prose text does not false-positive.
 _TRAILER_LINE_RE = re.compile(r"(?im)^co-authored-by:\s*(?P<rest>.*)$")
 
-# Extracts every `<email>`-bracketed address from a trailer line's tail (the
-# standard git trailer shape). Un-anchored and repeated via `finditer` so a
-# single line listing more than one bracketed co-author (e.g.
-# comma-separated) yields every email, not just the last.
+# Splits a trailer line's tail into top-level, comma-separated identity
+# segments (one per co-author). The lookahead treats a comma INSIDE an
+# angle-bracketed span as part of that span rather than a separator, so a
+# malformed multi-address bracket (e.g. "<a@x, b@y>") stays one segment
+# instead of being torn in half by its own internal comma.
+_SEGMENT_SPLIT_RE = re.compile(r",(?![^<]*>)")
+
+# Extracts a `<...>`-bracketed span (the standard git trailer shape).
 _EMAIL_ANGLE_RE = re.compile(r"<(?P<email>[^<>]+)>")
 
-# Falls back to a bare `user@host` address with no brackets (the shape PR
-# #2302's manual footer actually used) when the trailer line's tail has no
-# bracketed email at all.
-_EMAIL_BARE_RE = re.compile(r"(?P<email>[\w.+-]+@[\w.-]+)")
+# Matches a bare `user@host` address with no brackets (the shape PR #2302's
+# manual footer actually used). The domain requires a final non-dot
+# character so a sentence-ending period right after the email (e.g.
+# "noreply@anthropic.com.") is never folded into the match.
+_EMAIL_BARE_RE = re.compile(r"(?P<email>[\w.+-]+@[\w.-]*[\w-])")
+
+
+def _emails_in_segment(segment: str) -> list[str]:
+    """Return the identity email(s) one comma-delimited segment names.
+
+    A segment holding a bracketed co-author (``Name <email>``) yields every
+    email inside that FIRST bracket (scanning the bracket's own content
+    with `_EMAIL_BARE_RE` so a malformed bracket listing more than one
+    address, e.g. ``<a@x, b@y>``, still surfaces each one), and ignores
+    anything after that bracket in the same segment: a trailing annotation
+    or a second email-looking token does not name a second identity within
+    one segment, only a separate comma-delimited segment does (matching how
+    ``Co-authored-by:`` lines are actually written). A bracket-less segment
+    yields only the first bare email found, for the same reason: trailing
+    prose after the one real identity in a segment (e.g. "(paired)", or an
+    unrelated email mentioned in an aside) must not be treated as another
+    identity to check.
+    """
+    angle_match = _EMAIL_ANGLE_RE.search(segment)
+    if angle_match:
+        return [m.group("email") for m in _EMAIL_BARE_RE.finditer(angle_match.group("email"))]
+    bare_match = _EMAIL_BARE_RE.search(segment)
+    return [bare_match.group("email")] if bare_match else []
 
 
 @dataclass(frozen=True)
@@ -140,21 +166,17 @@ def find_redundant_trailers(runner: Runner, shas: list[str]) -> list[Violation]:
         author_email, body = parsed
         for line_match in _TRAILER_LINE_RE.finditer(body):
             rest = line_match.group("rest")
-            angle_emails = [m.group("email").strip() for m in _EMAIL_ANGLE_RE.finditer(rest)]
-            # A bare email can appear alongside a bracketed one on the same
-            # line (e.g. a bracketed co-author followed by a bare self
-            # email); scanning only the text outside `<...>` spans finds it
-            # without re-matching an email already captured by the angle
-            # branch (the bracket contents would otherwise also satisfy the
-            # bare pattern, double-counting the same address).
-            rest_outside_brackets = _EMAIL_ANGLE_RE.sub(" ", rest)
-            bare_emails = [m.group("email") for m in _EMAIL_BARE_RE.finditer(rest_outside_brackets)]
-            trailer_emails = angle_emails + bare_emails
-            for trailer_email in trailer_emails:
-                if trailer_email and trailer_email.casefold() == author_email.casefold():
-                    violations.append(
-                        Violation(sha=sha, author_email=author_email, trailer_email=trailer_email)
-                    )
+            seen_emails: set[str] = set()
+            for segment in _SEGMENT_SPLIT_RE.split(rest):
+                for trailer_email in _emails_in_segment(segment):
+                    key = trailer_email.casefold()
+                    if key in seen_emails:
+                        continue  # e.g. the same address bracketed and bare on one line
+                    seen_emails.add(key)
+                    if key == author_email.casefold():
+                        violations.append(
+                            Violation(sha=sha, author_email=author_email, trailer_email=trailer_email)
+                        )
     return violations
 
 
