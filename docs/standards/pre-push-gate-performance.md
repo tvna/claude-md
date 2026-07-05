@@ -80,8 +80,13 @@ explicitly. This parallelises the residual real work across cores.
 
 ### 3. Content-addressed skip cache (strict parity, kills the multiplier)
 
-`scripts/preflight_cache.py` fingerprints the test-relevant working tree
-(`scripts/`, `tests/`, `pyproject.toml`, `uv.lock`) plus the pytest argv. After
+`scripts/preflight_cache.py` fingerprints every tracked file in the working
+tree, minus an explicit denylist (`EXCLUDED_PATHSPECS`, currently empty), plus
+the pytest argv. Covering every tracked file by default is deliberate: repo-wide
+scanner tests read essentially any file in the tree, so a narrow allowlist of
+"test-relevant" paths drifts stale the moment a test reads a newly added data
+directory (#2195; the prior allowlist missed `.agents/skills` and reused a
+cached green on a skills-only commit, so the failure surfaced only in CI). After
 a green heavy-tier run the fingerprint is recorded at
 `<git-dir>/preflight_heavy_cache.json` (per-clone, untracked). On the next push,
 if the fingerprint is byte-identical the heavy step is reported `pass (cached)`

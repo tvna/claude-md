@@ -2,7 +2,7 @@
 """CI gate: validate document dependency co-changes using the typed graph.
 
 When a PR changes a file that is declared as a node in
-``docs/graph/doc-dependencies.toml``, this gate requires that all
+``.gitapex/doc-dependencies.toml``, this gate requires that all
 blocking-severity dependent nodes are also changed in the same PR. If any
 are missing, the gate fails with ``::error::`` annotations that name the
 absent documents and show the waiver syntax.
@@ -26,7 +26,7 @@ Architecture: pure functions on top (:func:`parse_waivers`,
 :func:`get_changed_files`, and a ``main()`` entrypoint at the bottom.
 
 Contract:
-- Inputs: ``--graph`` (default ``docs/graph/doc-dependencies.toml``),
+- Inputs: ``--graph`` (default ``.gitapex/doc-dependencies.toml``),
   ``--base-ref`` (default: ``BASE_REF`` env var, then ``origin/main``),
   ``--body-file`` (PR body path) or ``PR_BODY`` env var.
 - Outputs: ``::error file=<path>::`` annotations on stderr for missing
@@ -36,7 +36,7 @@ Contract:
   CLAUDE.md section 4; fails open (exit 0) when the git diff is unavailable
   so the gate skips rather than blocks on a missing diff.
 
-Tested by ``tests/test_gate_doc_graph_pr.py``. Refs #1754.
+Tested by ``tests/test_gate_doc_graph_pr.py``. Refs #1754, #2342.
 """
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from doc_graph import DocGraph, GraphValidationError, impact_report, load_graph
 
-_GRAPH_PATH = Path("docs/graph/doc-dependencies.toml")
+_GRAPH_PATH = Path(".gitapex/doc-dependencies.toml")
 _SCRIPT = "gate_doc_graph_pr"
 
 # Plain-text waiver marker (MCP-safe; HTML comments are stripped by GitHub MCP
@@ -149,7 +149,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--graph",
         default=str(_GRAPH_PATH),
-        help="Path to doc-dependencies.toml (default: %(default)s).",
+        help="Path to .gitapex/doc-dependencies.toml (default: %(default)s).",
     )
     parser.add_argument(
         "--base-ref",

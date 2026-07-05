@@ -112,7 +112,7 @@ git merge-tree --write-tree HEAD origin/main 2>&1 | grep "^CONFLICT"
 ```
 
 Record the conflicting paths. In most cases these are generated artifacts
-(e.g. `docs/standards/module-size-distribution.toml`).
+(e.g. `.gitapex/module-size-distribution.toml`).
 
 ### Step 2; Find the merge-base SHA
 
@@ -137,7 +137,7 @@ git rev-parse HEAD:<path/to/file>
 
 Then call `mcp__github__create_or_update_file` with:
 
-- `path`: the file path (e.g. `docs/standards/module-size-distribution.toml`)
+- `path`: the file path (e.g. `.gitapex/module-size-distribution.toml`)
 - `message`: a commit message citing the issue (e.g.
   `chore: set generated file to merge-base for server-side base-update #1802`)
 - `content`: the **raw file content** from `git show "$MERGE_BASE:<path>"` above
@@ -180,7 +180,7 @@ apply.
 ### Step 6; Regenerate generated artifacts
 
 Re-run whatever script produces the generated files that were neutralized in
-Step 3. For example, to regenerate `module-size-distribution.toml`:
+Step 3. For example, to regenerate `.gitapex/module-size-distribution.toml`:
 
 ```sh
 python3 scripts/gen_module_size_distribution.py

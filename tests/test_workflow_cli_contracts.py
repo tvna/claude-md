@@ -83,6 +83,7 @@ import scan_devcontainer_tool_drift
 import scan_doc_workflow_refs
 import scan_docs_inventory
 import scan_flake_pin_drift
+import scan_gitapex_schema
 import scan_hardcoded_label_literals
 import scan_harness_doc_coverage
 import scan_hook_coverage_drift
@@ -277,6 +278,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_secrets.py", "verify"): "test_scan_secrets_verify_matches_workflow_args",
     ("scan_ssot_drift.py", "verify"): "test_scan_ssot_drift_verify_matches_workflow_args",
     ("scan_ssot_schema.py", "verify"): "test_scan_ssot_schema_verify_matches_workflow_args",
+    ("scan_gitapex_schema.py", "verify"): "test_scan_gitapex_schema_verify_matches_workflow_args",
     ("scan_hardcoded_label_literals.py", "verify"): "test_scan_hardcoded_label_literals_verify_matches_workflow_args",
     ("scan_routing_table_drift.py", "verify"): "test_scan_routing_table_drift_verify_matches_workflow_args",
     ("scan_ruff_format.py", "verify"): "test_scan_ruff_format_verify_matches_workflow_args",
@@ -3266,6 +3268,12 @@ def test_scan_ssot_schema_verify_matches_workflow_args() -> None:
     """Mirrors the `Validate .gitapex/ssot.json registry` step in
     `.github/workflows/verify-pr.yml` (issue #2252)."""
     assert scan_ssot_schema.main(["verify"]) == 0
+
+
+def test_scan_gitapex_schema_verify_matches_workflow_args() -> None:
+    """Mirrors the `Validate .gitapex/*.toml against their sibling schemas`
+    step in `.github/workflows/verify-pr.yml` (issue #2342)."""
+    assert scan_gitapex_schema.main(["verify"]) == 0
 
 
 def test_scan_ssot_drift_verify_matches_workflow_args() -> None:

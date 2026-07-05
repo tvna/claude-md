@@ -236,6 +236,16 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_ssot_schema.py", "verify"),
     ),
     Step(
+        # Refs #2342. Validates every .gitapex/*.toml against its sibling
+        # .gitapex/NAME.schema.json (shape only; referential/semantic checks
+        # stay with each file's own normative validator: doc_graph.load_graph,
+        # scan_pr_body_quality_drift.py, scan_quality_standard_drift.py,
+        # audit_loop_engineering.py). Static working-tree read; mirrors the
+        # verify-pr.yml step so the gate fires pre-push, not only in CI.
+        name="scan_gitapex_schema",
+        argv=("python3", "scripts/scan_gitapex_schema.py", "verify"),
+    ),
+    Step(
         # Refs #2256. Blocking reconciliation of .gitapex/ssot.json against
         # the four partial gate manifests (agent_hooks_source.json,
         # this STEPS tuple, .pre-commit-config.yaml, rulesets/main.json native
@@ -377,7 +387,7 @@ STEPS: tuple[Step, ...] = (
     ),
     Step(
         # Refs #1828. Fails when an `enforced`/`partial` row in
-        # docs/standards/pr-body-quality.enforcement.toml names a backing gate
+        # .gitapex/pr-body-quality.enforcement.toml names a backing gate
         # that does not exist, or an orphaned defect class is present.
         name="scan_pr_body_quality_drift",
         argv=("python3", "scripts/scan_pr_body_quality_drift.py", "verify"),

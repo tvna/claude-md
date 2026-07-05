@@ -12,14 +12,14 @@ stdout without writing. Same single-producer ownership pattern as
 
 Contract:
 - Inputs: ``all-doc`` or ``preview`` subcommand; ``--graph`` (default
-  ``docs/graph/doc-dependencies.toml``); ``--out`` (default
+  ``.gitapex/doc-dependencies.toml``); ``--out`` (default
   ``docs/generated/graph/doc-dependency-graph.md``).
 - Outputs: Mermaid ``flowchart LR`` diagram wrapped in a Markdown file;
   exit 0 on success.
 - Failure policy: fails loud per CLAUDE.md section 4 when the graph file
   is missing or invalid, or the output path cannot be written.
 
-Tested by ``tests/test_doc_graph_viz.py``. Refs #1754.
+Tested by ``tests/test_doc_graph_viz.py``. Refs #1754, #2342.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from doc_graph import GraphValidationError, load_graph, render_mermaid
 
-_GRAPH_PATH = Path("docs/graph/doc-dependencies.toml")
+_GRAPH_PATH = Path(".gitapex/doc-dependencies.toml")
 _OUT_PATH = Path("docs/generated/graph/doc-dependency-graph.md")
 
 _LEGEND = """\
