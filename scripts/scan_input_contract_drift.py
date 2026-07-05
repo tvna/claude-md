@@ -51,7 +51,7 @@ import re
 import sys
 from pathlib import Path
 
-from scan_preflight_drift import extract_script_refs
+from scan_ssot_drift import extract_script_refs
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
@@ -91,7 +91,6 @@ BASELINE_MISSING_CONTRACT: dict[str, str] = {
         "nixpkgs_cooldown",
         "post_issue_comment",
         "pr_upsert",
-        "preflight_all",
         "ruleset_drift",
         "rulesets_apply",
         "scan_apm_portability",
@@ -99,7 +98,6 @@ BASELINE_MISSING_CONTRACT: dict[str, str] = {
         "scan_hook_coverage_drift",
         "scan_maintainability_metrics",
         "scan_markdown_links",
-        "scan_preflight_drift",
         "scan_retro_followup_drift",
         "scan_secret_runbooks",
         "scan_workflow_action_pins",
@@ -159,7 +157,7 @@ def read_module_docstring(path: Path) -> str | None:
 def collect_target_scripts(workflows_dir: Path, scripts_dir: Path) -> set[str]:
     """Return public script names referenced by any workflow YAML.
 
-    The reference regex (reused from :mod:`scan_preflight_drift`) only
+    The reference regex (reused from :mod:`scan_ssot_drift`) only
     matches names whose first character is a letter, so private helpers
     (``_github_api`` etc.) are excluded. The result is intersected with
     the files that actually exist so a reference in a comment to a removed

@@ -1,7 +1,7 @@
 """Tests for ``scripts/preflight_all.py``.
 
 Verifies the manifest contract consumed by
-``scripts/scan_preflight_drift.py`` and the prereq / skip / failure
+``scripts/scan_ssot_drift.py`` and the prereq / skip / failure
 classification that ``run_step`` exposes. CLI smoke tests cover the
 ``--list`` machine-readable path and the human summary path.
 

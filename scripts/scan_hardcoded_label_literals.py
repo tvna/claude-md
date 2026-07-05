@@ -39,8 +39,8 @@ edit.
 
 Sanctioned homes (the allowlist)
 --------------------------------
-Two tiers, both rationale-carrying (mirroring the ``scan_preflight_drift`` /
-``scan_ssot_drift`` allowlist idiom):
+Two tiers, both rationale-carrying (mirroring the ``scan_ssot_drift``
+allowlist idiom):
 
 - :data:`SSOT_HOME_FILES`: files that are the definitional single source for
   label names, exempt wholesale (``scripts/_retro_labels.py`` is the retro:*
