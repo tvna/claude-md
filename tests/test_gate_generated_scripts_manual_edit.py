@@ -105,6 +105,17 @@ def test_changed_generated_docs_protects_module_size_snapshot() -> None:
     assert changed == frozenset({".gitapex/module-size-distribution.toml"})
 
 
+def test_changed_generated_docs_ignores_suffixed_sibling_of_exact_file() -> None:
+    # A plain startswith() on the exact-file entry has no path boundary, so
+    # ``.gitapex/module-size-distribution.toml.bak`` would otherwise also
+    # match startswith(".gitapex/module-size-distribution.toml") and be
+    # misclassified as a hand-edit of the protected snapshot. It must not be:
+    # it is a distinct, unprotected file that merely shares a prefix.
+    stdout = "M\t.gitapex/module-size-distribution.toml.bak\n"
+    changed = gate.changed_generated_docs("origin/main", runner=_fake_runner(stdout))
+    assert changed == frozenset()
+
+
 def test_changed_generated_docs_exempts_pure_rename_into_protected_path() -> None:
     # Refs #2342: a git-mv relocation (byte-identical, so git reports it as a
     # rename at the -M100% threshold) from a not-yet-protected path into a
