@@ -2,6 +2,15 @@
 
 This file is generated from `scripts/gate_generated_scripts_manual_edit.py` by `python3 scripts/script_ast_graph.py all-doc`. Do not edit it by hand: content under `docs/generated/scripts/` is owned by the post-merge automation (refs #1540); update the source script instead.
 
+## _is_protected(...)
+
+```mermaid
+flowchart TD
+    N001["_is_protected(...)"]
+    N002["return path.startswith(_PROTECTED_FOLDER_PREFIXES) or path in _PROTECTED_EXACT_FILES"]
+    N001 -->|"start"| N002
+```
+
 ## resolve_base(...)
 
 ```mermaid
@@ -56,11 +65,13 @@ flowchart TD
 flowchart TD
     N001["changed_generated_docs(...)"]
     N002["result = _run(...)"]
-    N003["touched = {line.strip() for line in result.stdout.splitlines() if line.strip()}"]
-    N004["return frozenset((path for path in touched if path.startswith(PROTECTED_PREFIXES)))"]
+    N003["touched = set(...)"]
+    N004["for line in result.stdout.splitlines():     if not line.strip():         continue     parts = line.split('<str>')     status = parts[0]     if status.startswith('<str>') and len(parts) == 3:         old_path, new_path = (parts[1], parts[2])         if not _is_protected(old_path) and new_path in _PROTECTED_EXACT_FILES:             continue         touched.update((p for p in (old_path, new_path) if _is_protected(p)))     elif len(parts) == 2:         path = parts[1]         if _is_protected(path):             touched.add(path)"]
+    N005["return frozenset(touched)"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
+    N004 --> N005
 ```
 
 ## is_exempt(...)
