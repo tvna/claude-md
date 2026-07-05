@@ -34,10 +34,10 @@ Contract:
   ``PREFLIGHT_PUSH_REMOTE`` (the pushed refs the pre-push hook bridged from
   stdin; absent for a direct CLI run).
 - Outputs: an ``OK:`` line and exit 0 when no commit in range carries a
-  self-redundant trailer, or when the range cannot be resolved (skip, the
-  same fail-open posture as ``preflight_signed_commits.py``); ``::error::``
-  annotations naming each offending commit and exit 1 otherwise; exit 64 on
-  an unrecognised subcommand.
+  self-redundant trailer; a ``SKIP:`` line and exit 0 when the range cannot
+  be resolved (the same fail-open posture as ``preflight_signed_commits.py``);
+  ``::error::`` annotations naming each offending commit and exit 1
+  otherwise; exit 64 on an unrecognised subcommand.
 - Failure policy: fails loud (exit 1) only on a positively-shown redundant
   trailer; an unresolvable range or an uninspectable commit fails open
   (CLAUDE.md section 4), since a git/subprocess error here is an
@@ -59,9 +59,9 @@ from _git import (
     PushRef,
     Runner,
     commits_for_pushed_refs,
+    commits_in_range,
     make_runner,
     read_push_refs,
-    rev_list,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -73,14 +73,26 @@ _GIT_TIMEOUT_SECONDS = 30
 _FIELD_SEP = "\x1f"
 
 # Matches a `Co-authored-by:` / `Co-Authored-By:` trailer line (git's own
-# trailer key spelling is case-insensitive) and captures the email, whether it
-# is wrapped in `<...>` (the standard git trailer shape, group "angle") or
-# written bare with no brackets (the shape PR #2302's manual footer actually
-# used, group "bare"). Anchored to a full line so a mention of the phrase in
+# trailer key spelling is case-insensitive), capturing everything after the
+# key rather than anchoring the email itself to end-of-line: a trailing
+# annotation after the email (e.g. "(paired)") must not prevent a match. The
+# emails are then extracted from the captured tail separately (see
+# `_EMAIL_ANGLE_RE` / `_EMAIL_BARE_RE` below) so every bracketed/bare email on
+# the line is checked, not only the last one a single greedy match would have
+# captured. Anchored to a full line's start so a mention of the phrase in
 # prose text does not false-positive.
-_TRAILER_RE = re.compile(
-    r"(?im)^co-authored-by:\s*(?:.*<(?P<angle>[^<>]+)>|.*?(?P<bare>[\w.+-]+@[\w.-]+))\s*$"
-)
+_TRAILER_LINE_RE = re.compile(r"(?im)^co-authored-by:\s*(?P<rest>.*)$")
+
+# Extracts every `<email>`-bracketed address from a trailer line's tail (the
+# standard git trailer shape). Un-anchored and repeated via `finditer` so a
+# single line listing more than one bracketed co-author (e.g.
+# comma-separated) yields every email, not just the last.
+_EMAIL_ANGLE_RE = re.compile(r"<(?P<email>[^<>]+)>")
+
+# Falls back to a bare `user@host` address with no brackets (the shape PR
+# #2302's manual footer actually used) when the trailer line's tail has no
+# bracketed email at all.
+_EMAIL_BARE_RE = re.compile(r"(?P<email>[\w.+-]+@[\w.-]+)")
 
 
 @dataclass(frozen=True)
@@ -99,11 +111,6 @@ class CoauthorTrailerResult:
     status: str  # "pass" | "fail" | "skip"
     detail: str
     violations: tuple[Violation, ...] = ()
-
-
-def commits_in_range(runner: Runner, base_ref: str) -> list[str] | None:
-    """Return the shas in ``<base_ref>..HEAD``, or None when undeterminable."""
-    return rev_list(runner, [f"{base_ref}..HEAD"])
 
 
 def _commit_author_and_body(runner: Runner, sha: str) -> tuple[str, str] | None:
@@ -131,12 +138,17 @@ def find_redundant_trailers(runner: Runner, shas: list[str]) -> list[Violation]:
         if parsed is None:
             continue
         author_email, body = parsed
-        for match in _TRAILER_RE.finditer(body):
-            trailer_email = (match.group("angle") or match.group("bare") or "").strip()
-            if trailer_email and trailer_email.casefold() == author_email.casefold():
-                violations.append(
-                    Violation(sha=sha, author_email=author_email, trailer_email=trailer_email)
-                )
+        for line_match in _TRAILER_LINE_RE.finditer(body):
+            rest = line_match.group("rest")
+            angle_emails = [m.group("email").strip() for m in _EMAIL_ANGLE_RE.finditer(rest)]
+            trailer_emails = angle_emails or [
+                m.group("email") for m in _EMAIL_BARE_RE.finditer(rest)
+            ]
+            for trailer_email in trailer_emails:
+                if trailer_email and trailer_email.casefold() == author_email.casefold():
+                    violations.append(
+                        Violation(sha=sha, author_email=author_email, trailer_email=trailer_email)
+                    )
     return violations
 
 
@@ -251,8 +263,11 @@ def main(argv: list[str] | None = None) -> int:
     if argv is None:
         argv = sys.argv[1:]
 
+    # `-h`/`--help` must fall through to argparse (which prints help and
+    # exits 0) rather than being rejected as an unknown subcommand below; any
+    # other unrecognised token keeps the existing exit-64 contract.
     command = argv[0] if argv else None
-    if command != "verify":
+    if command not in ("verify", "-h", "--help"):
         print(
             f"::error::preflight_coauthor_trailer: unknown subcommand {command!r}; expected 'verify'.",
             file=sys.stderr,
