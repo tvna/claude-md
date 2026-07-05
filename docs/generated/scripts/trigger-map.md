@@ -199,6 +199,8 @@ Detection is string-match based:
 | `scan_docs_inventory.py` | pre-commit | `scan-docs-inventory` |
 | `scan_docs_inventory.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_flake_pin_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
+| `scan_gitapex_schema.py` | pre-commit | `scan-gitapex-schema` |
+| `scan_gitapex_schema.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_hardcoded_label_literals.py` | pre-commit | `scan-hardcoded-label-literals` |
 | `scan_hardcoded_label_literals.py` | workflow | `verify-pr.yml (portable-pr-policy)` |
 | `scan_harness_doc_coverage.py` | pre-commit | `scan-harness-doc-coverage` |
@@ -247,6 +249,8 @@ Detection is string-match based:
 | `scan_workflow_gh_calls.py` | workflow | `weekly-maintenance.yml (dependency-freshness)` |
 | `scan_workflow_injection.py` | pre-commit | `scan-workflow-injection` |
 | `scan_workflow_injection.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
+| `scan_workflow_llm_budget.py` | pre-commit | `scan-workflow-llm-budget` |
+| `scan_workflow_llm_budget.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_workflow_pip.py` | pre-commit | `scan-workflow-pip` |
 | `scan_workflow_pip.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_workflow_pip.py` | workflow | `weekly-maintenance.yml (dependency-freshness)` |
@@ -299,6 +303,6 @@ Detection is string-match based:
 
 ## Unreferenced scripts (dead script candidates)
 
-49 script(s) are referenced by no scanned launch source (see the detection caveats above before treating one as dead):
+50 script(s) are referenced by no scanned launch source (see the detection caveats above before treating one as dead):
 
-`_allowlist.py`, `_apm_managed_paths.py`, `_auto_retro_parse.py`, `_auto_retro_render.py`, `_auto_retro_triage.py`, `_ci_watch.py`, `_commit_signing.py`, `_git.py`, `_github_api.py`, `_github_tool_names.py`, `_hook_runtime.py`, `_pr_base_currency.py`, `_pr_commit_batch.py`, `_pr_merge.py`, `_ref_classifier.py`, `_retro_labels.py`, `_secret_patterns.py`, `_security_drift_families.py`, `_security_drift_issues.py`, `_session_branches.py`, `_shell_lines.py`, `_ssot.py`, `_trusted_bots.py`, `audit_loop_engineering.py`, `backup_non_ascii.py`, `ccusage_pin.py`, `compare_cache_regimes.py`, `doc_graph.py`, `generate_devcontainer_arch_overlays.py`, `github_api.py`, `measure_prefix_tokens.py`, `mint_github_app_token.py`, `np_strategy_tracking.py`, `pr_body_builder.py`, `preflight_all.py`, `preflight_cache.py`, `preflight_coauthor_trailer.py`, `preflight_merge_index_budget.py`, `preflight_pr_body.py`, `preflight_push_prek.py`, `preflight_replacement_pr.py`, `preflight_signed_commits.py`, `preflight_steps.py`, `refresh_pr_branch.py`, `sanitize_history.py`, `scan_area_path_coverage.py`, `session_cost_structure.py`, `uv_download_checksum.py`, `waza_pin.py`
+`_allowlist.py`, `_apm_managed_paths.py`, `_auto_retro_parse.py`, `_auto_retro_render.py`, `_auto_retro_triage.py`, `_ci_watch.py`, `_commit_signing.py`, `_git.py`, `_github_api.py`, `_github_tool_names.py`, `_hook_runtime.py`, `_json_schema_subset.py`, `_pr_base_currency.py`, `_pr_commit_batch.py`, `_pr_merge.py`, `_ref_classifier.py`, `_retro_labels.py`, `_secret_patterns.py`, `_security_drift_families.py`, `_security_drift_issues.py`, `_session_branches.py`, `_shell_lines.py`, `_ssot.py`, `_trusted_bots.py`, `audit_loop_engineering.py`, `backup_non_ascii.py`, `ccusage_pin.py`, `compare_cache_regimes.py`, `doc_graph.py`, `generate_devcontainer_arch_overlays.py`, `github_api.py`, `measure_prefix_tokens.py`, `mint_github_app_token.py`, `np_strategy_tracking.py`, `pr_body_builder.py`, `preflight_all.py`, `preflight_cache.py`, `preflight_coauthor_trailer.py`, `preflight_merge_index_budget.py`, `preflight_pr_body.py`, `preflight_push_prek.py`, `preflight_replacement_pr.py`, `preflight_signed_commits.py`, `preflight_steps.py`, `refresh_pr_branch.py`, `sanitize_history.py`, `scan_area_path_coverage.py`, `session_cost_structure.py`, `uv_download_checksum.py`, `waza_pin.py`
