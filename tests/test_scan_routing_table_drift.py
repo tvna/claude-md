@@ -126,6 +126,15 @@ class TestParseCondition:
         with pytest.raises(gate.TableParseError, match="no label token"):
             gate.parse_condition("nothing quoted here")
 
+    def test_multi_label_without_or_raises(self) -> None:
+        """Codex review on #2325: a mistaken AND must not silently parse as OR."""
+        with pytest.raises(gate.TableParseError, match="not joined by ' OR '"):
+            gate.parse_condition("`type:feat` AND `type:refactor`")
+
+    def test_multi_label_bare_juxtaposition_raises(self) -> None:
+        with pytest.raises(gate.TableParseError, match="not joined by ' OR '"):
+            gate.parse_condition("`state:rfc` `state:parked`")
+
 
 class TestParseAction:
     def test_no_action(self) -> None:

@@ -122,7 +122,15 @@ def split_row(row: str) -> tuple[str, str, str]:
 
 
 def parse_condition(cell: str) -> dict[str, object]:
-    """Return the ``if_any``/``if_all``/``if_none``/``default`` shape for *cell*."""
+    """Return the ``if_any``/``if_all``/``if_none``/``default`` shape for *cell*.
+
+    A multi-label cell with no ``AND NOT`` must spell the combinator as ``OR``
+    between every pair of backtick tokens; this is deliberate (Codex review on
+    #2325): silently treating any unrecognised combinator (e.g. a mistaken
+    ``AND``) as ``if_any`` would let the runbook prose drift from its actual
+    ``if_any`` semantics without the gate ever noticing, since both wordings
+    parse to the identical canonical shape.
+    """
     tokens = _BACKTICK_RE.findall(cell)
     if tokens == [_WILDCARD_TYPE_MARKER]:
         return {"default": True}
@@ -138,6 +146,13 @@ def parse_condition(cell: str) -> dict[str, object]:
         return result
     if not tokens:
         raise TableParseError(f"condition cell has no label token: {cell!r}")
+    if len(tokens) > 1:
+        expected = " OR ".join(f"`{token}`" for token in tokens)
+        if cell.strip() != expected:
+            raise TableParseError(
+                f"condition cell has {len(tokens)} label tokens but is not "
+                f"joined by ' OR ' (expected {expected!r}): {cell!r}"
+            )
     return {"if_any": tokens}
 
 
