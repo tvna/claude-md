@@ -29,6 +29,36 @@
       "path": ".github/rulesets/main.json",
       "format": "json",
       "authority": "GitHub ruleset: required checks and native branch rules"
+    },
+    {
+      "id": "doc-dependencies",
+      "path": ".gitapex/doc-dependencies.toml",
+      "format": "toml",
+      "authority": "typed document dependency graph for PR governance co-change enforcement"
+    },
+    {
+      "id": "loop-engineering-audit",
+      "path": ".gitapex/loop-engineering-audit.toml",
+      "format": "toml",
+      "authority": "loop-engineering achievement audit checklist"
+    },
+    {
+      "id": "module-size-distribution",
+      "path": ".gitapex/module-size-distribution.toml",
+      "format": "toml",
+      "authority": "scripts/*.py physical-line size distribution snapshot"
+    },
+    {
+      "id": "pr-body-quality-enforcement",
+      "path": ".gitapex/pr-body-quality.enforcement.toml",
+      "format": "toml",
+      "authority": "PR body content-quality defect-class enforcement registry"
+    },
+    {
+      "id": "workflow-script-quality-enforcement",
+      "path": ".gitapex/workflow-script-quality.enforcement.toml",
+      "format": "toml",
+      "authority": "workflow-script-quality standard must-have enforcement registry"
     }
   ],
   "gates": [
@@ -1271,6 +1301,27 @@
       "policy_refs": [],
       "cluster": null,
       "tracking_issue": null
+    },
+    {
+      "id": "scan-gitapex-schema",
+      "kind": "script",
+      "script": "scripts/scan_gitapex_schema.py",
+      "rule": "CI gate: every .gitapex/*.toml validates against its sibling .gitapex/NAME.schema.json",
+      "planes": [
+        "pre-commit",
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git commit or push (prek / scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [
+        "doc-dependencies",
+        "loop-engineering-audit",
+        "module-size-distribution",
+        "pr-body-quality-enforcement",
+        "workflow-script-quality-enforcement"
+      ],
+      "cluster": null,
+      "tracking_issue": 2342
     },
     {
       "id": "scan-hardcoded-label-literals",

@@ -1,8 +1,8 @@
 """Tests for ``scripts/scan_pr_body_quality_drift.py``.
 
-The gate keeps ``docs/standards/pr-body-quality.enforcement.toml`` internally
+The gate keeps ``.gitapex/pr-body-quality.enforcement.toml`` internally
 consistent: every ``enforced``/``partial`` row resolves its backing, and every
-``doc-only`` row has an empty backing list. Refs #1828.
+``doc-only`` row has an empty backing list. Refs #1828, #2342.
 """
 
 from __future__ import annotations

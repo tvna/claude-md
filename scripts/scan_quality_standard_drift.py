@@ -7,7 +7,7 @@ standard `docs/standards/workflow-script-quality.md` (#196) being a
 doc-only snapshot: only M8 and M10 ever had backing gates, while the
 other must-haves relied on reviewer memory (against CLAUDE.md section 3).
 
-`docs/standards/workflow-script-quality.enforcement.toml` is the registry
+`.gitapex/workflow-script-quality.enforcement.toml` is the registry
 mapping each must-have (M1-M10) to a `status`
 (`enforced` / `partial` / `doc-only`) and the deterministic `backing`
 that sustains it. This gate proves the registry and the standard cannot
@@ -35,7 +35,7 @@ Contract:
 - Failure policy: fails loud per CLAUDE.md section 4 (it is a CI gate;
   any drift or unresolved backing exits non-zero).
 
-Tested by `tests/test_scan_quality_standard_drift.py`. Refs #1089, #196, #197.
+Tested by `tests/test_scan_quality_standard_drift.py`. Refs #1089, #196, #197, #2342.
 """
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 STANDARD = REPO_ROOT / "docs" / "standards" / "workflow-script-quality.md"
-REGISTRY = REPO_ROOT / "docs" / "standards" / "workflow-script-quality.enforcement.toml"
+REGISTRY = REPO_ROOT / ".gitapex" / "workflow-script-quality.enforcement.toml"
 
 # `### M1. ...`, `### M10. ...`. Optional-enhancement (`O`) and coverage
 # graduation (`G`) headings are intentionally excluded: the registry maps
@@ -148,7 +148,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
     defects = find_drift(must_haves, registry, repo_root, pyproject_text)
     for defect in defects:
         print(
-            f"::error file=docs/standards/workflow-script-quality.enforcement.toml::{defect}.",
+            f"::error file=.gitapex/workflow-script-quality.enforcement.toml::{defect}.",
             file=sys.stderr,
         )
     if defects:

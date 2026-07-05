@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Core library for the typed document dependency graph.
 
-Loads ``docs/graph/doc-dependencies.toml``, validates the graph structure,
+Loads ``.gitapex/doc-dependencies.toml``, validates the graph structure,
 and provides query functions used by ``gate_doc_graph_pr.py`` (the CI gate)
 and ``doc_graph_viz.py`` (the Mermaid diagram generator).
 
@@ -38,7 +38,7 @@ Contract:
 - Failure policy: :class:`GraphValidationError` (subclass of ``ValueError``)
   on any structural violation; fails loud per CLAUDE.md section 4.
 
-Tested by ``tests/test_doc_graph.py``. Refs #1754.
+Tested by ``tests/test_doc_graph.py``. Refs #1754, #2342.
 """
 
 from __future__ import annotations

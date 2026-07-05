@@ -127,7 +127,7 @@ jobs:
 
       - name: Verify PR body content-quality enforcement map
         # Refs #1828: every enforced/partial row in
-        # docs/standards/pr-body-quality.enforcement.toml resolves its
+        # .gitapex/pr-body-quality.enforcement.toml resolves its
         # backing gate, and no orphaned defect class exists.
         run: uv run python scripts/scan_pr_body_quality_drift.py verify
 

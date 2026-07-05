@@ -203,6 +203,17 @@ repos:
         pass_filenames: false
         files: ^(\.gitapex/.*\.json|scripts/scan_ssot_schema\.py|\.github/labels\.json|\.github/label-policy\.toml)$
 
+      - id: scan-gitapex-schema
+        name: scan gitapex schema (scripts/scan_gitapex_schema.py verify)
+        # Refs #2342: validates every .gitapex/*.toml against its sibling
+        # .gitapex/NAME.schema.json (shape only; referential/semantic checks
+        # stay with each file's own normative validator). Mirrors the
+        # scan-ssot-schema wiring on the same three planes.
+        entry: uv run python scripts/scan_gitapex_schema.py verify
+        language: system
+        pass_filenames: false
+        files: ^\.gitapex/.*\.(toml|schema\.json)$
+
       - id: scan-ssot-drift
         name: scan ssot drift (scripts/scan_ssot_drift.py verify)
         # Refs #2256: blocking reconciliation of .gitapex/ssot.json against

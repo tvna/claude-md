@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tvna/claude-md/.gitapex/module-size-distribution.schema.json",
+  "title": "scripts/*.py module-size distribution snapshot",
+  "description": "Shape-only schema for the generated .gitapex/module-size-distribution.toml (single-producer: scripts/scan_module_size_distribution.py write; verified by its verify subcommand). Refs #200, #1700, #1701, #2342.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["budget", "summary", "histogram", "modules"],
+  "properties": {
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_module_lines", "warn_module_lines"],
+      "properties": {
+        "max_module_lines": {"type": "integer"},
+        "warn_module_lines": {"type": "integer"}
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total_modules", "in_warn_band", "exactly_at_limit", "over_budget"],
+      "properties": {
+        "total_modules": {"type": "integer"},
+        "in_warn_band": {"type": "integer"},
+        "exactly_at_limit": {"type": "integer"},
+        "over_budget": {"type": "integer"}
+      }
+    },
+    "histogram": {
+      "type": "object",
+      "additionalProperties": {"type": "integer"}
+    },
+    "modules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["warn_band", "over_budget"],
+      "properties": {
+        "warn_band": {"type": "array", "items": {"type": "string"}},
+        "over_budget": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}
