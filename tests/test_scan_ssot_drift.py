@@ -108,6 +108,20 @@ class TestStepsManifest:
         assert "scan_ssot_drift" in scripts
         assert unmapped == frozenset()
 
+    def test_records_every_script_token_in_one_argv(self) -> None:
+        # A future Step invoking two scripts in one argv must not silently
+        # under-report the second one (#2340: the old `break` on first match
+        # stopped scanning a step's remaining argv tokens).
+        steps = (
+            Step(
+                "gate_a_then_b",
+                ("python3", "scripts/gate_a.py", "&&", "python3", "scripts/gate_b.py"),
+            ),
+        )
+        scripts, unmapped = gate.steps_manifest(steps)
+        assert scripts == frozenset({"gate_a", "gate_b"})
+        assert unmapped == frozenset()
+
 
 class TestPreCommitManifest:
     def test_extracts_script_from_entry_and_args(self) -> None:
@@ -283,7 +297,9 @@ class TestCollectWorkflowRefs:
 class TestDiffStepsVsWorkflows:
     def test_no_drift(self) -> None:
         refs = [gate.WorkflowReference(workflow="pr.yml", script="foo")]
-        missing, extra = gate.diff_steps_vs_workflows(refs, declared=frozenset({"foo"}), allowlist={})
+        missing, extra = gate.diff_steps_vs_workflows(
+            refs, declared=frozenset({"foo"}), excluded=frozenset()
+        )
         assert missing == []
         assert extra == frozenset()
 
@@ -292,7 +308,9 @@ class TestDiffStepsVsWorkflows:
             gate.WorkflowReference(workflow="pr.yml", script="foo"),
             gate.WorkflowReference(workflow="pr.yml", script="bar"),
         ]
-        missing, extra = gate.diff_steps_vs_workflows(refs, declared=frozenset({"foo"}), allowlist={})
+        missing, extra = gate.diff_steps_vs_workflows(
+            refs, declared=frozenset({"foo"}), excluded=frozenset()
+        )
         assert missing == [gate.WorkflowReference(workflow="pr.yml", script="bar")]
         assert extra == frozenset()
 
@@ -301,7 +319,7 @@ class TestDiffStepsVsWorkflows:
         missing, extra = gate.diff_steps_vs_workflows(
             refs,
             declared=frozenset(),
-            allowlist={"title_policy": "webhook input only"},
+            excluded=frozenset({"title_policy"}),
         )
         assert missing == []
         assert extra == frozenset()
@@ -309,7 +327,7 @@ class TestDiffStepsVsWorkflows:
     def test_steps_extra_is_advisory(self) -> None:
         refs = [gate.WorkflowReference(workflow="pr.yml", script="foo")]
         missing, extra = gate.diff_steps_vs_workflows(
-            refs, declared=frozenset({"foo", "future"}), allowlist={}
+            refs, declared=frozenset({"foo", "future"}), excluded=frozenset()
         )
         assert missing == []
         assert extra == frozenset({"future"})
@@ -373,6 +391,9 @@ class TestMainVerifyReportsStepsVsWorkflowDrift:
         assert exit_code == 1
         captured = capsys.readouterr()
         assert "new_gate" in captured.err
+        # The missing-step annotation must still anchor to the offending
+        # workflow file via GitHub's `::error file=...::` attribute (#2340).
+        assert "::error file=pr.yml::" in captured.err
 
 
 class TestServerNativeRules:
@@ -411,12 +432,30 @@ _SAMPLE_REGISTRY: dict[str, object] = {
             "planes": ["pre-commit"],
             "cluster": None,
         },
+        {
+            "id": "g-ci-only",
+            "kind": "script",
+            "script": "scripts/ci_only_gate.py",
+            "planes": ["ci"],
+            "cluster": None,
+        },
     ],
     "clusters": [
         {"id": "c1", "expected_planes": ["pre-push", "ci", "server"]},
         {"id": "c2", "expected_planes": ["pre-commit"]},
     ],
 }
+
+
+class TestRegistryCiOnlyScripts:
+    def test_derives_scripts_on_ci_without_pre_push(self) -> None:
+        assert gate.registry_ci_only_scripts(_SAMPLE_REGISTRY) == frozenset({"ci_only_gate"})
+
+    def test_excludes_scripts_also_declared_on_pre_push(self) -> None:
+        assert "foo" not in gate.registry_ci_only_scripts(_SAMPLE_REGISTRY)
+
+    def test_excludes_scripts_not_on_ci_at_all(self) -> None:
+        assert "bar" not in gate.registry_ci_only_scripts(_SAMPLE_REGISTRY)
 
 
 class TestRegistryProjections:
@@ -535,10 +574,7 @@ class TestVerifyRegistrySynthetic:
             ]
         }
 
-    def test_clean_registry_reports_nothing(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            gate, "steps_manifest", lambda: (frozenset({"foo"}), frozenset())
-        )
+    def test_clean_registry_reports_nothing(self, tmp_path: Path) -> None:
         workflows = tmp_path / "workflows"
         workflows.mkdir()
         (workflows / "pr.yml").write_text(
@@ -549,28 +585,33 @@ class TestVerifyRegistrySynthetic:
             "repos": [{"hooks": [{"id": "g-foo", "entry": "python3 scripts/foo.py verify"}]}]
         }
         rulesets = {"rules": [{"type": "deletion"}]}
-        warnings = gate.verify_registry(
+        result = gate.verify_registry(
             self._base_registry(),
             agent_hooks=self._agent_hooks(),
             pre_commit_config=pre_commit_config,
             rulesets=rulesets,
-            workflows_dir=workflows,
+            workflow_refs=gate.collect_workflow_refs(workflows),
+            push_scripts=frozenset({"foo"}),
+            push_unmapped=frozenset(),
         )
-        assert warnings == []
+        assert result.blocking == []
+        assert result.advisory == []
 
-    def test_missing_registry_gate_reported(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(gate, "steps_manifest", lambda: (frozenset(), frozenset()))
-        workflows = tmp_path / "workflows"
-        workflows.mkdir()
+    def test_missing_registry_gate_reported(self, tmp_path: Path) -> None:
         registry: dict[str, object] = {"gates": [], "clusters": []}
-        warnings = gate.verify_registry(
+        result = gate.verify_registry(
             registry,
             agent_hooks=self._agent_hooks(),
             pre_commit_config={"repos": []},
             rulesets={"rules": []},
-            workflows_dir=workflows,
+            workflow_refs=[],
+            push_scripts=frozenset(),
+            push_unmapped=frozenset(),
         )
-        assert any("scripts/foo.py" in w and "pretooluse" in w for w in warnings)
+        assert any(
+            "scripts/foo.py" in w.message and "pretooluse" in w.message
+            for w in result.blocking
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -595,14 +636,19 @@ class TestRealRepository:
         agent_hooks = json.loads((_REPO_ROOT / "scripts/agent_hooks_source.json").read_text())
         pre_commit_config = gate._load_yaml(_REPO_ROOT / ".pre-commit-config.yaml")
         rulesets = json.loads((_REPO_ROOT / ".github/rulesets/main.json").read_text())
-        warnings = gate.verify_registry(
+        workflow_refs = gate.collect_workflow_refs(_REPO_ROOT / ".github/workflows")
+        push_scripts, push_unmapped = gate.steps_manifest()
+        result = gate.verify_registry(
             registry,
             agent_hooks=agent_hooks,
             pre_commit_config=pre_commit_config,
             rulesets=rulesets,
-            workflows_dir=_REPO_ROOT / ".github/workflows",
+            workflow_refs=workflow_refs,
+            push_scripts=push_scripts,
+            push_unmapped=push_unmapped,
         )
-        assert isinstance(warnings, list)
+        assert isinstance(result.blocking, list)
+        assert isinstance(result.advisory, list)
 
     def test_main_verify_exits_zero(self) -> None:
         assert gate.main(["verify"]) == 0
