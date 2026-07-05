@@ -256,6 +256,15 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_hardcoded_label_literals.py", "verify"),
     ),
     Step(
+        # Refs #2300. Anti-drift gate for SSoT phase 3: rejects a mismatch
+        # between the issue-triage runbook's Agent routing table and the
+        # registry's label_routing.rules, in either direction. Static
+        # working-tree read; mirrors the verify-pr.yml step so the gate fires
+        # pre-push, not only in CI.
+        name="scan_routing_table_drift",
+        argv=("python3", "scripts/scan_routing_table_drift.py", "verify"),
+    ),
+    Step(
         # Refs #1325. Fails when a Markdown doc outside docs/archive/ cites a
         # .github/workflows/<name>.yml path that no longer exists; the drift
         # class #1319's workflow consolidation left behind.
