@@ -9,6 +9,14 @@ for PRs authored by the App bot: it lists every open PR whose author login is
 (all required checks green and the branch up to date), squash-merges it via the
 REST merge API and deletes the head branch.
 
+The bot PRs are considered in a fixed merge priority (``docs(generated)`` before
+the triage-report series; see ``_pr_merge._BOT_PR_PRIORITY_BRANCHES``). While a
+higher-priority bot PR is open and still in flight, the keeper holds the
+lower-priority series for the next trigger instead of merging it, so the bot
+series stop starving one another under ``strict_required_status_checks_policy``
+(every merge to ``main`` re-stales the others and only a PR-churning
+``--recreate`` can refresh them). Refs #2382.
+
 Branch protection (``main`` ruleset) still gates the merge; a non-clean PR is
 left for the next trigger. The merge method is fixed to ``squash`` so the keyless
 commit-signature invariant on ``main`` documented in
@@ -61,7 +69,7 @@ import sys
 
 from _pr_merge import (
     _list_open_prs_by_author,
-    _merge_pr_if_clean,
+    merge_bot_prs_in_priority_order,
 )
 
 # The App bot's PR author login. Commits it authors via ``createCommitOnBranch``
@@ -85,12 +93,7 @@ def _cmd_merge(_args: argparse.Namespace) -> int:
         print(f"no open PRs authored by {author_login}")
         return 0
 
-    merged = 0
-    for pr in prs:
-        number = int(pr["number"])
-        head_ref = pr.get("head", {}).get("ref", "") if isinstance(pr.get("head"), dict) else ""
-        if _merge_pr_if_clean(repo=repo, number=number, head_ref=head_ref, token=token):
-            merged += 1
+    merged = merge_bot_prs_in_priority_order(prs=prs, repo=repo, token=token)
     print(f"merged {merged} of {len(prs)} open PR(s) authored by {author_login}")
     return 0
 
