@@ -276,11 +276,16 @@ templates, tests, backfill assignments, and then run `apply-labels.yml` with
 `prune=true` only after the dry-run plan contains exactly the authorized
 delete set.
 
-For retrospectives specifically, #972 must: stop `scripts/auto_retro.py:issue_labels`
-emitting `layer:meta`; re-key retro discovery in `scripts/auto_retro.py`
-(`fetch_past_retro_labels`, `search_open_retro_issues`) and
-`scripts/scan_retro_followup_drift.py` off the `is_retro_issue_title`
-predicate instead of `label:layer:meta`; backfill #963, #929, and #957 to
-`type:docs` (removing `type:tracking`, `retrospective`, and
-`type:retrospective`); and prune the undeclared `retrospective` and
-`type:retrospective` labels. Refs #1060.
+For retrospectives specifically, the label re-key has already landed ahead
+of the broader #972 rollout, via #2313 (PR #2383):
+`scripts/auto_retro.py` no longer emits `layer:meta` on a newly opened retro
+(`_identity_labels` now yields `layer:p3-harness` + `area:ci-ops`), and retro
+discovery in `scripts/auto_retro.py` (`fetch_past_retro_labels`,
+`search_open_retro_issues`) and `scripts/scan_retro_followup_drift.py` was
+re-keyed onto a family-grouped OR of `layer:meta` and `layer:p3-harness`
+(via `_ssot.group_labels_by_family`), not the `is_retro_issue_title` predicate
+originally sketched here. The residual retro work is the live-catalog and
+registry removal of `layer:meta`, owned by #2393; the #963/#929/#957 backfill
+to `type:docs` (removing `type:tracking`, `retrospective`, and
+`type:retrospective`) and the prune of the undeclared `retrospective` /
+`type:retrospective` labels remain with #972. Refs #1060, #2313, #2383, #2393.
