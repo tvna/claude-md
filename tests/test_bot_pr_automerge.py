@@ -31,10 +31,10 @@ class TestMergeCommand:
     ) -> None:
         monkeypatch.setattr(bpa, "_list_open_prs_by_author", lambda **kw: [])
 
-        def _never(**kw: Any) -> bool:
-            raise AssertionError("must not attempt a merge when no bot PR is open")
+        def _never(**kw: Any) -> int:
+            raise AssertionError("must not orchestrate merges when no bot PR is open")
 
-        monkeypatch.setattr(bpa, "_merge_pr_if_clean", _never)
+        monkeypatch.setattr(bpa, "merge_bot_prs_in_priority_order", _never)
         rc = bpa.main(["merge"])
         assert rc == 0
         assert "no open PRs authored by tvna-bot[bot]" in capsys.readouterr().out
@@ -47,35 +47,33 @@ class TestMergeCommand:
             return []
 
         monkeypatch.setattr(bpa, "_list_open_prs_by_author", _list)
-        monkeypatch.setattr(bpa, "_merge_pr_if_clean", lambda **kw: False)
+        monkeypatch.setattr(bpa, "merge_bot_prs_in_priority_order", lambda **kw: 0)
         assert bpa.main(["merge"]) == 0
         assert captured["author_login"] == "tvna-bot[bot]"
 
-    def test_merges_each_clean_pr_with_head_ref(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_passes_listed_prs_to_priority_orchestrator(self, monkeypatch: pytest.MonkeyPatch) -> None:
         prs = [_pr(11, "devcontainer/image-pins-x"), _pr(12, "chore/update-generated-docs")]
         monkeypatch.setattr(bpa, "_list_open_prs_by_author", lambda **kw: prs)
-        seen: list[tuple[int, str]] = []
+        captured: dict[str, Any] = {}
 
-        def _merge(*, repo: str, number: int, head_ref: str, token: str) -> bool:
-            seen.append((number, head_ref))
-            return True
+        def _orchestrate(*, prs: list[dict[str, Any]], repo: str, token: str) -> int:
+            captured["prs"] = prs
+            captured["repo"] = repo
+            return len(prs)
 
-        monkeypatch.setattr(bpa, "_merge_pr_if_clean", _merge)
+        monkeypatch.setattr(bpa, "merge_bot_prs_in_priority_order", _orchestrate)
         rc = bpa.main(["merge"])
         assert rc == 0
-        assert seen == [(11, "devcontainer/image-pins-x"), (12, "chore/update-generated-docs")]
+        assert captured["prs"] == prs
+        assert captured["repo"] == "owner/repo"
 
-    def test_non_clean_pr_is_skipped_but_others_merge(
+    def test_tally_reports_orchestrator_merge_count(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
         prs = [_pr(11, "a"), _pr(12, "b")]
         monkeypatch.setattr(bpa, "_list_open_prs_by_author", lambda **kw: prs)
-
-        # PR 11 is not yet clean (False); PR 12 merges (True).
-        def _merge(*, repo: str, number: int, head_ref: str, token: str) -> bool:
-            return number == 12
-
-        monkeypatch.setattr(bpa, "_merge_pr_if_clean", _merge)
+        # Orchestrator merged one of the two open PRs (the other was held/skipped).
+        monkeypatch.setattr(bpa, "merge_bot_prs_in_priority_order", lambda **kw: 1)
         rc = bpa.main(["merge"])
         assert rc == 0
         assert "merged 1 of 2 open PR(s)" in capsys.readouterr().out
