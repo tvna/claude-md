@@ -54,7 +54,7 @@ A branch qualifies as a deletion candidate iff **all** of the following hold:
 The workflow maintains **at most one open rolling issue**, but creates and writes to it **only when there are candidates**. The steady state with zero stale branches is silent; no issue, no comments.
 
 - **Title:** `[branch-cleanup] weekly summary log` (exact match).
-- **Labels:** `layer:meta`, `type:docs`.
+- **Labels:** `layer:p3-harness`, `area:ci-ops`, `type:docs`.
 - **Owner:** `github-actions[bot]` (created via `GITHUB_TOKEN`).
 - **Lookup:** by exact title + `state: open`.
 
