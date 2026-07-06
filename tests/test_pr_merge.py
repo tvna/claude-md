@@ -7,6 +7,7 @@ key under ``[tool.pytest.ini_options]`` in ``pyproject.toml``.
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import _pr_merge as pm
@@ -151,50 +152,37 @@ class TestMergePrIfClean:
 
 
 # ---------------------------------------------------------------------------
-# _head_checks_failed
+# _higher_pr_still_holds / _pr_created_at
 # ---------------------------------------------------------------------------
 
+_NOW = datetime(2026, 7, 6, 4, 0, 0, tzinfo=UTC)
 
-class TestHeadChecksFailed:
-    def test_failure_conclusion_is_failed(self) -> None:
-        body = json.dumps({"check_runs": [
-            {"name": "Verify PR", "conclusion": "success"},
-            {"name": "Verify repository scripts", "conclusion": "failure"},
-        ]})
 
-        def _call(*, method: str, url: str, payload: Any, token: str) -> tuple[int, str]:
-            assert method == "GET" and url.endswith("/commits/abc/check-runs?per_page=100")
-            return (200, body)
+def _iso(dt: datetime) -> str:
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        assert pm._head_checks_failed(repo="o/r", sha="abc", token="t", apply_call=_call) is True
 
-    def test_running_and_success_runs_are_not_failed(self) -> None:
-        body = json.dumps({"check_runs": [
-            {"name": "Verify PR", "status": "in_progress", "conclusion": None},
-            {"name": "Verify repository scripts", "conclusion": "success"},
-        ]})
-        assert (
-            pm._head_checks_failed(
-                repo="o/r", sha="abc", token="t", apply_call=lambda **kw: (200, body)
-            )
-            is False
-        )
+class TestHigherPrStillHolds:
+    def test_fresh_pr_holds(self) -> None:
+        pr = {"created_at": _iso(_NOW - timedelta(minutes=3))}
+        assert pm._higher_pr_still_holds(pr, _NOW) is True
 
-    def test_no_check_runs_is_not_failed(self) -> None:
-        # Freshly recreated head: no runs registered yet -> not failed, hold kept.
-        assert (
-            pm._head_checks_failed(
-                repo="o/r", sha="abc", token="t",
-                apply_call=lambda **kw: (200, json.dumps({"check_runs": []})),
-            )
-            is False
-        )
+    def test_pr_aged_past_ttl_releases(self) -> None:
+        pr = {"created_at": _iso(_NOW - timedelta(hours=2))}
+        assert pm._higher_pr_still_holds(pr, _NOW) is False
 
-    def test_http_error_raises(self) -> None:
-        with pytest.raises(RuntimeError, match="check-runs"):
-            pm._head_checks_failed(
-                repo="o/r", sha="abc", token="t", apply_call=lambda **kw: (500, "boom")
-            )
+    def test_pr_exactly_at_ttl_boundary_releases(self) -> None:
+        pr = {"created_at": _iso(_NOW - timedelta(seconds=pm._HIGHER_PRIORITY_HOLD_TTL_SECONDS))}
+        assert pm._higher_pr_still_holds(pr, _NOW) is False
+
+    def test_missing_or_unparseable_created_at_is_failsafe_release(self) -> None:
+        # Fail-safe: never permanently block a lower PR on bad/absent data.
+        assert pm._higher_pr_still_holds({}, _NOW) is False
+        assert pm._higher_pr_still_holds({"created_at": "not-a-date"}, _NOW) is False
+
+    def test_pr_created_at_parses_z_suffix(self) -> None:
+        parsed = pm._pr_created_at({"created_at": "2026-07-06T03:30:00Z"})
+        assert parsed == datetime(2026, 7, 6, 3, 30, 0, tzinfo=UTC)
 
 
 # ---------------------------------------------------------------------------
@@ -213,7 +201,6 @@ def _list_pr(number: int, ref: str) -> dict[str, Any]:
 def _make_router(
     *,
     pr_states: dict[int, dict[str, Any]],
-    check_runs: dict[str, list[dict[str, Any]]],
     merges: list[int],
     deletes: list[str],
     merge_ok: bool = True,
@@ -221,8 +208,9 @@ def _make_router(
     """Return a fake ``apply_call`` routing GitHub REST calls off in-memory state.
 
     ``pr_states`` maps PR number to its ``_get_pr`` body (mergeable_state + head
-    sha); ``check_runs`` maps head sha to its check-run list. Merge (PUT) and
-    branch-delete (DELETE) calls are recorded into *merges* / *deletes*.
+    sha + created_at). Merge (PUT) and branch-delete (DELETE) calls are recorded
+    into *merges* / *deletes*. The keeper never calls the Checks API, so there is
+    no check-runs route here.
     """
 
     def _call(*, method: str, url: str, payload: Any, token: str) -> tuple[int, str]:
@@ -236,20 +224,27 @@ def _make_router(
         if method == "DELETE" and "/git/refs/heads/" in url:
             deletes.append(url.rsplit("/git/refs/heads/", 1)[1])
             return (204, "")
-        if method == "GET" and "/check-runs" in url:
-            sha = url.rsplit("/commits/", 1)[1].split("/check-runs")[0]
-            return (200, json.dumps({"check_runs": check_runs.get(sha, [])}))
         raise AssertionError(f"unexpected call {method} {url}")
 
     return _call
 
 
-def _clean(sha: str) -> dict[str, Any]:
-    return {"mergeable": True, "mergeable_state": "clean", "head": {"sha": sha}}
+def _clean(sha: str, *, age_minutes: int = 3) -> dict[str, Any]:
+    return {
+        "mergeable": True,
+        "mergeable_state": "clean",
+        "head": {"sha": sha},
+        "created_at": _iso(_NOW - timedelta(minutes=age_minutes)),
+    }
 
 
-def _not_clean(state: str, sha: str) -> dict[str, Any]:
-    return {"mergeable": True, "mergeable_state": state, "head": {"sha": sha}}
+def _not_clean(state: str, sha: str, *, age_minutes: int = 3) -> dict[str, Any]:
+    return {
+        "mergeable": True,
+        "mergeable_state": state,
+        "head": {"sha": sha},
+        "created_at": _iso(_NOW - timedelta(minutes=age_minutes)),
+    }
 
 
 class TestMergeBotPrsInPriorityOrder:
@@ -258,18 +253,22 @@ class TestMergeBotPrsInPriorityOrder:
         monkeypatch.setattr(pm.time, "sleep", lambda _s: None)
 
     def test_higher_in_flight_holds_lower(self, capsys: pytest.CaptureFixture[str]) -> None:
-        # docs is in flight (blocked, checks not failed); triage is clean but is
+        # docs is in flight (blocked and still fresh); triage is clean but is
         # held for the next trigger so it does not advance main and re-stale docs.
         prs = [_list_pr(101, _TRIAGE), _list_pr(100, _DOCS)]  # unordered input
         merges: list[int] = []
         deletes: list[str] = []
         router = _make_router(
-            pr_states={100: _not_clean("blocked", "docs_sha"), 101: _clean("triage_sha")},
-            check_runs={"docs_sha": [{"conclusion": None, "status": "in_progress"}]},
+            pr_states={
+                100: _not_clean("blocked", "docs_sha", age_minutes=3),
+                101: _clean("triage_sha"),
+            },
             merges=merges,
             deletes=deletes,
         )
-        merged = pm.merge_bot_prs_in_priority_order(prs=prs, repo="o/r", token="t", apply_call=router)
+        merged = pm.merge_bot_prs_in_priority_order(
+            prs=prs, repo="o/r", token="t", now=_NOW, apply_call=router
+        )
         assert merged == 0
         assert merges == []  # triage was held, docs was not clean -> nothing merged
         assert "held" in capsys.readouterr().out
@@ -282,45 +281,53 @@ class TestMergeBotPrsInPriorityOrder:
         deletes: list[str] = []
         router = _make_router(
             pr_states={100: _clean("docs_sha"), 101: _not_clean("behind", "triage_sha")},
-            check_runs={"triage_sha": [{"conclusion": None, "status": "in_progress"}]},
             merges=merges,
             deletes=deletes,
         )
-        merged = pm.merge_bot_prs_in_priority_order(prs=prs, repo="o/r", token="t", apply_call=router)
+        merged = pm.merge_bot_prs_in_priority_order(
+            prs=prs, repo="o/r", token="t", now=_NOW, apply_call=router
+        )
         assert merged == 1
         assert merges == [100]  # docs (higher priority) merged first; triage left
         assert deletes == [_DOCS]
 
-    def test_higher_checks_failed_releases_hold_on_lower(self) -> None:
-        # docs is blocked AND a required check failed, so it must not permanently
-        # block triage; triage is clean and merges this cycle.
+    def test_higher_stuck_past_ttl_releases_hold_on_lower(self, capsys: pytest.CaptureFixture[str]) -> None:
+        # docs is blocked and has been non-clean well past the hold TTL (its
+        # checks would be green by now, so it is stuck); it must not permanently
+        # block triage, which is clean and merges this cycle.
         prs = [_list_pr(100, _DOCS), _list_pr(101, _TRIAGE)]
         merges: list[int] = []
         deletes: list[str] = []
         router = _make_router(
-            pr_states={100: _not_clean("blocked", "docs_sha"), 101: _clean("triage_sha")},
-            check_runs={"docs_sha": [{"conclusion": "failure"}]},
+            pr_states={
+                100: _not_clean("blocked", "docs_sha", age_minutes=120),
+                101: _clean("triage_sha"),
+            },
             merges=merges,
             deletes=deletes,
         )
-        merged = pm.merge_bot_prs_in_priority_order(prs=prs, repo="o/r", token="t", apply_call=router)
+        merged = pm.merge_bot_prs_in_priority_order(
+            prs=prs, repo="o/r", token="t", now=_NOW, apply_call=router
+        )
         assert merged == 1
         assert merges == [101]  # triage released and merged; docs stays for its own fix
         assert deletes == [_TRIAGE]
+        assert "past" in capsys.readouterr().out  # release-on-TTL was announced
 
     def test_no_higher_priority_pr_merges_normally(self) -> None:
         # Only lowest-rank bot PRs open: behaves exactly as the pre-#2382 keeper,
-        # merging each clean PR with no hold and no check-run probe.
+        # merging each clean PR with no hold.
         prs = [_list_pr(101, _TRIAGE), _list_pr(102, "devcontainer/image-pins-x")]
         merges: list[int] = []
         deletes: list[str] = []
         router = _make_router(
             pr_states={101: _clean("triage_sha"), 102: _clean("pin_sha")},
-            check_runs={},  # never consulted; no non-clean higher PR to classify
             merges=merges,
             deletes=deletes,
         )
-        merged = pm.merge_bot_prs_in_priority_order(prs=prs, repo="o/r", token="t", apply_call=router)
+        merged = pm.merge_bot_prs_in_priority_order(
+            prs=prs, repo="o/r", token="t", now=_NOW, apply_call=router
+        )
         assert merged == 2
         assert sorted(merges) == [101, 102]
         assert sorted(deletes) == sorted([_TRIAGE, "devcontainer/image-pins-x"])
@@ -333,11 +340,12 @@ class TestMergeBotPrsInPriorityOrder:
         deletes: list[str] = []
         router = _make_router(
             pr_states={100: _clean("docs_sha")},
-            check_runs={},
             merges=merges,
             deletes=deletes,
         )
-        merged = pm.merge_bot_prs_in_priority_order(prs=prs, repo="o/r", token="t", apply_call=router)
+        merged = pm.merge_bot_prs_in_priority_order(
+            prs=prs, repo="o/r", token="t", now=_NOW, apply_call=router
+        )
         assert merged == 1
         assert merges == [100]
 

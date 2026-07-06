@@ -14,6 +14,7 @@ import json
 import sys
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any
 
 from _github_api import apply_call as _github_apply_call
@@ -37,20 +38,52 @@ _BOT_PR_PRIORITY_BRANCHES: tuple[str, ...] = (
     "chore/refresh-auto-retro-triage-report",
 )
 
-# Check-run conclusions that mean a required check will not turn green on its
-# own. Any of these on a higher-priority PR's head releases the hold on the
-# lower-priority series: a higher PR whose checks have already failed must never
-# permanently block a lower one (#2382). A still-running check has
-# ``conclusion == null`` and is ignored here, so it counts as "in flight".
-_FAILED_CHECK_CONCLUSIONS = frozenset(
-    {"failure", "timed_out", "cancelled", "action_required", "startup_failure"}
-)
+# A non-clean higher-priority bot PR holds the lower series only while it is
+# still plausibly running its checks. The keeper's App token is scoped to
+# ``contents`` + ``pull-requests`` only (see
+# ``docs/prd/security-control-inventory.md``), so it cannot read the Checks API
+# to tell "checks pending" from "checks failed" (both surface as
+# ``mergeable_state == blocked``). The hold is therefore time-bounded instead:
+# past this TTL a still-non-clean higher PR is treated as settled-and-stuck (a
+# healthy PR's checks would have gone green well before now) and no longer holds
+# the lower series, so a broken higher PR can never permanently starve a lower
+# one (#2382). Each drift recreates the fixed bot branch as a brand-new PR, so
+# ``created_at`` is the age of the current attempt: a healthy in-flight PR is
+# always fresh and holds, while a genuinely stuck one ages out and releases.
+_HIGHER_PRIORITY_HOLD_TTL_SECONDS = 45 * 60
 
 
 def _pr_head_ref(pr: dict[str, Any]) -> str:
     """Return a PR object's head branch ref, or ``""`` when absent."""
     head = pr.get("head")
     return head.get("ref", "") if isinstance(head, dict) else ""
+
+
+def _pr_created_at(pr: dict[str, Any]) -> datetime | None:
+    """Return a PR object's ``created_at`` as an aware datetime, or None if absent/unparseable."""
+    raw = pr.get("created_at")
+    if not isinstance(raw, str) or not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _higher_pr_still_holds(pr: dict[str, Any], now: datetime) -> bool:
+    """Return True if non-clean higher-priority *pr* should still hold the lower series.
+
+    True while the PR is fresh (created within
+    :data:`_HIGHER_PRIORITY_HOLD_TTL_SECONDS`); False once it has aged past the
+    TTL, so a stuck higher PR eventually releases the lower series instead of
+    blocking it forever (#2382). A PR with a missing or unparseable ``created_at``
+    is treated as aged-out (release), the fail-safe that can never permanently
+    block a lower PR on bad data.
+    """
+    created = _pr_created_at(pr)
+    if created is None:
+        return False
+    return (now - created).total_seconds() < _HIGHER_PRIORITY_HOLD_TTL_SECONDS
 
 
 def _priority_rank(head_ref: str) -> int:
@@ -188,43 +221,12 @@ def _merge_pr_if_clean(
     )
 
 
-def _head_checks_failed(
-    *,
-    repo: str,
-    sha: str,
-    token: str,
-    apply_call: Callable[..., tuple[int, str]] = _github_apply_call,
-) -> bool:
-    """Return True if any check run on *sha* has a terminal non-success conclusion.
-
-    Distinguishes a higher-priority PR whose checks are still in flight (hold the
-    lower-priority series) from one whose checks have already failed (release the
-    hold; a failed higher PR must never permanently block a lower one, #2382). A
-    still-running check has ``conclusion == null`` and does not count as failed,
-    so an in-flight or freshly-recreated head (no completed failing run yet) is
-    reported as not-failed and keeps the hold.
-    """
-    url = f"{_API_ROOT}/repos/{repo}/commits/{sha}/check-runs?per_page=100"
-    code, body = apply_call(method="GET", url=url, payload=None, token=token)
-    if not (200 <= code < 300):
-        raise RuntimeError(f"List check-runs for {sha[:12]} failed: HTTP {code}: {body[:200]}")
-    try:
-        data = json.loads(body)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Unexpected response from check-runs: {body[:200]}") from exc
-    runs = data.get("check_runs", []) if isinstance(data, dict) else []
-    for run in runs:
-        conclusion = str(run.get("conclusion") or "").lower() if isinstance(run, dict) else ""
-        if conclusion in _FAILED_CHECK_CONCLUSIONS:
-            return True
-    return False
-
-
 def merge_bot_prs_in_priority_order(
     *,
     prs: list[dict[str, Any]],
     repo: str,
     token: str,
+    now: datetime | None = None,
     sleeper: Callable[[float], None] = time.sleep,
     apply_call: Callable[..., tuple[int, str]] = _github_apply_call,
 ) -> int:
@@ -234,20 +236,26 @@ def merge_bot_prs_in_priority_order(
     Rule (Refs #2382): the fixed bot branches carry a merge priority
     (:data:`_BOT_PR_PRIORITY_BRANCHES`). PRs are considered from highest to
     lowest priority; a PR is *held* (skipped, left for the next trigger) when a
-    strictly-higher-priority bot PR is open and still in flight (not yet
-    ``clean`` and with no check run already failed). A higher PR that is ``clean``
-    merges first; one whose checks have failed does not hold the lower series, so
-    a broken higher PR can never permanently block a lower one. This stops the
-    bot series from re-staling one another under
-    ``strict_required_status_checks_policy``: merging a lower-priority PR would
-    advance ``main`` and trigger the ``--recreate`` that auto-closes the still
-    -pending higher PR before it can land.
+    strictly-higher-priority bot PR is open, not yet ``clean``, and still fresh
+    (created within :data:`_HIGHER_PRIORITY_HOLD_TTL_SECONDS`). A higher PR that
+    is ``clean`` merges first; one that has been non-clean past the TTL is
+    treated as stuck and no longer holds the lower series, so a broken higher PR
+    can never permanently block a lower one. This stops the bot series from
+    re-staling one another under ``strict_required_status_checks_policy``:
+    merging a lower-priority PR would advance ``main`` and trigger the
+    ``--recreate`` that auto-closes the still-pending higher PR before it lands.
+
+    The token is scoped to ``contents`` + ``pull-requests`` only, so the hold
+    decision uses just the already-polled PR object (``mergeable_state`` and
+    ``created_at``); it never calls the Checks API, which would need a
+    ``checks: read`` scope the keeper does not hold.
 
     Only listed branches (rank < ``len(_BOT_PR_PRIORITY_BRANCHES)``) can hold a
     lower series; unlisted bot PRs share the lowest rank and merge under the
     pre-existing per-PR ``clean`` rule, so a repository with no drift in the
     listed series behaves exactly as before.
     """
+    now = now if now is not None else datetime.now(UTC)
     ordered = sorted(
         enumerate(prs),
         key=lambda item: (_priority_rank(_pr_head_ref(item[1])), item[0]),
@@ -278,12 +286,15 @@ def merge_bot_prs_in_priority_order(
             f"PR #{number} ({head_ref or 'unknown branch'}) not mergeable yet "
             f"(mergeable_state={state}); leaving for the next trigger"
         )
-        # A non-clean, listed (higher-priority) PR holds the lower series while
-        # its checks are still in flight; a failed check releases the hold.
+        # A non-clean, listed (higher-priority) PR holds the lower series while it
+        # is still fresh; once it ages past the hold TTL it is treated as stuck
+        # and releases the hold so it cannot permanently block a lower PR.
         if rank < len(_BOT_PR_PRIORITY_BRANCHES) and blocking_rank is None:
-            head_sha = polled.get("head", {}).get("sha", "") if isinstance(polled.get("head"), dict) else ""
-            if head_sha and not _head_checks_failed(
-                repo=repo, sha=head_sha, token=token, apply_call=apply_call
-            ):
+            if _higher_pr_still_holds(polled, now):
                 blocking_rank = rank
+            else:
+                print(
+                    f"PR #{number} ({head_ref or 'unknown branch'}) has been non-clean past "
+                    "the hold TTL; releasing lower-priority bot PRs to merge"
+                )
     return merged
