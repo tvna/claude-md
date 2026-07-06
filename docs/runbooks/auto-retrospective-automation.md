@@ -95,9 +95,10 @@ gh workflow enable  .github/workflows/post-merge.yml --ref main   # resume
 deterministic trigger. Prefer the smallest revert set; see
 [`revert-first-rollback.md`](revert-first-rollback.md).
 
-Runaway retro issues are identifiable by label `type:docs + layer:meta` plus
-title prefix `chore(auto-retro)` (legacy retros use `fix(auto-retro)`; Refs
-#1069). Close them individually:
+Runaway retro issues are identifiable by label
+`type:docs + layer:p3-harness + area:ci-ops` plus title prefix
+`chore(auto-retro)` (legacy retros use `fix(auto-retro)`; Refs #1069).
+Close them individually:
 
 ```sh
 gh api --method PATCH /repos/tvna/claude-md/issues/<n> \
