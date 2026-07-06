@@ -144,16 +144,20 @@ retros. A PR that links a retro issue must itself be a retro-close PR (a
 (wired into `.github/workflows/verify-pr.yml`) rejects any other PR
 that closes or references a retro issue, so triage cannot be skipped.
 
-Today `scripts/auto_retro.py:issue_labels` still emits the retired
-`layer:meta` alongside `type:docs`, and the retro-discovery queries in
-`fetch_past_retro_labels`, `search_open_retro_issues`, and
-`scripts/scan_retro_followup_drift.py` use `label:layer:meta` as the retro
-identity key. Because `type:docs` is not retro-unique, dropping `layer:meta`
-requires re-keying retro discovery on the title predicate
-(`is_retro_issue_title`) rather than the label. That re-key, the `layer:meta`
-removal, and the backfill of existing retros are migration work owned by #972
-(see Migration Boundary); this section records the design decision only.
-Refs #1060, #1050.
+As of PR #2383, `scripts/auto_retro.py` no longer emits the retired
+`layer:meta` on a newly opened retro: its create-time identity set
+(`_identity_labels`) is `layer:p3-harness` + `area:ci-ops` alongside
+`type:docs` (successor decided at #1041 comment 4882932274). The
+retro-discovery queries in `fetch_past_retro_labels`,
+`search_open_retro_issues`, and `scripts/scan_retro_followup_drift.py`
+no longer key on a bare `label:layer:meta`; they now use a family-grouped
+OR of `layer:meta` and `layer:p3-harness` (via
+`_ssot.group_labels_by_family`, since `_discovery_labels` retains the
+retired label for search only) so retros filed before and after the
+migration both stay discoverable. `layer:meta` therefore survives in the
+registry entry as a deliberate transition aid; its removal from the live
+catalog and the registry is tracked by #2393. Refs #1060, #1050, #2313,
+#1041, #2383.
 
 ## Severity Labels
 
