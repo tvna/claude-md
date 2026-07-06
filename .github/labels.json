@@ -30,11 +30,6 @@
     "color": "b60205"
   },
   {
-    "name": "layer:meta",
-    "description": "Repo infrastructure (labels, rulesets, workflows) for the meta-document. NOT a CLAUDE.md principle.",
-    "color": "c5def5"
-  },
-  {
     "name": "type:feat",
     "description": "New behaviour or rule added to the meta-document or repo.",
     "color": "a2eeef"
