@@ -164,7 +164,7 @@ jobs:
     environment:
       name: devcontainer-image-pins
     permissions:
-      contents: write
+      contents: read
       pull-requests: write
     concurrency:
       group: generate-docs-${{ github.ref }}
@@ -377,7 +377,7 @@ jobs:
     environment:
       name: devcontainer-image-pins
     permissions:
-      contents: write
+      contents: read
       issues: read
       pull-requests: write
     concurrency:
