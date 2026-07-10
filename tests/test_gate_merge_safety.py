@@ -258,3 +258,76 @@ def test_main_block_exits_via_runpy(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(SystemExit) as exc_info:
         runpy.run_module("gate_merge_safety", run_name="__main__")
     assert exc_info.value.code == 0
+
+
+# ---------------------------------------------------------------------------
+# main(); CLAUDE_GATE_MODE=audit must not suppress the merge deny (#2403)
+# ---------------------------------------------------------------------------
+
+
+class TestAuditModeCannotSuppressDeny:
+    """gate_merge_safety is a fail-closed safety-boundary gate: its deny must
+    survive ``CLAUDE_GATE_MODE=audit`` the same way the six push gates'
+    denies do. Regression for #2403, where ``main()`` called
+    ``emit_decision(decide(*split), _SCRIPT)`` with no ``auditable=False``,
+    so the default ``auditable=True`` let audit mode downgrade an unsafe-merge
+    deny to a stderr warning and pass through silently.
+    """
+
+    def _run(self, payload: object, monkeypatch: pytest.MonkeyPatch) -> tuple[str, str]:
+        monkeypatch.setenv("CLAUDE_GATE_MODE", "audit")
+        monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+        stdout_buf = io.StringIO()
+        stderr_buf = io.StringIO()
+        monkeypatch.setattr("sys.stdout", stdout_buf)
+        monkeypatch.setattr("sys.stderr", stderr_buf)
+        gms.main()
+        return stdout_buf.getvalue(), stderr_buf.getvalue()
+
+    def test_audit_mode_does_not_suppress_unsafe_state_deny(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # decide()'s `poller` default is bound at function-definition time, so
+        # monkeypatching the module-level `_poll_mergeability` name cannot
+        # reach it here; patch `decide` itself to isolate exactly the
+        # property under test: that main() forwards whatever decide() returns
+        # through emit_decision with auditable=False, regardless of decide's
+        # internal reasoning.
+        monkeypatch.setattr(
+            gms,
+            "decide",
+            lambda *a, **k: gms._deny_for_state("tvna/claude-md#42", True, "dirty"),
+        )
+        stdout, _ = self._run(
+            {"tool_name": _MERGE_TOOL, "tool_input": dict(_VALID_INPUT)}, monkeypatch
+        )
+        decision = json.loads(stdout)
+        assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert "dirty" in decision["hookSpecificOutput"]["permissionDecisionReason"]
+
+    def test_audit_mode_does_not_suppress_missing_token_deny(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("GH_TOKEN", raising=False)
+        stdout, _ = self._run(
+            {"tool_name": _MERGE_TOOL, "tool_input": dict(_VALID_INPUT)}, monkeypatch
+        )
+        decision = json.loads(stdout)
+        assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_audit_mode_does_not_suppress_bad_input_deny(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        stdout, _ = self._run({"tool_name": _MERGE_TOOL, "tool_input": {}}, monkeypatch)
+        decision = json.loads(stdout)
+        assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_decide_call_site_passes_auditable_false(self) -> None:
+        """Direct pin on the emit_decision call site named in #2403's Facts:
+        ``gate_merge_safety.py:210`` must forward ``auditable=False`` so a
+        future edit cannot silently drop the keyword argument again.
+        """
+        import inspect
+
+        source = inspect.getsource(gms.main)
+        assert "auditable=False" in source, source
