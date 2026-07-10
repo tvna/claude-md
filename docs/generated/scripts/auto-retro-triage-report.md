@@ -2,9 +2,9 @@
 
 This file is generated from live GitHub retro-issue labels by `python3 scripts/auto_retro.py triage-report`. Do not edit it by hand. Unlike the per-script AST docs it is a non-deterministic snapshot of repository state, so it is refreshed on merge by the `post-merge.yml` workflow (which opens a pull request when the snapshot drifts) rather than as part of the deterministic generated docs.
 
-Retros observed: **371**
+Retros observed: **372**
 
-Open untriaged: **31**
+Open untriaged: **32**
 
 ## Anomalies
 
@@ -19,16 +19,16 @@ pie showData
     "retro:fp" : 67
     "retro:fp-candidate" : 0
     "retro:tentative" : 0
-    "unlabelled" : 289
+    "unlabelled" : 290
 ```
 
 ## Signal occurrence and false-positive rates
 
 | Signal | Fired | Fire rate | FP | FP rate | n | Anomaly |
 | --- | --: | --: | --: | --: | --: | :-: |
-| `inline_review_comments` | 68 | 0.18 | 0 | 0.00 | 68 |  |
+| `inline_review_comments` | 69 | 0.19 | 0 | 0.00 | 69 |  |
 | `fix_typed_title` | 54 | 0.15 | 12 | 0.22 | 54 |  |
-| `multi_commit_pr` | 104 | 0.28 | 13 | 0.12 | 104 |  |
+| `multi_commit_pr` | 105 | 0.28 | 13 | 0.12 | 105 |  |
 
 ## False-positive rate trend
 
@@ -39,6 +39,7 @@ pie showData
 
 | # | State | Status | Title |
 | --: | :-- | :-- | :-- |
+| 2427 | open | untriaged | chore(auto-retro): review PR #2426 repair loops |
 | 2423 | open | untriaged | chore(auto-retro): review PR #2422 repair loops |
 | 2412 | open | untriaged | docs(runbook): fix retro-doc drift (refresh cadence, phantom script name) |
 | 2400 | open | untriaged | chore(auto-retro): review PR #2396 repair loops |
@@ -48,4 +49,3 @@ pie showData
 | 2367 | open | untriaged | chore(auto-retro): review PR #2362 repair loops |
 | 2365 | open | untriaged | chore(auto-retro): review PR #2345 repair loops |
 | 2356 | open | untriaged | chore(auto-retro): review PR #2344 repair loops |
-| 2353 | open | untriaged | chore(auto-retro): review PR #2321 repair loops |
