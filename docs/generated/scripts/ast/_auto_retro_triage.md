@@ -51,17 +51,18 @@ flowchart TD
 flowchart TD
     N001["compute_triage_report(...)"]
     N002["total = len(...)"]
-    N003["label_counts = {label: sum((1 for r in past_retros if label in r.labels)) for label in _TRIAGE_LABELS}"]
-    N004["label_counts[_UNLABELLED_KEY] = sum(...)"]
-    N005["prior = compute_prior_from_labels(...)"]
-    N006["signal_stats = []"]
-    N007["for name in signal_names:     fp_rate, sample = prior[name]     fp_count = round(fp_rate * sample)     fire_rate = sample / total if total else 0.0     signal_stats.append(SignalStat(name=name, fire_count=sample, fire_rate=fire_rate, fp_count=fp_count, fp_rate=fp_rate, sample_size=sample))"]
-    N008["open_untriaged = sum(...)"]
-    N009["by_recency = sorted(...)"]
-    N010["recent = tuple(...)"]
-    N011["(fp_rate_all, fp_triaged) = _retro_fp_rate(...)"]
-    N012["(fp_rate_recent, fp_recent_triaged) = _retro_fp_rate(...)"]
-    N013["return TriageReport(total=total, label_counts=label_counts, signal_stats=tuple(signal_stats), open_untriaged=open_untriaged, recent=recent, fp_rate_all=fp_rate_all, fp_triaged=fp_triaged, fp_rate_recent=fp_rate_recent, fp_recent_triaged=fp_recent_triaged)"]
+    N003["population_total = total if total_live is None else total_live"]
+    N004["label_counts = {label: sum((1 for r in past_retros if label in r.labels)) for label in _TRIAGE_LABELS}"]
+    N005["label_counts[_UNLABELLED_KEY] = sum(...)"]
+    N006["prior = compute_prior_from_labels(...)"]
+    N007["signal_stats = []"]
+    N008["for name in signal_names:     fp_rate, sample = prior[name]     fp_count = round(fp_rate * sample)     fire_rate = sample / total if total else 0.0     signal_stats.append(SignalStat(name=name, fire_count=sample, fire_rate=fire_rate, fp_count=fp_count, fp_rate=fp_rate, sample_size=sample))"]
+    N009["open_untriaged = sum(...)"]
+    N010["by_recency = sorted(...)"]
+    N011["recent = tuple(...)"]
+    N012["(fp_rate_all, fp_triaged) = _retro_fp_rate(...)"]
+    N013["(fp_rate_recent, fp_recent_triaged) = _retro_fp_rate(...)"]
+    N014["return TriageReport(total=total, label_counts=label_counts, signal_stats=tuple(signal_stats), open_untriaged=open_untriaged, recent=recent, fp_rate_all=fp_rate_all, fp_triaged=fp_triaged, fp_rate_recent=fp_rate_recent, fp_recent_triaged=fp_recent_triaged, population_total=population_total)"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -74,6 +75,7 @@ flowchart TD
     N010 --> N011
     N011 --> N012
     N012 --> N013
+    N013 --> N014
 ```
 
 ## render_triage_report_markdown(...)
@@ -81,46 +83,53 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["render_triage_report_markdown(...)"]
-    N002["lines = ['<str>', '<str>', '<str>', '<str>', f'<str>{report.total}<str>', '<str>', f'<str>{report.open_untriaged}<str>', '<str>', '<str>', '<str>']"]
-    N003["if report.anomalies"]
-    N004["append(...)"]
-    N005["append(...)"]
-    N006["for stat in report.anomalies:     lines.append(f'<str>{stat.name}<str>{stat.fp_rate:<str>}<str>{stat.sample_size}<str>')"]
+    N002["observed_line = f'<str>{report.total}<str>'"]
+    N003["if report.truncated"]
+    N004["observed_line = f'<str>{report.total}<str>{report.population_total}<str>'"]
+    N005["lines = ['<str>', '<str>', '<str>', '<str>', observed_line, '<str>', f'<str>{report.open_untriaged}<str>', '<str>', '<str>', '<str>']"]
+    N006["if report.anomalies"]
     N007["append(...)"]
-    N008["extend(...)"]
-    N009["if report.total == 0"]
+    N008["append(...)"]
+    N009["for stat in report.anomalies:     lines.append(f'<str>{stat.name}<str>{stat.fp_rate:<str>}<str>{stat.sample_size}<str>')"]
     N010["append(...)"]
-    N011["append(...)"]
-    N012["append(...)"]
+    N011["extend(...)"]
+    N012["if report.total == 0"]
     N013["append(...)"]
-    N014["for label in (*_TRIAGE_LABELS, _UNLABELLED_KEY):     lines.append(f'<str>{label}<str>{report.label_counts[label]}')"]
+    N014["append(...)"]
     N015["append(...)"]
-    N016["extend(...)"]
-    N017["for stat in report.signal_stats:     marker = '<str>' if stat.is_anomaly else '<str>'     lines.append(f'<str>{stat.name}<str>{stat.fire_count}<str>{stat.fire_rate:<str>}<str>{stat.fp_count}<str>{stat.fp_rate:<str>}<str>{stat.sample_size}<str>{marker}<str>')"]
-    N018["extend(...)"]
+    N016["append(...)"]
+    N017["for label in (*_TRIAGE_LABELS, _UNLABELLED_KEY):     lines.append(f'<str>{label}<str>{report.label_counts[label]}')"]
+    N018["append(...)"]
     N019["extend(...)"]
-    N020["return '<str>'.join(lines) + '<str>'"]
+    N020["for stat in report.signal_stats:     marker = '<str>' if stat.is_anomaly else '<str>'     lines.append(f'<str>{stat.name}<str>{stat.fire_count}<str>{stat.fire_rate:<str>}<str>{stat.fp_count}<str>{stat.fp_rate:<str>}<str>{stat.sample_size}<str>{marker}<str>')"]
+    N021["extend(...)"]
+    N022["extend(...)"]
+    N023["return '<str>'.join(lines) + '<str>'"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
     N004 --> N005
+    N003 -->|"false"| N005
     N005 --> N006
-    N003 -->|"false"| N007
-    N006 --> N008
+    N006 -->|"true"| N007
     N007 --> N008
     N008 --> N009
-    N009 -->|"true"| N010
-    N009 -->|"false"| N011
+    N006 -->|"false"| N010
+    N009 --> N011
+    N010 --> N011
     N011 --> N012
-    N012 --> N013
-    N013 --> N014
+    N012 -->|"true"| N013
+    N012 -->|"false"| N014
     N014 --> N015
-    N010 --> N016
     N015 --> N016
     N016 --> N017
     N017 --> N018
+    N013 --> N019
     N018 --> N019
     N019 --> N020
+    N020 --> N021
+    N021 --> N022
+    N022 --> N023
 ```
 
 ## _render_fp_trend(...)
