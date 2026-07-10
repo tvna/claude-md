@@ -34,6 +34,17 @@ flowchart TD
     N002 --> N003
 ```
 
+## _deny_for_poll_timeout(...)
+
+```mermaid
+flowchart TD
+    N001["_deny_for_poll_timeout(...)"]
+    N002["sleep_seconds = (_MERGE_GATE_MAX_POLLS - 1) * _POLL_INTERVAL_SECONDS"]
+    N003["return build_deny(f'<str>{label}<str>{_MERGE_GATE_MAX_POLLS}<str>{_POLL_INTERVAL_SECONDS}<str>{sleep_seconds:<str>}<str>')"]
+    N001 -->|"start"| N002
+    N002 --> N003
+```
+
 ## decide(...)
 
 ```mermaid
@@ -54,10 +65,13 @@ flowchart TD
     N014["if not isinstance(pr_data, dict)"]
     N015["return build_deny(_API_FAILED_REASON)"]
     N016["mergeable = get(...)"]
-    N017["state = lower(...)"]
-    N018["if mergeable is True and state == 'clean'"]
-    N019["return None"]
-    N020["return _deny_for_state(label, mergeable, state)"]
+    N017["raw_state = get(...)"]
+    N018["state = lower(...)"]
+    N019["if mergeable is True and state == 'clean'"]
+    N020["return None"]
+    N021["if mergeable is None and isinstance(raw_state, str) and (raw_state.strip().lower() == 'unknown')"]
+    N022["return _deny_for_poll_timeout(label)"]
+    N023["return _deny_for_state(label, mergeable, state)"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N002 -->|"false"| N004
@@ -75,8 +89,11 @@ flowchart TD
     N014 -->|"false"| N016
     N016 --> N017
     N017 --> N018
-    N018 -->|"true"| N019
-    N018 -->|"false"| N020
+    N018 --> N019
+    N019 -->|"true"| N020
+    N019 -->|"false"| N021
+    N021 -->|"true"| N022
+    N021 -->|"false"| N023
 ```
 
 ## main(...)
