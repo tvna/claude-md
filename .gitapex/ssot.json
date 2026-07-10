@@ -1870,7 +1870,8 @@
         "ops:retro-opened",
         "harness:retro-opened"
       ],
-      "note": "retrospective issue identity and terminal open-state labels; layer:meta successor decided at #1041 comment 4882932274; the retired layer:meta was dropped from this entry by #2393 after every open retro was backfilled with layer:p3-harness, so _discovery_labels now keys on layer:p3-harness alone. See #1041, #2313, #2393"
+      "discovery_only_labels": ["type:retrospective"],
+      "note": "retrospective issue identity and terminal open-state labels; layer:meta successor decided at #1041 comment 4882932274; the retired layer:meta was dropped from this entry by #2393 after every open retro was backfilled with layer:p3-harness, so _discovery_labels keys on layer:p3-harness alone. type:retrospective is a live (non-retired) label a separate hand-filed creation path applies to in-session retros without type:docs; it lives in discovery_only_labels, not labels, so _discovery_labels finds them while _identity_labels never applies it to a newly auto-opened retro. See #1041, #2313, #2393, #2413"
     },
     {
       "path": "scripts/scan_retro_followup_drift.py",
