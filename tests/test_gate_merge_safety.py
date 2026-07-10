@@ -15,11 +15,13 @@ Verifies that:
 
 from __future__ import annotations
 
+import inspect
 import io
 import json
 from pathlib import Path
 from typing import Any
 
+import check_pr_mergeability
 import gate_merge_safety as gms
 import pytest
 
@@ -144,6 +146,108 @@ class TestFailClosed:
         decision = gms.decide(_MERGE_TOOL, dict(_VALID_INPUT), token="tok", poller=poll)
         reason = _deny_reason(decision)
         assert "failed" in reason or "timed out" in reason
+
+
+# ---------------------------------------------------------------------------
+# decide(); poll budget is the gate's own, not check_pr_mergeability's
+# advisory default, and a poll-budget expiry names the timeout explicitly
+# (#2404).
+# ---------------------------------------------------------------------------
+
+
+class TestPollBudget:
+    def test_poller_is_called_with_the_gates_own_max_polls(self) -> None:
+        seen: dict[str, Any] = {}
+
+        def poll(owner: str, repo: str, pr_number: str, *, token: str = "", **kwargs: Any) -> dict[str, Any]:
+            seen.update(kwargs)
+            return {"mergeable": True, "mergeable_state": "clean"}
+
+        gms.decide(_MERGE_TOOL, dict(_VALID_INPUT), token="tok", poller=poll)
+        assert seen.get("max_polls") == gms._MERGE_GATE_MAX_POLLS
+        # Pinned distinct from the advisory poller's own default budget, so a
+        # future edit cannot quietly make this gate reuse that constant.
+        assert gms._MERGE_GATE_MAX_POLLS != check_pr_mergeability._MAX_POLLS
+
+    def test_poll_timeout_denied_with_explicit_timeout_wording(self) -> None:
+        """mergeable still None after the poll budget is exhausted (the shape
+        _poll_mergeability returns on a real timeout) must deny with a
+        message naming the gate's own budget, not the generic unknown-state
+        remediation text.
+        """
+        decision = gms.decide(
+            _MERGE_TOOL,
+            dict(_VALID_INPUT),
+            token="tok",
+            poller=_poller("unknown", mergeable=None),
+        )
+        reason = _deny_reason(decision)
+        assert "poll budget" in reason
+        assert str(gms._MERGE_GATE_MAX_POLLS) in reason
+        assert "tvna/claude-md#42" in reason
+        # Distinct from the generic unknown-state remediation's wording.
+        assert "Re-check shortly via the GitHub REST API, then re-try once it settles." not in reason
+
+    def test_missing_mergeable_state_key_is_not_treated_as_poll_timeout(self) -> None:
+        """A malformed/partial payload (mergeable still None, but the
+        mergeable_state key itself missing entirely rather than the literal
+        string "unknown") is a different, likely persistent problem, not a
+        benign timing race, and must NOT get the poll-timeout's reassuring
+        "just retry" message.
+        """
+
+        def poll(owner: str, repo: str, pr_number: str, *, token: str = "", **_: Any) -> dict[str, Any]:
+            return {"mergeable": None}  # no mergeable_state key at all
+
+        decision = gms.decide(_MERGE_TOOL, dict(_VALID_INPUT), token="tok", poller=poll)
+        reason = _deny_reason(decision)
+        assert "poll budget" not in reason
+        assert "no other remediation is needed" not in reason
+
+    def test_unknown_state_with_determinate_mergeable_uses_generic_remediation(self) -> None:
+        """GitHub genuinely reporting mergeable_state=unknown alongside a
+        non-null mergeable is a different case from a gate-side poll timeout
+        (mergeable is None); it must keep using the state-specific
+        remediation, not the poll-timeout message.
+        """
+        decision = gms.decide(
+            _MERGE_TOOL,
+            dict(_VALID_INPUT),
+            token="tok",
+            poller=_poller("unknown", mergeable=True),
+        )
+        reason = _deny_reason(decision)
+        assert "poll budget" not in reason
+        assert "Re-check shortly via the GitHub REST API" in reason
+
+
+# ---------------------------------------------------------------------------
+# Contract pin on the imported check_pr_mergeability helpers (#2404): a
+# future change to their signature or advisory-side defaults must fail
+# loudly here rather than silently crossing into this fail-closed gate.
+# ---------------------------------------------------------------------------
+
+
+class TestImportedHelperContract:
+    def test_poll_mergeability_signature_pinned(self) -> None:
+        sig = inspect.signature(check_pr_mergeability._poll_mergeability)
+        params = list(sig.parameters)
+        assert params == ["owner", "repo", "pr_number", "opener", "token", "sleeper", "max_polls"]
+        assert sig.parameters["max_polls"].default is None
+        assert sig.parameters["max_polls"].kind == inspect.Parameter.KEYWORD_ONLY
+
+    def test_get_token_signature_pinned(self) -> None:
+        sig = inspect.signature(check_pr_mergeability._get_token)
+        assert list(sig.parameters) == []
+
+    def test_advisory_poll_defaults_pinned(self) -> None:
+        """Pins the advisory-side constants gate_merge_safety deliberately
+        does NOT reuse for its own poll budget (Facts, #2404); a change here
+        is a signal to re-check whether _MERGE_GATE_MAX_POLLS still makes
+        sense relative to the advisory default, not a silent drift.
+        """
+        assert check_pr_mergeability._MAX_POLLS == 10
+        assert check_pr_mergeability._POLL_INTERVAL_SECONDS == 2.0
 
 
 # ---------------------------------------------------------------------------
