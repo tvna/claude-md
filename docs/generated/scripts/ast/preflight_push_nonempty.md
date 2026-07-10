@@ -68,14 +68,3 @@ flowchart TD
     N013 -->|"true"| N014
     N013 -->|"false"| N015
 ```
-
-## main(...)
-
-```mermaid
-flowchart TD
-    N001["main(...)"]
-    N002["del argv"]
-    N003["return run_event_hook('<str>', decide, auditable=False)"]
-    N001 -->|"start"| N002
-    N002 --> N003
-```
