@@ -2,7 +2,7 @@
 
 This file is generated from live GitHub retro-issue labels by `python3 scripts/auto_retro.py triage-report`. Do not edit it by hand. Unlike the per-script AST docs it is a non-deterministic snapshot of repository state, so it is refreshed on merge by the `post-merge.yml` workflow (which opens a pull request when the snapshot drifts) rather than as part of the deterministic generated docs.
 
-Retros observed: **372**
+Retros observed: **92**
 
 Open untriaged: **32**
 
@@ -15,24 +15,24 @@ None: no fired signal clears both the FP-rate and sample-size thresholds.
 ```mermaid
 pie showData
     title Triage status
-    "retro:tp" : 15
-    "retro:fp" : 67
+    "retro:tp" : 5
+    "retro:fp" : 0
     "retro:fp-candidate" : 0
     "retro:tentative" : 0
-    "unlabelled" : 290
+    "unlabelled" : 87
 ```
 
 ## Signal occurrence and false-positive rates
 
 | Signal | Fired | Fire rate | FP | FP rate | n | Anomaly |
 | --- | --: | --: | --: | --: | --: | :-: |
-| `inline_review_comments` | 69 | 0.19 | 0 | 0.00 | 69 |  |
-| `fix_typed_title` | 54 | 0.15 | 12 | 0.22 | 54 |  |
-| `multi_commit_pr` | 105 | 0.28 | 13 | 0.12 | 105 |  |
+| `inline_review_comments` | 24 | 0.26 | 0 | 0.00 | 24 |  |
+| `fix_typed_title` | 5 | 0.05 | 0 | 0.00 | 5 |  |
+| `multi_commit_pr` | 27 | 0.29 | 0 | 0.00 | 27 |  |
 
 ## False-positive rate trend
 
-- All-time: 0.82 (n=82 triaged)
+- All-time: 0.00 (n=5 triaged)
 - Last 20 retros: 0.00 (n=0 triaged); n/a
 
 ## Recent retros
