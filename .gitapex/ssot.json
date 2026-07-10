@@ -280,36 +280,10 @@
       "tracking_issue": null
     },
     {
-      "id": "preflight-push-unsigned-commits",
+      "id": "preflight-push-dispatch",
       "kind": "script",
-      "script": "scripts/preflight_push_unsigned_commits.py",
-      "rule": "pushed commits are signed",
-      "planes": [
-        "pretooluse"
-      ],
-      "trigger": "Bash git push",
-      "policy_refs": [],
-      "cluster": null,
-      "tracking_issue": null
-    },
-    {
-      "id": "preflight-push-base",
-      "kind": "script",
-      "script": "scripts/preflight_push_base.py",
-      "rule": "the branch base is current before a push",
-      "planes": [
-        "pretooluse"
-      ],
-      "trigger": "Bash git push",
-      "policy_refs": [],
-      "cluster": null,
-      "tracking_issue": null
-    },
-    {
-      "id": "preflight-push-session-branch",
-      "kind": "script",
-      "script": "scripts/preflight_push_session_branch.py",
-      "rule": "a push targets the authorized session branch",
+      "script": "scripts/preflight_push_dispatch.py",
+      "rule": "a git push clears the consolidated push gates (unsigned commit, branch base, session branch, non-empty) in fixed order with first-deny-wins",
       "planes": [
         "pretooluse"
       ],
@@ -407,19 +381,6 @@
         "pretooluse"
       ],
       "trigger": "Bash git commit",
-      "policy_refs": [],
-      "cluster": null,
-      "tracking_issue": null
-    },
-    {
-      "id": "preflight-push-nonempty",
-      "kind": "script",
-      "script": "scripts/preflight_push_nonempty.py",
-      "rule": "a push ships new work",
-      "planes": [
-        "pretooluse"
-      ],
-      "trigger": "Bash git push",
       "policy_refs": [],
       "cluster": null,
       "tracking_issue": null

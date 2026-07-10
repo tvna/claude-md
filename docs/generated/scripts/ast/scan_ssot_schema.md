@@ -168,7 +168,7 @@ flowchart TD
 flowchart TD
     N001["_check_consumers(...)"]
     N002["errors = []"]
-    N003["for i, con in enumerate(_as_list(registry.get('<str>'))):     if not isinstance(con, dict):         continue     for label in _as_list(con.get('<str>')):         if label not in consumer_labels:             errors.append(f'<str>{i}<str>{con.get('<str>')!r}<str>{label!r}<str>{_LABELS_PATH}<str>')"]
+    N003["for i, con in enumerate(_as_list(registry.get('<str>'))):     if not isinstance(con, dict):         continue     for field in ('<str>', '<str>'):         for label in _as_list(con.get(field)):             if label not in consumer_labels:                 errors.append(f'<str>{i}<str>{con.get('<str>')!r}<str>{field}<str>{label!r}<str>{_LABELS_PATH}<str>')"]
     N004["return errors"]
     N001 -->|"start"| N002
     N002 --> N003

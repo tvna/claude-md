@@ -15,11 +15,13 @@ Verifies that:
 
 from __future__ import annotations
 
+import inspect
 import io
 import json
 from pathlib import Path
 from typing import Any
 
+import check_pr_mergeability
 import gate_merge_safety as gms
 import pytest
 
@@ -147,6 +149,108 @@ class TestFailClosed:
 
 
 # ---------------------------------------------------------------------------
+# decide(); poll budget is the gate's own, not check_pr_mergeability's
+# advisory default, and a poll-budget expiry names the timeout explicitly
+# (#2404).
+# ---------------------------------------------------------------------------
+
+
+class TestPollBudget:
+    def test_poller_is_called_with_the_gates_own_max_polls(self) -> None:
+        seen: dict[str, Any] = {}
+
+        def poll(owner: str, repo: str, pr_number: str, *, token: str = "", **kwargs: Any) -> dict[str, Any]:
+            seen.update(kwargs)
+            return {"mergeable": True, "mergeable_state": "clean"}
+
+        gms.decide(_MERGE_TOOL, dict(_VALID_INPUT), token="tok", poller=poll)
+        assert seen.get("max_polls") == gms._MERGE_GATE_MAX_POLLS
+        # Pinned distinct from the advisory poller's own default budget, so a
+        # future edit cannot quietly make this gate reuse that constant.
+        assert gms._MERGE_GATE_MAX_POLLS != check_pr_mergeability._MAX_POLLS
+
+    def test_poll_timeout_denied_with_explicit_timeout_wording(self) -> None:
+        """mergeable still None after the poll budget is exhausted (the shape
+        _poll_mergeability returns on a real timeout) must deny with a
+        message naming the gate's own budget, not the generic unknown-state
+        remediation text.
+        """
+        decision = gms.decide(
+            _MERGE_TOOL,
+            dict(_VALID_INPUT),
+            token="tok",
+            poller=_poller("unknown", mergeable=None),
+        )
+        reason = _deny_reason(decision)
+        assert "poll budget" in reason
+        assert str(gms._MERGE_GATE_MAX_POLLS) in reason
+        assert "tvna/claude-md#42" in reason
+        # Distinct from the generic unknown-state remediation's wording.
+        assert "Re-check shortly via the GitHub REST API, then re-try once it settles." not in reason
+
+    def test_missing_mergeable_state_key_is_not_treated_as_poll_timeout(self) -> None:
+        """A malformed/partial payload (mergeable still None, but the
+        mergeable_state key itself missing entirely rather than the literal
+        string "unknown") is a different, likely persistent problem, not a
+        benign timing race, and must NOT get the poll-timeout's reassuring
+        "just retry" message.
+        """
+
+        def poll(owner: str, repo: str, pr_number: str, *, token: str = "", **_: Any) -> dict[str, Any]:
+            return {"mergeable": None}  # no mergeable_state key at all
+
+        decision = gms.decide(_MERGE_TOOL, dict(_VALID_INPUT), token="tok", poller=poll)
+        reason = _deny_reason(decision)
+        assert "poll budget" not in reason
+        assert "no other remediation is needed" not in reason
+
+    def test_unknown_state_with_determinate_mergeable_uses_generic_remediation(self) -> None:
+        """GitHub genuinely reporting mergeable_state=unknown alongside a
+        non-null mergeable is a different case from a gate-side poll timeout
+        (mergeable is None); it must keep using the state-specific
+        remediation, not the poll-timeout message.
+        """
+        decision = gms.decide(
+            _MERGE_TOOL,
+            dict(_VALID_INPUT),
+            token="tok",
+            poller=_poller("unknown", mergeable=True),
+        )
+        reason = _deny_reason(decision)
+        assert "poll budget" not in reason
+        assert "Re-check shortly via the GitHub REST API" in reason
+
+
+# ---------------------------------------------------------------------------
+# Contract pin on the imported check_pr_mergeability helpers (#2404): a
+# future change to their signature or advisory-side defaults must fail
+# loudly here rather than silently crossing into this fail-closed gate.
+# ---------------------------------------------------------------------------
+
+
+class TestImportedHelperContract:
+    def test_poll_mergeability_signature_pinned(self) -> None:
+        sig = inspect.signature(check_pr_mergeability._poll_mergeability)
+        params = list(sig.parameters)
+        assert params == ["owner", "repo", "pr_number", "opener", "token", "sleeper", "max_polls"]
+        assert sig.parameters["max_polls"].default is None
+        assert sig.parameters["max_polls"].kind == inspect.Parameter.KEYWORD_ONLY
+
+    def test_get_token_signature_pinned(self) -> None:
+        sig = inspect.signature(check_pr_mergeability._get_token)
+        assert list(sig.parameters) == []
+
+    def test_advisory_poll_defaults_pinned(self) -> None:
+        """Pins the advisory-side constants gate_merge_safety deliberately
+        does NOT reuse for its own poll budget (Facts, #2404); a change here
+        is a signal to re-check whether _MERGE_GATE_MAX_POLLS still makes
+        sense relative to the advisory default, not a silent drift.
+        """
+        assert check_pr_mergeability._MAX_POLLS == 10
+        assert check_pr_mergeability._POLL_INTERVAL_SECONDS == 2.0
+
+
+# ---------------------------------------------------------------------------
 # Wiring: source of truth and generated configs
 # ---------------------------------------------------------------------------
 
@@ -258,3 +362,76 @@ def test_main_block_exits_via_runpy(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(SystemExit) as exc_info:
         runpy.run_module("gate_merge_safety", run_name="__main__")
     assert exc_info.value.code == 0
+
+
+# ---------------------------------------------------------------------------
+# main(); CLAUDE_GATE_MODE=audit must not suppress the merge deny (#2403)
+# ---------------------------------------------------------------------------
+
+
+class TestAuditModeCannotSuppressDeny:
+    """gate_merge_safety is a fail-closed safety-boundary gate: its deny must
+    survive ``CLAUDE_GATE_MODE=audit`` the same way the six push gates'
+    denies do. Regression for #2403, where ``main()`` called
+    ``emit_decision(decide(*split), _SCRIPT)`` with no ``auditable=False``,
+    so the default ``auditable=True`` let audit mode downgrade an unsafe-merge
+    deny to a stderr warning and pass through silently.
+    """
+
+    def _run(self, payload: object, monkeypatch: pytest.MonkeyPatch) -> tuple[str, str]:
+        monkeypatch.setenv("CLAUDE_GATE_MODE", "audit")
+        monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+        stdout_buf = io.StringIO()
+        stderr_buf = io.StringIO()
+        monkeypatch.setattr("sys.stdout", stdout_buf)
+        monkeypatch.setattr("sys.stderr", stderr_buf)
+        gms.main()
+        return stdout_buf.getvalue(), stderr_buf.getvalue()
+
+    def test_audit_mode_does_not_suppress_unsafe_state_deny(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # decide()'s `poller` default is bound at function-definition time, so
+        # monkeypatching the module-level `_poll_mergeability` name cannot
+        # reach it here; patch `decide` itself to isolate exactly the
+        # property under test: that main() forwards whatever decide() returns
+        # through emit_decision with auditable=False, regardless of decide's
+        # internal reasoning.
+        monkeypatch.setattr(
+            gms,
+            "decide",
+            lambda *a, **k: gms._deny_for_state("tvna/claude-md#42", True, "dirty"),
+        )
+        stdout, _ = self._run(
+            {"tool_name": _MERGE_TOOL, "tool_input": dict(_VALID_INPUT)}, monkeypatch
+        )
+        decision = json.loads(stdout)
+        assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert "dirty" in decision["hookSpecificOutput"]["permissionDecisionReason"]
+
+    def test_audit_mode_does_not_suppress_missing_token_deny(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("GH_TOKEN", raising=False)
+        stdout, _ = self._run(
+            {"tool_name": _MERGE_TOOL, "tool_input": dict(_VALID_INPUT)}, monkeypatch
+        )
+        decision = json.loads(stdout)
+        assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_audit_mode_does_not_suppress_bad_input_deny(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        stdout, _ = self._run({"tool_name": _MERGE_TOOL, "tool_input": {}}, monkeypatch)
+        decision = json.loads(stdout)
+        assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_decide_call_site_passes_auditable_false(self) -> None:
+        """Direct pin on the emit_decision call site named in #2403's Facts:
+        ``gate_merge_safety.py:210`` must forward ``auditable=False`` so a
+        future edit cannot silently drop the keyword argument again.
+        """
+        import inspect
+
+        source = inspect.getsource(gms.main)
+        assert "auditable=False" in source, source
