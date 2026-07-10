@@ -30,7 +30,7 @@ import shlex
 from pathlib import Path
 from typing import Any
 
-from _hook_runtime import build_deny, run_event_hook
+from _hook_runtime import build_deny
 from _session_branches import is_authorized, read_authorized_set
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -165,12 +165,3 @@ def decide(event: dict[str, Any]) -> dict[str, Any] | None:
         f"authorized here.\n\n"
         "Refs #1513, #785."
     )
-
-
-def main(argv: list[str] | None = None) -> int:
-    del argv
-    return run_event_hook("preflight_push_session_branch", decide, auditable=False)
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from _git import run_git
-from _hook_runtime import build_deny, run_event_hook
+from _hook_runtime import build_deny
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -102,12 +102,3 @@ def decide(
         "re-run the commit verbosely (without `-q`) and check its exit code, "
         "then push as a separate step. Refs #1130."
     )
-
-
-def main(argv: list[str] | None = None) -> int:
-    del argv
-    return run_event_hook("preflight_push_nonempty", decide, auditable=False)
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

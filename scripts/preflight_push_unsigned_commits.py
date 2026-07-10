@@ -94,7 +94,7 @@ from typing import Any
 
 from _commit_signing import is_unsigned as _is_unsigned
 from _git import Runner, commits_to_push, make_runner
-from _hook_runtime import build_deny, run_event_hook
+from _hook_runtime import build_deny
 
 # Both remote signals, mirroring check_commit_signing_ready.py so the gate is
 # operative under Claude Code on the Web AND Codex/Devin cloud sessions; the
@@ -361,12 +361,3 @@ def decide(
     if not unsigned:
         return None
     return _deny(unsigned)
-
-
-def main(argv: list[str] | None = None) -> int:
-    del argv
-    return run_event_hook("preflight_push_unsigned_commits", decide, auditable=False)
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
