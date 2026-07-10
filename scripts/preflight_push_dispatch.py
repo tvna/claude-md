@@ -51,13 +51,17 @@ can never suppress a push deny (the same posture each gate carried individually)
 
 Fail-open: a non-push command, a non-Bash tool, or an empty command passes
 through (every delegated ``decide`` returns None); each delegated ``decide`` also
-keeps its own wide fail-open on infrastructure errors. Always exits 0.
+keeps its own wide fail-open on infrastructure errors. Each ``decide`` is called
+in its own try/except so an unexpected exception in one gate fails open for that
+gate alone and never skips the remaining gates (the per-process isolation the
+four separate hooks had). Always exits 0.
 
 Tested by ``tests/test_preflight_push_dispatch.py``.
 """
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable, Mapping
 from typing import Any
 
@@ -96,9 +100,25 @@ def decide(event: dict[str, Any]) -> Mapping[str, Any] | None:
     every gate return None), so a gate fires on exactly the commands it fired on
     as a standalone process and its deny text and fail-open posture are
     preserved.
+
+    Per-gate fail-open isolation: each ``decide`` is called inside its own
+    try/except so an unexpected exception in one gate fails open for THAT gate
+    only (logged, treated as None) and never skips the remaining gates or crashes
+    the hook. This preserves the process-level isolation the four separate
+    PreToolUse hooks had before consolidation (CLAUDE.md section 4: do not
+    collapse a defense-in-depth layer), where one gate crashing could not
+    suppress another.
     """
     for check in _CHECKS:
-        decision = check(event)
+        try:
+            decision = check(event)
+        except Exception as exc:  # fail-open: isolate one gate's crash from the rest
+            print(
+                f"::warning::preflight_push_dispatch: {getattr(check, '__module__', 'check')} "
+                f"raised, failing open for this gate: {exc}",
+                file=sys.stderr,
+            )
+            continue
         if decision is not None:
             return decision
     return None

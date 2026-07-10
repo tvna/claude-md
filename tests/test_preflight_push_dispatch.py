@@ -129,6 +129,37 @@ def test_dispatcher_wires_the_four_gates_in_fixed_order() -> None:
     ) == subject._CHECKS
 
 
+def test_check_exception_is_isolated_and_later_gate_still_denies(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A crash in one gate must not skip the rest: the per-process isolation the
+    # four separate hooks had. The later gate's deny still surfaces.
+    calls: list[str] = []
+
+    def boom(_event: dict[str, Any]) -> dict[str, Any] | None:
+        calls.append("boom")
+        raise RuntimeError("gate blew up")
+
+    def denier(_event: dict[str, Any]) -> dict[str, Any]:
+        calls.append("denier")
+        return {"sentinel": "denied"}
+
+    monkeypatch.setattr(subject, "_CHECKS", (boom, denier))
+    result = subject.decide(_bash_event("git push origin branch"))
+    assert result == {"sentinel": "denied"}
+    assert calls == ["boom", "denier"]  # the crash did not skip the next gate
+    assert "failing open for this gate" in capsys.readouterr().err
+
+
+def test_all_checks_crashing_fails_open(monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(_event: dict[str, Any]) -> dict[str, Any] | None:
+        raise RuntimeError("gate blew up")
+
+    monkeypatch.setattr(subject, "_CHECKS", (boom, boom))
+    # Every gate crashing must fail open (allow), never wedge the push.
+    assert subject.decide(_bash_event("git push origin branch")) is None
+
+
 def test_deny_decision_passed_through_verbatim(monkeypatch: pytest.MonkeyPatch) -> None:
     # The dispatcher returns the check's object unchanged (identity), so a gate's
     # deny text can never be rewritten in transit.

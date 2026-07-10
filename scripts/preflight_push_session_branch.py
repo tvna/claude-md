@@ -17,9 +17,10 @@ to a prior session's branch (Refs #1513).
 Fail-open: any hook error, an empty authorized set, or a push without an
 explicit refspec exits 0 so the push proceeds and CI acts as backstop.
 
-Architecture mirrors preflight_push_base.py:
-* Pure decide() surface plus a thin main() entry.
-* Injected runner for subprocess calls enables unit testing without I/O.
+Architecture mirrors preflight_push_base.py: a pure decide() library imported
+and dispatched by scripts/preflight_push_dispatch.py (the consolidated push hook,
+Refs #2410); this module has no main() entry of its own. Its session-branch reads
+are injectable so the decision is unit-testable without I/O.
 """
 
 from __future__ import annotations

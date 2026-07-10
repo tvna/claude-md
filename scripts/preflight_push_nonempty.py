@@ -18,9 +18,10 @@ manual save that caught the original incident.
 Fail-open: any hook error, a missing base ref, or a delete / dry-run push exits
 0 so a script bug never wedges a legitimate push. CI is the backstop.
 
-Architecture mirrors preflight_push_base.py:
-* Pure decide() surface plus a thin main() entry.
-* Injected runner for git calls enables unit testing without a real repo.
+Architecture mirrors preflight_push_base.py: a pure decide() library imported
+and dispatched by scripts/preflight_push_dispatch.py (the consolidated push hook,
+Refs #2410); this module has no main() entry of its own. Its runner is injected
+so git calls are unit-testable without a real repo.
 """
 
 from __future__ import annotations

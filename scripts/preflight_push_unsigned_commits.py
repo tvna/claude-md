@@ -72,11 +72,13 @@ backstop that can actually verify it.
   wedges a push; the ruleset stays as the backstop. The gate fails loud only by
   denying a push it has positively shown to carry an unsigned commit.
 
-Contract:
-- Inputs: a PreToolUse hook event as JSON on stdin (``tool_name`` plus
+Contract (a pure decide() library imported and dispatched by
+scripts/preflight_push_dispatch.py, the consolidated push hook, Refs #2410; this
+module has no main() entry of its own):
+- Inputs: a PreToolUse hook event dict (``tool_name`` plus
   ``tool_input.command`` for the Bash matcher). No flags.
-- Outputs: a JSON deny decision on stdout when the push ships an unsigned
-  commit; nothing on stdout on pass-through. Always exits 0.
+- Outputs: a JSON deny decision when the push ships an unsigned commit; None on
+  pass-through (the dispatcher writes it to stdout and always exits 0).
 - Failure policy: fail-open at every boundary except a demonstrated unsigned
   commit, which is denied (CLAUDE.md section 4).
 
