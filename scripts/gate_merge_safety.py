@@ -175,24 +175,32 @@ def _deny_for_state(label: str, mergeable: Any, state: str) -> dict[str, Any]:
 
 
 def _deny_for_poll_timeout(label: str) -> dict[str, Any]:
-    """Deny for a gate-side poll-budget expiry (#2404), distinct from GitHub
-    itself reporting ``mergeable_state=unknown``. Reached only when
-    ``mergeable`` is still ``None`` after exhausting :data:`_MERGE_GATE_MAX_POLLS`
-    attempts, i.e. GitHub had not finished computing mergeability within this
-    gate's own budget; the deny names the timeout explicitly so the agent
-    knows a bare retry (not the ``unknown``-state remediation) is the right
-    next step.
+    """Deny for a gate-side poll-budget expiry (#2404). Reached only when
+    ``mergeable`` is still ``None`` AND GitHub explicitly returned the literal
+    string ``"unknown"`` for ``mergeable_state`` on the final poll, i.e.
+    GitHub had not finished computing mergeability within this gate's own
+    budget. Deliberately narrower than "mergeable is None and the *defaulted*
+    state reads unknown": a malformed/partial payload that is merely missing
+    the ``mergeable_state`` key is a different, likely persistent problem and
+    falls through to :func:`_deny_for_state` instead, so it is not reassured
+    away as a benign timing race. The deny names the timeout explicitly so
+    the agent knows a bare retry (not the generic ``unknown``-state
+    remediation) is the right next step for a genuine poll-timeout.
     """
-    budget_seconds = (_MERGE_GATE_MAX_POLLS - 1) * _POLL_INTERVAL_SECONDS
+    sleep_seconds = (_MERGE_GATE_MAX_POLLS - 1) * _POLL_INTERVAL_SECONDS
     return build_deny(
         f"`mcp__github__merge_pull_request` is blocked for {label}: this "
         f"gate's own poll budget ({_MERGE_GATE_MAX_POLLS} attempts, "
-        f"{_POLL_INTERVAL_SECONDS}s apart, ~{budget_seconds:.0f}s total) expired "
-        "before GitHub finished computing mergeability (mergeable is still "
-        "null). This is a poll-timeout, not a persistent GitHub-reported "
-        "unknown state: GitHub is very likely to finish the computation shortly. "
-        "Re-check the PR mergeable_state via the GitHub REST API and re-try; no "
-        "other remediation is needed."
+        f"{_POLL_INTERVAL_SECONDS}s apart, at least ~{sleep_seconds:.0f}s of sleep "
+        "alone plus each poll's own network latency) expired before GitHub "
+        "returned a determinate mergeable value (mergeable is still null). "
+        "This is a poll-timeout: this gate's own budget ran out, not "
+        "necessarily a persistent GitHub-side problem. Re-check the PR "
+        "mergeable_state via the GitHub REST API and re-try. If this keeps "
+        "recurring across multiple attempts for the same PR, mergeability "
+        "computation may be genuinely stuck (e.g. an unusually large diff); "
+        "see docs/runbooks/merge-readiness-loop.md rather than retrying "
+        "indefinitely."
     )
 
 
@@ -242,10 +250,17 @@ def decide(
         return build_deny(_API_FAILED_REASON)
 
     mergeable = pr_data.get("mergeable")
-    state = str(pr_data.get("mergeable_state") or "unknown").lower()
+    raw_state = pr_data.get("mergeable_state")
+    state = str(raw_state or "unknown").lower()
     if mergeable is True and state == "clean":
         return None
-    if mergeable is None and state == "unknown":
+    # Poll-timeout is narrower than "state defaults to unknown": it fires only
+    # when GitHub itself returned the literal string "unknown" alongside a
+    # still-null mergeable, not when mergeable_state was missing/malformed
+    # (which the `or "unknown"` fallback above would otherwise collapse into
+    # the same value). A malformed payload is a different, likely persistent
+    # problem and should not be reassured away as a benign timing race.
+    if mergeable is None and isinstance(raw_state, str) and raw_state.strip().lower() == "unknown":
         return _deny_for_poll_timeout(label)
 
     return _deny_for_state(label, mergeable, state)

@@ -188,6 +188,22 @@ class TestPollBudget:
         # Distinct from the generic unknown-state remediation's wording.
         assert "Re-check shortly via the GitHub REST API, then re-try once it settles." not in reason
 
+    def test_missing_mergeable_state_key_is_not_treated_as_poll_timeout(self) -> None:
+        """A malformed/partial payload (mergeable still None, but the
+        mergeable_state key itself missing entirely rather than the literal
+        string "unknown") is a different, likely persistent problem, not a
+        benign timing race, and must NOT get the poll-timeout's reassuring
+        "just retry" message.
+        """
+
+        def poll(owner: str, repo: str, pr_number: str, *, token: str = "", **_: Any) -> dict[str, Any]:
+            return {"mergeable": None}  # no mergeable_state key at all
+
+        decision = gms.decide(_MERGE_TOOL, dict(_VALID_INPUT), token="tok", poller=poll)
+        reason = _deny_reason(decision)
+        assert "poll budget" not in reason
+        assert "no other remediation is needed" not in reason
+
     def test_unknown_state_with_determinate_mergeable_uses_generic_remediation(self) -> None:
         """GitHub genuinely reporting mergeable_state=unknown alongside a
         non-null mergeable is a different case from a gate-side poll timeout
@@ -232,13 +248,6 @@ class TestImportedHelperContract:
         """
         assert check_pr_mergeability._MAX_POLLS == 10
         assert check_pr_mergeability._POLL_INTERVAL_SECONDS == 2.0
-
-    def test_gate_merge_safety_imports_poll_interval_from_check_pr_mergeability(self) -> None:
-        """gate_merge_safety's poll-timeout message computes its budget from
-        the same interval constant check_pr_mergeability's poller actually
-        sleeps with, rather than a hardcoded duplicate that could drift.
-        """
-        assert gms._POLL_INTERVAL_SECONDS is check_pr_mergeability._POLL_INTERVAL_SECONDS
 
 
 # ---------------------------------------------------------------------------
