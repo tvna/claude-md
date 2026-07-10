@@ -78,6 +78,33 @@ def consumer_labels(path: str) -> tuple[str, ...]:
     raise KeyError(f"_ssot: no label_consumers entry for path {path!r} in {_REGISTRY_PATH}")
 
 
+def consumer_discovery_only_labels(path: str) -> tuple[str, ...]:
+    """Return the optional ``discovery_only_labels`` for the entry at *path*.
+
+    Unlike :func:`consumer_labels` (the create-time identity set, also reused
+    for discovery), a discovery-only label is a live, non-retired label that a
+    DIFFERENT creation path applies (e.g. a hand-filed issue) and that this
+    consumer's search query must still match, without that label ever being
+    applied to an issue this consumer itself creates. Marking it ``retired``
+    in label-policy would be wrong (it is not retired) and would risk a prune
+    deleting it; this separate registry field is the correct home. Returns an
+    empty tuple when the entry has no ``discovery_only_labels`` key (the
+    common case), and raises the same ``KeyError``/``TypeError`` as
+    :func:`consumer_labels` for a missing entry or a malformed value, so a
+    drifted registry fails loud here too. Refs #2413.
+    """
+    for entry in _load().get("label_consumers", []):
+        if isinstance(entry, dict) and entry.get("path") == path:
+            labels = entry.get("discovery_only_labels", [])
+            if not isinstance(labels, list):
+                raise TypeError(
+                    f"_ssot: label_consumers entry for {path!r} has non-list "
+                    f"discovery_only_labels {labels!r} in {_REGISTRY_PATH}"
+                )
+            return tuple(labels)
+    raise KeyError(f"_ssot: no label_consumers entry for path {path!r} in {_REGISTRY_PATH}")
+
+
 def routing_rules() -> tuple[dict[str, Any], ...]:
     """Return ``label_routing.rules`` verbatim, in registry order (first-match-wins).
 

@@ -250,13 +250,14 @@ def _check_consumers(
     for i, con in enumerate(_as_list(registry.get("label_consumers"))):
         if not isinstance(con, dict):
             continue
-        for label in _as_list(con.get("labels")):
-            if label not in consumer_labels:
-                errors.append(
-                    f"label_consumers[{i}] ({con.get('path')!r}): label {label!r} does not "
-                    f"resolve against {_LABELS_PATH} unioned with the label-policy "
-                    f"rename_from and retired tables"
-                )
+        for field in ("labels", "discovery_only_labels"):
+            for label in _as_list(con.get(field)):
+                if label not in consumer_labels:
+                    errors.append(
+                        f"label_consumers[{i}] ({con.get('path')!r}): {field} label "
+                        f"{label!r} does not resolve against {_LABELS_PATH} unioned "
+                        f"with the label-policy rename_from and retired tables"
+                    )
     return errors
 
 

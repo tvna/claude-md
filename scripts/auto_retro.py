@@ -168,6 +168,7 @@ from _retro_labels import (
     RETRO_FP_CANDIDATE,
     RETRO_TENTATIVE,
     RETRO_TP,
+    TRIAGE_REPORT_FETCH_LIMIT,
 )
 from _trusted_bots import _TRUSTED_BOT_LOGINS
 from issue_link import extract_refs, strip_html_comments
@@ -322,6 +323,18 @@ def _resolve_registry_labels() -> tuple[str, ...]:
         raise RuntimeError(f"auto-retro registry labels: {exc}") from exc
 
 
+def _resolve_discovery_only_labels() -> tuple[str, ...]:
+    """Return this script's registered ``discovery_only_labels``, or ``()``.
+
+    Same error-wrapping boundary as :func:`_resolve_registry_labels`; see
+    :func:`_ssot.consumer_discovery_only_labels`. Refs #2413.
+    """
+    try:
+        return _ssot.consumer_discovery_only_labels("scripts/auto_retro.py")
+    except (KeyError, TypeError) as exc:
+        raise RuntimeError(f"auto-retro registry labels: {exc}") from exc
+
+
 def _identity_labels() -> list[str]:
     """Return the labels applied to a NEWLY opened retro issue, in registry order.
 
@@ -371,6 +384,7 @@ def _discovery_labels() -> list[str]:
         label for label in _resolve_registry_labels()
         if not label.endswith("retro-opened") and not label.startswith("area:")
     ]
+    stable.extend(_resolve_discovery_only_labels())
     if not stable:
         raise RuntimeError(
             "auto-retro registry labels: registry entry for scripts/auto_retro.py "
@@ -651,80 +665,135 @@ def search_retro_issues(repo: str, pr_number: int) -> list[dict[str, Any]]:
     return list(data.get("items") or [])
 
 
-def fetch_past_retro_labels(
-    repo: str, limit: int = PRIOR_FETCH_LIMIT
-) -> list[PastRetro]:
-    """Return up to *limit* past retros as :class:`PastRetro` records.
+# GitHub's search API itself refuses to page past this many results (10 pages
+# of the max per_page=100); a page beyond it 422s, so pagination stops here
+# regardless of *limit*. Refs #2413.
+_SEARCH_API_MAX_RESULTS: int = 1000
 
-    Uses a single search query matching the retro-issue discovery labels
-    resolved from the SSoT registry via :func:`_discovery_labels` (both the
-    current identity labels and any retired label kept in the registry
-    entry for discoverability, OR'd by family) + title contains ``retro``,
-    then parses each item's body for the
-    ``- Signals fired:`` line. Soft-fails on search errors and on
-    per-item JSON shape errors; the prior degrades to empty (no skip,
-    no tentative) rather than aborting the retro flow. A drifted
-    registry is a config error, not a transient search error, so it
-    propagates loud via ``main()`` rather than degrading to empty.
+
+def _fetch_past_retro_page(repo: str, limit: int) -> tuple[list[PastRetro], int]:
+    """Return up to *limit* past retros plus the search API's ``total_count``.
+
+    Shared implementation behind :func:`fetch_past_retro_labels` (drops the
+    count, kept for backward compatibility) and :func:`fetch_past_retro_population`
+    (keeps it, so the triage report can render "observed N of M" instead of a
+    silent cap). Paginates ``per_page=100`` pages, sorted ``created desc`` (so
+    a population larger than *limit* still samples the most RECENT retros,
+    not GitHub's best-match default order) until *limit* items are collected,
+    a page returns fewer than a full page, or :data:`_SEARCH_API_MAX_RESULTS`
+    is reached.
+
+    Uses a search query matching the retro-issue discovery labels resolved
+    from the SSoT registry via :func:`_discovery_labels` (identity labels,
+    any retired label kept for discoverability, and any registered
+    ``discovery_only_labels``, OR'd by family) + title contains ``retro``,
+    then parses each item's body for the ``- Signals fired:`` line.
+    Soft-fails on search errors and on per-item JSON shape errors on the
+    FIRST page; the prior degrades to empty (no skip, no tentative) rather
+    than aborting the retro flow. A page after the first that fails simply
+    stops pagination and returns what was already collected, since a partial
+    population is still better than discarding it. A drifted registry is a
+    config error, not a transient search error, so it propagates loud via
+    ``main()`` rather than degrading to empty.
 
     The query mirrors
     :func:`scripts.scan_retro_followup_drift.search_retro_issues`
     so PR1's scanner and PR2's prior population observe the same
     retro population.
-    Refs #582.
+    Refs #582, #2413.
     """
     label_clause = " ".join(f"label:{label}" for label in _discovery_labels())
     query = f"repo:{repo} is:issue {label_clause} in:title retro"
     encoded = quote(query, safe="")
     per_page = min(max(limit, 1), 100)
-    try:
-        raw = gh_api(
-            "GET", f"/search/issues?q={encoded}&per_page={per_page}"
-        )
-    except GitHubApiError as exc:
-        print(
-            f"::warning::fetch_past_retro_labels search failed "
-            f"(HTTP {exc.code}); prior will be empty",
-            file=sys.stderr,
-        )
-        return []
-    try:
-        data = json.loads(raw) if raw.strip() else {}
-    except json.JSONDecodeError:
-        return []
-    items = list(data.get("items") or [])[:limit]
     out: list[PastRetro] = []
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        number = item.get("number")
-        if not isinstance(number, int):
-            continue
-        labels_raw = item.get("labels") or []
-        names: set[str] = set()
-        for lbl in labels_raw:
-            if isinstance(lbl, dict):
-                name = lbl.get("name")
-                if isinstance(name, str) and name:
-                    names.add(name)
-        body = item.get("body")
-        if not isinstance(body, str) or not body:
-            body = ""
-        signals = parse_signals_from_retro_body(body)
-        state = item.get("state")
-        state = state if isinstance(state, str) and state else "open"
-        title = item.get("title")
-        title = title if isinstance(title, str) else ""
-        out.append(
-            PastRetro(
-                number=number,
-                signals=signals,
-                labels=frozenset(names),
-                state=state,
-                title=title,
+    total_count = 0
+    page = 1
+    while len(out) < limit and (page - 1) * per_page < _SEARCH_API_MAX_RESULTS:
+        try:
+            raw = gh_api(
+                "GET",
+                f"/search/issues?q={encoded}&sort=created&order=desc"
+                f"&per_page={per_page}&page={page}",
             )
-        )
-    return out
+        except GitHubApiError as exc:
+            if page == 1:
+                print(
+                    f"::warning::fetch_past_retro_labels search failed "
+                    f"(HTTP {exc.code}); prior will be empty",
+                    file=sys.stderr,
+                )
+            break
+        try:
+            data = json.loads(raw) if raw.strip() else {}
+        except json.JSONDecodeError:
+            break
+        count = data.get("total_count")
+        if isinstance(count, int):
+            total_count = count
+        items = list(data.get("items") or [])
+        if not items:
+            break
+        for item in items[: limit - len(out)]:
+            if not isinstance(item, dict):
+                continue
+            number = item.get("number")
+            if not isinstance(number, int):
+                continue
+            labels_raw = item.get("labels") or []
+            names: set[str] = set()
+            for lbl in labels_raw:
+                if isinstance(lbl, dict):
+                    name = lbl.get("name")
+                    if isinstance(name, str) and name:
+                        names.add(name)
+            body = item.get("body")
+            if not isinstance(body, str) or not body:
+                body = ""
+            signals = parse_signals_from_retro_body(body)
+            state = item.get("state")
+            state = state if isinstance(state, str) and state else "open"
+            title = item.get("title")
+            title = title if isinstance(title, str) else ""
+            out.append(
+                PastRetro(
+                    number=number,
+                    signals=signals,
+                    labels=frozenset(names),
+                    state=state,
+                    title=title,
+                )
+            )
+        if len(items) < per_page:
+            break
+        page += 1
+    return out, total_count
+
+
+def fetch_past_retro_labels(
+    repo: str, limit: int = PRIOR_FETCH_LIMIT
+) -> list[PastRetro]:
+    """Return up to *limit* past retros as :class:`PastRetro` records.
+
+    Thin wrapper over :func:`_fetch_past_retro_page` that drops the live
+    ``total_count``; kept as the stable entry point for the live skip
+    decision (:func:`compute_prior_from_labels` via ``run()``), which only
+    ever needs the sampled population, not the population size. Refs #582.
+    """
+    records, _total_count = _fetch_past_retro_page(repo, limit)
+    return records
+
+
+def fetch_past_retro_population(
+    repo: str, limit: int = PRIOR_FETCH_LIMIT
+) -> tuple[list[PastRetro], int]:
+    """Return up to *limit* past retros plus the live ``total_count``.
+
+    Used by the ``triage-report`` command so the rendered report can state
+    "observed N of M (truncated)" instead of silently capping at *limit*
+    with no indication the population is larger. Refs #2413.
+    """
+    return _fetch_past_retro_page(repo, limit)
 
 
 def has_review_comments(repo: str, pr_number: int) -> bool:
@@ -2114,8 +2183,8 @@ def _cmd_triage_report(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
-    past = fetch_past_retro_labels(repo, limit=args.limit)
-    report = compute_triage_report(past)
+    past, total_live = fetch_past_retro_population(repo, limit=args.limit)
+    report = compute_triage_report(past, total_live=total_live)
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(render_triage_report_markdown(report), encoding="utf-8")
@@ -2406,10 +2475,10 @@ def main(argv: list[str] | None = None) -> int:
     p_triage.add_argument(
         "--limit",
         type=int,
-        default=PRIOR_FETCH_LIMIT,
+        default=TRIAGE_REPORT_FETCH_LIMIT,
         help=(
             f"Maximum number of past retros to aggregate "
-            f"(default {PRIOR_FETCH_LIMIT})."
+            f"(default {TRIAGE_REPORT_FETCH_LIMIT})."
         ),
     )
     p_triage.add_argument(

@@ -237,6 +237,11 @@
             "type": "array",
             "items": {"type": "string"}
           },
+          "discovery_only_labels": {
+            "description": "Optional. Live, non-retired label literals the consumer's search/discovery query must also match, but that the consumer never applies when it creates an issue itself (e.g. a label a different, hand-filed creation path uses). Kept out of 'labels' so it cannot leak into create-time identity labels; kept out of label-policy retired_labels so a prune cannot delete it as if it were deprecated.",
+            "type": "array",
+            "items": {"type": "string"}
+          },
           "note": {
             "description": "One line on what the consumer does with the labels.",
             "type": "string"
