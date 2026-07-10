@@ -106,7 +106,7 @@ stateDiagram-v2
 
 `[fact]` マージ合流条件（`.github/rulesets/main.json` 実測）: (a)
 `require_code_owner_review: true` ---- CODEOWNERS 保護パス（`.github/rulesets/**`、
-`docs/graph/**`、`.github/CODEOWNERS`、`docs/runbooks/rulesets.md`、
+`/.gitapex/`（PR #2347 で `docs/graph/**` から移動）、`.github/CODEOWNERS`、`docs/runbooks/rulesets.md`、
 `.github/workflows/apply-rulesets.yml`）を変更する PR は @tvna 承認が必須; (b) `required_review_thread_resolution: true` ---- 全レビュースレッド
 の解決が必須; (c) `dismiss_stale_reviews_on_push: true` ---- 承認後の push で既存
 承認が即時失効; (d) `strict_required_status_checks_policy: true` ---- マージ試行時点で
@@ -125,7 +125,7 @@ push（再び承認失効）→ CI 再実行 → 再承認 のサイクルが繰
 「@tvna の最後の承認からマージ試行までの窓に競合マージが入らない」状態になるまで
 続く。これらのループは CODEOWNERS 保護パス 5 グループ（`.github/CODEOWNERS`、
 `.github/rulesets/**`、`.github/workflows/apply-rulesets.yml`、
-`docs/runbooks/rulesets.md`、`docs/graph/**`）に触れる PR にのみ発生する。
+`docs/runbooks/rulesets.md`、`/.gitapex/`）に触れる PR にのみ発生する。
 
 ## ギャップ分析
 
@@ -138,7 +138,7 @@ push（再び承認失効）→ CI 再実行 → 再承認 のサイクルが繰
 | 5 | `update_pull_request_branch` は deny される（マージコミットを加えるサーバ側マージのため）が、その回復 ---- ローカル rebase 後の push ---- はランブックに記された運用/エージェント手順であり、自動化された遷移ではない。 | `gate_update_pr_branch.py:4-9`, 回復ランブックは `:40`。 | #893 |
 | 6 | 多層防御の前提: すべてのローカル commit/push ゲートは内部エラーで fail-open するため、静かに壊れたゲートは守るべき操作を許す。correctness はサーバ側のブランチ保護と CI に全面的に依存する。 | fail-open は `preflight_push_session_branch.py:18`, `preflight_commit_session_branch.py:27`, `check_session_branch.py:23`。 | #785 |
 | 7 | `CIGreen --> Merged` が単一の直接遷移として描かれており、サーバ側のマージ合流条件（CODEOWNERS 承認・レビュースレッド解決・strict ポリシーによるブランチ陳腐化・ドラフト状態・マージ手法制約）がすべて欠落していた。`CIGreen` はマージの必要条件であって十分条件ではなく、`MergeReady` には 5 条件の同時充足が必要。 | `.github/rulesets/main.json`（5 条件）; `gate_merge_safety.py:17-19`（`mergeable_state != "clean"` でのブロック）。 | #1923 |
-| 8 | 2 つのフィードバックループが未モデル化: (1) CI 修正 push で @tvna 承認が失効し CI 再実行と再承認が必要（`dismiss_stale_reviews_on_push: true`）; (2) @tvna 承認後に別 PR が main にマージされるとブランチが `Behind` に遷移し、更新 push で承認が再失効するループ（`strict_required_status_checks_policy: true`）。いずれも CODEOWNERS 保護パスを含む PR にのみ発生。 | `main.json: dismiss_stale_reviews_on_push=true`, `strict_required_status_checks_policy=true`; `.github/CODEOWNERS`（`docs/graph/**` を含む 5 パス群）。 | #1923 |
+| 8 | 2 つのフィードバックループが未モデル化: (1) CI 修正 push で @tvna 承認が失効し CI 再実行と再承認が必要（`dismiss_stale_reviews_on_push: true`）; (2) @tvna 承認後に別 PR が main にマージされるとブランチが `Behind` に遷移し、更新 push で承認が再失効するループ（`strict_required_status_checks_policy: true`）。いずれも CODEOWNERS 保護パスを含む PR にのみ発生。 | `main.json: dismiss_stale_reviews_on_push=true`, `strict_required_status_checks_policy=true`; `.github/CODEOWNERS`（`/.gitapex/` を含む 5 パス群）。 | #1923 |
 | 9 | `gate_merge_safety.py` は `blocked` 状態のサブ条件を単一の汎用メッセージに集約しており、エージェントは「CI 待機」「@tvna レビュー要求」「スレッド解決」「ブランチ更新」のいずれが必要かを判断できない。 | `gate_merge_safety.py:79-84`（`_STATE_REMEDIATION["blocked"]` が汎用文字列）。 | #1923 |
 | 10 | `ThreadsUnresolved` 状態に返信投稿と `resolve_review_thread` 呼び出しのサブ遷移がなく、エージェントが読んでも必要な 2 ステップの手順が見えない。ギャップ A（stop hook の自己返信 echo 誤発火）およびギャップ B（fix push 後の resolve 手順未定義）と連動。 | ギャップ A: `scripts/gate_stop_pr_review_reply.py`（自己投稿 webhook スキップを追加）; ギャップ B: `.apm/instructions/master.instructions.md` セクション 3（resolve 手順を追記）。 | #1932 |
 

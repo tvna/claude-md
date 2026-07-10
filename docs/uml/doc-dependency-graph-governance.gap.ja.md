@@ -89,7 +89,7 @@ sequenceDiagram
         Gate-->>GH: exit 0（fail-open · warning のみ）
     end
 
-    Gate->>Lib: load_graph(docs/graph/doc-dependencies.toml)
+    Gate->>Lib: load_graph(.gitapex/doc-dependencies.toml)
     note over Lib: TOML パース → 全エッジの from/to ID を検証
     alt 未知ノード ID
         Lib-->>Gate: GraphValidationError
@@ -186,8 +186,9 @@ classDiagram
     DocGraph ..> GraphValidationError : load_graph() が raise
 ```
 
-`[fact]` グラフ宣言は `docs/graph/doc-dependencies.toml` にあり、
-`.github/CODEOWNERS` で CODEOWNERS 保護されている。新規エッジの追加は
+`[fact]` グラフ宣言は `.gitapex/doc-dependencies.toml` にあり
+（PR #2347 で `docs/graph/` から移動）、
+`.github/CODEOWNERS`（`/.gitapex/` ルール）で CODEOWNERS 保護されている。新規エッジの追加は
 TOML diff（`[[edges]]` ブロック 2 行）としてコードレビューされるため、
 全ガバナンス関係が機械可読かつ変更監査可能になる。
 
@@ -196,9 +197,9 @@ TOML diff（`[[edges]]` ブロック 2 行）としてコードレビューさ�
 | # | ギャップ `[analysis]` | 証拠 `[fact]`（file:line） | 追跡 |
 |---|---|---|---|
 | 1 | 単一プロデューサーのギャップ（適用前）: 機械強制エッジは `master_instructions` → `design_philosophy_prd` の 1 本のみ。その他の governs/compiled_to エッジはレビュワーの記憶に依存。PR #1737 は `master.instructions.md` を変更したまま管轄下の 5 PRD をタッチせずにマージした。 | `scan_design_philosophy_drift.py:437-470`（1 カップリング）; PR #1737 マージコミット。 | #1754 |
-| 2 | TOML グラフが宣言済み依存関係の唯一の真実の源だが、TOML 未宣言のエッジはゲートから不可視。現行の 16 エッジ以外の関係はレビュワーの記憶に依存したまま。 | `docs/graph/doc-dependencies.toml`（PR #1755 時点で 16 エッジ）。 | #1754 |
+| 2 | TOML グラフが宣言済み依存関係の唯一の真実の源だが、TOML 未宣言のエッジはゲートから不可視。現行の 16 エッジ以外の関係はレビュワーの記憶に依存したまま。 | `.gitapex/doc-dependencies.toml`（PR #1755 時点で 16 エッジ）。 | #1754 |
 | 3 | Phase 1 は advisory（`continue-on-error: true`）: 本物の共変更欠如はアノテーションされるがマージをブロックできない。`.github/rulesets/main.json` への昇格は FP 率 < 5% を 2 スプリント連続で達成してから。 | `validate-doc-graph.yml:28`; `docs/runbooks/doc-dependency-graph.md` セクション 6.4。 | #1754 |
-| 4 | `compiled_to` エッジ（`master_instructions` → `claude_md`, `agents_md`）はグラフ上 blocking だが、コンパイルドリフトは別の required ゲート（`scan_design_philosophy_drift.py verify-apm-drift`）で既に強制されている。完全性のため宣言しているが、Phase 2 で昇格する際は severity を advisory に変更して二重失敗を防ぐ。 | `docs/graph/doc-dependencies.toml:[[edges]]` compiled_to エントリ; `gate_doc_graph_pr.py:107-117`。 | #1754 |
+| 4 | `compiled_to` エッジ（`master_instructions` → `claude_md`, `agents_md`）はグラフ上 blocking だが、コンパイルドリフトは別の required ゲート（`scan_design_philosophy_drift.py verify-apm-drift`）で既に強制されている。完全性のため宣言しているが、Phase 2 で昇格する際は severity を advisory に変更して二重失敗を防ぐ。 | `.gitapex/doc-dependencies.toml:[[edges]]` compiled_to エントリ; `gate_doc_graph_pr.py:107-117`。 | #1754 |
 | 5 | Waiver の監査証跡は PR ボディテキストにのみ存在する。あるPRで適用した waiver は、後続 PR では有効にならない。同じノードペアの blocking co-change をスキップする意図がある PR は、それぞれ waiver 行を持つ必要がある。 | `gate_doc_graph_pr.py:59-67`（呼び出しごとのパース）; クロス PR の waiver ストアなし。 | #1754 |
 
 ## 推奨方向（speculation）
@@ -210,7 +211,7 @@ TOML diff（`[[edges]]` ブロック 2 行）としてコードレビューさ�
   エッジを required check に昇格させる。昇格ステップは `.github/rulesets/main.json`
   への 1 行追加。
 - `[analysis]` ギャップ 5: waiver の監査証跡が重要になった場合、waiver を独立した
-  TOML ファイル（例: `docs/graph/waivers.toml`）に CODEOWNERS 保護のうえ永続化することで、
+  TOML ファイル（例: `.gitapex/waivers.toml`）に CODEOWNERS 保護のうえ永続化することで、
   PR をまたぐ waiver 管理とレビュー差分による可視化が可能になる。
 
 ## スコープ注記

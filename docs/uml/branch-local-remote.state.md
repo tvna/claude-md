@@ -109,7 +109,7 @@ stateDiagram-v2
 
 `[fact]` Merge readiness conditions observed in `.github/rulesets/main.json`: (a)
 `require_code_owner_review: true` (when a PR touches a CODEOWNERS-protected path
-(`.github/rulesets/**`, `docs/graph/**`, `.github/CODEOWNERS`, `docs/runbooks/rulesets.md`,
+(`.github/rulesets/**`, `/.gitapex/` (moved from `docs/graph/**` by PR #2347), `.github/CODEOWNERS`, `docs/runbooks/rulesets.md`,
 `.github/workflows/apply-rulesets.yml`), @tvna approval is required before merge); (b) `required_review_thread_resolution: true`
 (all review threads must be resolved); (c) `dismiss_stale_reviews_on_push: true` (a
 commit pushed after approval dismisses that approval immediately); (d)
@@ -129,7 +129,7 @@ which dismisses the approval again, forcing CI rerun and re-approval. Both loops
 until the window between the last @tvna approval and the merge attempt contains no
 competing merge to main. These loops apply only to PRs that touch the five
 CODEOWNERS-protected path groups (`.github/CODEOWNERS`, `.github/rulesets/**`,
-`.github/workflows/apply-rulesets.yml`, `docs/runbooks/rulesets.md`, `docs/graph/**`).
+`.github/workflows/apply-rulesets.yml`, `docs/runbooks/rulesets.md`, `/.gitapex/`).
 
 ## Gap analysis
 
@@ -142,7 +142,7 @@ CODEOWNERS-protected path groups (`.github/CODEOWNERS`, `.github/rulesets/**`,
 | 5 | `update_pull_request_branch` is denied (it does a server-side merge that adds a merge commit), but the recovery; a local rebase then push; is operator/agent procedure in a runbook, not an automated transition. | `gate_update_pr_branch.py:4-9`, recovery runbook at `:40`. | #893 |
 | 6 | Defense-in-depth assumption: every local commit/push gate fails open on internal error, so a silently broken gate permits the action it guards; correctness then rests entirely on server-side branch protection plus CI. | Fail-open in `preflight_push_session_branch.py:18`, `preflight_commit_session_branch.py:27`, `check_session_branch.py:23`. | #785 |
 | 7 | `CIGreen --> Merged` was a single direct transition omitting all server-side merge-readiness conditions: CODEOWNERS approval, review-thread resolution, branch staleness under the strict policy, draft state, and merge-method restriction. `CIGreen` is a necessary but not sufficient precondition for merge; `MergeReady` requires all five conditions to hold simultaneously. | `.github/rulesets/main.json` (five conditions); `gate_merge_safety.py:17-19` (fail-closed on `mergeable_state != "clean"`). | #1923 |
-| 8 | Two feedback loops are unmodeled: (1) a CI-fix push dismisses the existing @tvna approval (`dismiss_stale_reviews_on_push: true`), requiring CI rerun and re-approval after every fix iteration; (2) a competing merge to main after @tvna approves triggers `strict_required_status_checks_policy`, sending the branch `Behind`, which requires a refresh push (again dismissing approval), CI rerun, and re-approval. Both loops apply only to PRs touching CODEOWNERS-protected paths. | `main.json: dismiss_stale_reviews_on_push=true`, `strict_required_status_checks_policy=true`; `.github/CODEOWNERS` (5 protected path groups including `docs/graph/**`). | #1923 |
+| 8 | Two feedback loops are unmodeled: (1) a CI-fix push dismisses the existing @tvna approval (`dismiss_stale_reviews_on_push: true`), requiring CI rerun and re-approval after every fix iteration; (2) a competing merge to main after @tvna approves triggers `strict_required_status_checks_policy`, sending the branch `Behind`, which requires a refresh push (again dismissing approval), CI rerun, and re-approval. Both loops apply only to PRs touching CODEOWNERS-protected paths. | `main.json: dismiss_stale_reviews_on_push=true`, `strict_required_status_checks_policy=true`; `.github/CODEOWNERS` (5 protected path groups including `/.gitapex/`). | #1923 |
 | 9 | `gate_merge_safety.py` maps all non-`clean` `blocked` states to a single generic remediation message, giving no sub-condition diagnosis. An agent receiving `mergeable_state=blocked` cannot determine whether to wait for CI, request @tvna review, resolve a thread, or refresh the branch. | `gate_merge_safety.py:79-84` (`_STATE_REMEDIATION["blocked"]` is a single generic string). | #1923 |
 | 10 | `ThreadsUnresolved` has no sub-transitions for posting a reply and calling `resolve_review_thread`; an agent reading the diagram cannot see the required two-step sequence. Linked to Gap A (self-reply echo in the stop hook) and Gap B (missing resolve instruction after fix push). | Gap A: `scripts/gate_stop_pr_review_reply.py` (self-authored webhook skip); Gap B: `.apm/instructions/master.instructions.md` section 3 (resolve instruction added). | #1932 |
 
