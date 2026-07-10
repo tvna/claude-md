@@ -135,6 +135,11 @@
     "color": "d4c5f9"
   },
   {
+    "name": "retro:expired",
+    "description": "Sentinel closed this retro as not_planned after the inactivity window with no operator engagement (weak fp signal, counted separately from tp/fp).",
+    "color": "cfd3d7"
+  },
+  {
     "name": "type:retrospective",
     "description": "Auto-opened retrospective reviewing repair-free merge reproducibility after a merge.",
     "color": "c5def5"

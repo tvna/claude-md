@@ -164,6 +164,7 @@ from _retro_labels import (
     PRIOR_MIN_SAMPLE_SIZE,
     PRIOR_SKIP_THRESHOLD,
     PRIOR_TENTATIVE_THRESHOLD,
+    RETRO_EXPIRED,
     RETRO_FP,
     RETRO_FP_CANDIDATE,
     RETRO_TENTATIVE,
@@ -193,6 +194,7 @@ __all__ = [
     "PRIOR_MIN_SAMPLE_SIZE",
     "PRIOR_SKIP_THRESHOLD",
     "PRIOR_TENTATIVE_THRESHOLD",
+    "RETRO_EXPIRED",
     "RETRO_FP",
     "RETRO_FP_CANDIDATE",
     "RETRO_TENTATIVE",
@@ -1075,6 +1077,22 @@ def apply_terminal_label(
         )
 
 
+def apply_expired_label(repo: str, number: int) -> None:
+    """POST :data:`RETRO_EXPIRED` to the retro issue's own labels endpoint.
+
+    Called by :func:`sentinel_run` after the sentinel comment lands and
+    before the ``not_planned`` close, so a sentinel-closed retro carries a
+    visible weak-signal label instead of the evidence being discarded
+    unlabelled. Counted separately from ``retro:tp``/``retro:fp`` by
+    :func:`_auto_retro_triage.compute_prior_from_labels`. Refs #2433.
+    """
+    gh_api(
+        "POST",
+        f"/repos/{repo}/issues/{number}/labels",
+        {"labels": [RETRO_EXPIRED]},
+    )
+
+
 def post_skip_comment(repo: str, pr_number: int, reason: str) -> str:
     """PATCH an existing skip comment, else POST a new one.
 
@@ -1580,7 +1598,8 @@ def sentinel_run(repo: str, now_iso: str, days: int) -> int:
     2. Skip when a prior sentinel comment marker is present (idempotent).
     3. Skip when the retro shows operator engagement
        (:func:`is_retro_untouched` returns False).
-    4. Otherwise POST the sentinel comment, then PATCH the issue to
+    4. Otherwise POST the sentinel comment, POST the
+       :data:`_retro_labels.RETRO_EXPIRED` label, then PATCH the issue to
        ``closed`` / ``not_planned``.
 
     Returns 0 always; the step summary records the close / skip
@@ -1636,6 +1655,18 @@ def sentinel_run(repo: str, now_iso: str, days: int) -> int:
                 file=sys.stderr,
             )
             skipped.append((number, "comment post failed"))
+            continue
+        try:
+            apply_expired_label(repo, number)
+        except GitHubApiError as exc:
+            print(
+                f"::warning::apply_expired_label failed for retro "
+                f"#{number} (HTTP {exc.code}); sentinel comment posted "
+                "but NOT closing to avoid closing without the "
+                "retro:expired label",
+                file=sys.stderr,
+            )
+            skipped.append((number, "expired label add failed"))
             continue
         try:
             close_issue_as_not_planned(repo, number)

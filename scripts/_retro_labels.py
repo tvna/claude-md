@@ -28,6 +28,12 @@ Operator convention (see ``docs/runbooks/retro-labels.md``):
   (reserved for a future PR that retrofits
   ``scripts/auto_retro.py:compute_repair_signals`` with a label-derived
   prior). Not used by the PR1 scanner.
+* ``retro:expired``       ; the sentinel closed this retro as
+  ``not_planned`` after the inactivity window with no operator
+  engagement. Applied by ``scripts/auto_retro.py:apply_expired_label``
+  before the close PATCH so the evidence is not discarded unlabelled.
+  A weak signal only: counted separately from ``retro:tp``/``retro:fp``,
+  never merged into the TP/FP prior tally. Refs #2433.
 
 Refs #558.
 """
@@ -40,6 +46,7 @@ RETRO_TP: Final[str] = "retro:tp"
 RETRO_FP: Final[str] = "retro:fp"
 RETRO_FP_CANDIDATE: Final[str] = "retro:fp-candidate"
 RETRO_TENTATIVE: Final[str] = "retro:tentative"
+RETRO_EXPIRED: Final[str] = "retro:expired"
 
 ALL_RETRO_LABELS: Final[frozenset[str]] = frozenset(
     {RETRO_TP, RETRO_FP, RETRO_FP_CANDIDATE, RETRO_TENTATIVE}
