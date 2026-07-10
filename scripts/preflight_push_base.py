@@ -20,7 +20,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from _hook_runtime import build_deny, run_event_hook
+from _hook_runtime import build_deny
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -75,12 +75,3 @@ def decide(
             "Refs #856, #1854."
         )
     return None
-
-
-def main(argv: list[str] | None = None) -> int:
-    del argv
-    return run_event_hook("preflight_push_base", decide, auditable=False)
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

@@ -72,11 +72,13 @@ backstop that can actually verify it.
   wedges a push; the ruleset stays as the backstop. The gate fails loud only by
   denying a push it has positively shown to carry an unsigned commit.
 
-Contract:
-- Inputs: a PreToolUse hook event as JSON on stdin (``tool_name`` plus
+Contract (a pure decide() library imported and dispatched by
+scripts/preflight_push_dispatch.py, the consolidated push hook, Refs #2410; this
+module has no main() entry of its own):
+- Inputs: a PreToolUse hook event dict (``tool_name`` plus
   ``tool_input.command`` for the Bash matcher). No flags.
-- Outputs: a JSON deny decision on stdout when the push ships an unsigned
-  commit; nothing on stdout on pass-through. Always exits 0.
+- Outputs: a JSON deny decision when the push ships an unsigned commit; None on
+  pass-through (the dispatcher writes it to stdout and always exits 0).
 - Failure policy: fail-open at every boundary except a demonstrated unsigned
   commit, which is denied (CLAUDE.md section 4).
 
@@ -94,7 +96,7 @@ from typing import Any
 
 from _commit_signing import is_unsigned as _is_unsigned
 from _git import Runner, commits_to_push, make_runner
-from _hook_runtime import build_deny, run_event_hook
+from _hook_runtime import build_deny
 
 # Both remote signals, mirroring check_commit_signing_ready.py so the gate is
 # operative under Claude Code on the Web AND Codex/Devin cloud sessions; the
@@ -361,12 +363,3 @@ def decide(
     if not unsigned:
         return None
     return _deny(unsigned)
-
-
-def main(argv: list[str] | None = None) -> int:
-    del argv
-    return run_event_hook("preflight_push_unsigned_commits", decide, auditable=False)
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

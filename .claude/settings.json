@@ -370,27 +370,7 @@
           {
             "type": "command",
             "if": "Bash(*git push*)",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_unsigned_commits.py"
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "if": "Bash(*git push*)",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_base.py"
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "if": "Bash(*git push*)",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_session_branch.py"
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_dispatch.py"
           }
         ]
       },
@@ -478,16 +458,6 @@
             "type": "command",
             "if": "Bash(*git commit*)",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_instruction_body_advisory.py"
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "if": "Bash(*git push*)",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_nonempty.py"
           }
         ]
       },
