@@ -17,6 +17,21 @@ flowchart TD
     N004 --> N005
 ```
 
+## _resolve_discovery_only_labels(...)
+
+```mermaid
+flowchart TD
+    N001["_resolve_discovery_only_labels(...)"]
+    N002["try"]
+    N003["return _ssot.consumer_discovery_only_labels('<str>')"]
+    N004["except (KeyError, TypeError)"]
+    N005["raise RuntimeError(f'<str>{exc}')"]
+    N001 -->|"start"| N002
+    N002 -->|"try"| N003
+    N002 -->|"raises"| N004
+    N004 --> N005
+```
+
 ## _identity_labels(...)
 
 ```mermaid
@@ -40,13 +55,15 @@ flowchart TD
 flowchart TD
     N001["_discovery_labels(...)"]
     N002["stable = [label for label in _resolve_registry_labels() if not label.endswith('<str>') and (not label.startswith('<str>'))]"]
-    N003["if not stable"]
-    N004["raise RuntimeError('<str>')"]
-    N005["return _ssot.group_labels_by_family(stable)"]
+    N003["extend(...)"]
+    N004["if not stable"]
+    N005["raise RuntimeError('<str>')"]
+    N006["return _ssot.group_labels_by_family(stable)"]
     N001 -->|"start"| N002
     N002 --> N003
-    N003 -->|"true"| N004
-    N003 -->|"false"| N005
+    N003 --> N004
+    N004 -->|"true"| N005
+    N004 -->|"false"| N006
 ```
 
 ## _terminal_labels(...)
@@ -207,45 +224,49 @@ flowchart TD
     N005 --> N006
 ```
 
-## fetch_past_retro_labels(...)
+## _fetch_past_retro_page(...)
 
 ```mermaid
 flowchart TD
-    N001["fetch_past_retro_labels(...)"]
+    N001["_fetch_past_retro_page(...)"]
     N002["label_clause = join(...)"]
     N003["query = f'<str>{repo}<str>{label_clause}<str>'"]
     N004["encoded = quote(...)"]
     N005["per_page = min(...)"]
-    N006["try"]
-    N007["raw = gh_api(...)"]
-    N008["except GitHubApiError"]
-    N009["print(...)"]
-    N010["return []"]
-    N011["try"]
-    N012["data = json.loads(raw) if raw.strip() else {}"]
-    N013["except json.JSONDecodeError"]
-    N014["return []"]
-    N015["items = list(data.get('<str>') or [])[:limit]"]
-    N016["out = []"]
-    N017["for item in items:     if not isinstance(item, dict):         continue     number = item.get('<str>')     if not isinstance(number, int):         continue     labels_raw = item.get('<str>') or []     names: set[str] = set()     for lbl in labels_raw:         if isinstance(lbl, dict):             name = lbl.get('<str>')             if isinstance(name, str) and name:                 names.add(name)     body = item.get('<str>')     if not isinstance(body, str) or not body:         body = '<str>'     signals = parse_signals_from_retro_body(body)     state = item.get('<str>')     state = state if isinstance(state, str) and state else '<str>'     title = item.get('<str>')     title = title if isinstance(title, str) else '<str>'     out.append(PastRetro(number=number, signals=signals, labels=frozenset(names), state=state, title=title))"]
-    N018["return out"]
+    N006["out = []"]
+    N007["total_count = 0"]
+    N008["page = 1"]
+    N009["while len(out) < limit and (page - 1) * per_page < _SEARCH_API_MAX_RESULTS:     try:         raw = gh_api('<str>', f'<str>{encoded}<str>{per_page}<str>{page}')     except GitHubApiError as exc:         if page == 1:             print(f'<str>{exc.code}<str>', file=sys.stderr)         break     try:         data = json.loads(raw) if raw.strip() else {}     except json.JSONDecodeError:         break     count = data.get('<str>')     if isinstance(count, int):         total_count = count     items = list(data.get('<str>') or [])     if not items:         break     for item in items[:limit - len(out)]:         if not isinstance(item, dict):             continue         number = item.get('<str>')         if not isinstance(number, int):             continue         labels_raw = item.get('<str>') or []         names: set[str] = set()         for lbl in labels_raw:             if isinstance(lbl, dict):                 name = lbl.get('<str>')                 if isinstance(name, str) and name:                     names.add(name)         body = item.get('<str>')         if not isinstance(body, str) or not body:             body = '<str>'         signals = parse_signals_from_retro_body(body)         state = item.get('<str>')         state = state if isinstance(state, str) and state else '<str>'         title = item.get('<str>')         title = title if isinstance(title, str) else '<str>'         out.append(PastRetro(number=number, signals=signals, labels=frozenset(names), state=state, title=title))     if len(items) < per_page:         break     page += 1"]
+    N010["return (out, total_count)"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
     N004 --> N005
     N005 --> N006
-    N006 -->|"try"| N007
-    N006 -->|"raises"| N008
+    N006 --> N007
+    N007 --> N008
     N008 --> N009
     N009 --> N010
-    N007 --> N011
-    N011 -->|"try"| N012
-    N011 -->|"raises"| N013
-    N013 --> N014
-    N012 --> N015
-    N015 --> N016
-    N016 --> N017
-    N017 --> N018
+```
+
+## fetch_past_retro_labels(...)
+
+```mermaid
+flowchart TD
+    N001["fetch_past_retro_labels(...)"]
+    N002["(records, _total_count) = _fetch_past_retro_page(...)"]
+    N003["return records"]
+    N001 -->|"start"| N002
+    N002 --> N003
+```
+
+## fetch_past_retro_population(...)
+
+```mermaid
+flowchart TD
+    N001["fetch_past_retro_population(...)"]
+    N002["return _fetch_past_retro_page(repo, limit)"]
+    N001 -->|"start"| N002
 ```
 
 ## has_review_comments(...)
@@ -1206,7 +1227,7 @@ flowchart TD
     N003["if not repo"]
     N004["print(...)"]
     N005["return 1"]
-    N006["past = fetch_past_retro_labels(...)"]
+    N006["(past, total_live) = fetch_past_retro_population(...)"]
     N007["report = compute_triage_report(...)"]
     N008["output = Path(...)"]
     N009["mkdir(...)"]
