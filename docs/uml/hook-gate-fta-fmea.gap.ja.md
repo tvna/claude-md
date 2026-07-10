@@ -99,8 +99,12 @@ flowchart TD
 `preflight_push_nonempty.py:109`、`gate_unsigned_commit_bash.py:225`、
 `preflight_session_branch_authz.py:292`、`preflight_push_unsigned_commits.py:368`）
 ため環境変数では無効化できない。fail-closed 設計の唯一のゲートであるマージゲート
-だけが audit モードで沈黙可能である。`gate_update_pr_branch.py:70` も同じ欠落を
-共有する。
+だけが audit モードで沈黙可能である。`[fact]` audit モードを導入した設計 issue
+#1280 は `update-pr-branch` と decision-handoff Stop ゲートを auditable な
+ガバナンスゲートとして明示的に分類しており、これらのデフォルト `True` は欠落では
+なく意図的な決定である; `gate_merge_safety`（#1563）はその分類より後に作られ、
+docstring が fail-closed を宣言しているにもかかわらず `auditable=False` リストに
+追加されなかった。欠落はそこにある。
 
 `[analysis]` 非 clean な PR はクライアントゲートと無関係にサーバー側で拒否される
 （権威はフックではなく ruleset）ため AND 構造は保たれる。よって A1a 単独では
@@ -288,7 +292,7 @@ flowchart TD
 
 | ID | ゲート/フック | 故障モード | 原因 `[fact]` | 影響 | S | D | SxD | O メモ | 追跡 |
 |---|---|---|---|---|---|---|---|---|---|
-| F1 | `gate_merge_safety.py` | fail-closed の deny が audit モードで沈黙 | `emit_decision` のデフォルト `auditable=True`（`gate_merge_safety.py:210`; `_hook_runtime.py:110-132`） | push ゲートは保護されたままクライアント側マージ層だけが消える; Root A の脚 A1a | 5 | 4 | 20 | 未観測; #1005 ランタイム以降の潜在 | 新規（草稿 1） |
+| F1 | `gate_merge_safety.py` | fail-closed の deny が audit モードで沈黙 | `emit_decision` のデフォルト `auditable=True`（`gate_merge_safety.py:210`; `_hook_runtime.py:110-132`） | push ゲートは保護されたままクライアント側マージ層だけが消える; Root A の脚 A1a | 5 | 4 | 20 | 未観測; #1563 に先行する #1280 audit ランタイム以降の潜在 | 新規（草稿 1） |
 | F2 | `gate_merge_safety.py` | advisory な兄弟からの回帰混入 | `_get_token` / `_poll_mergeability` の共有（`gate_merge_safety.py:60`） | advisory パス向けの変更が fail-closed ゲートを静かに再調整する | 4 | 4 | 16 | 未観測; 構造的 | 新規（草稿 2） |
 | F3 | Stop 合成 | 4 フックが 1 つの Stop を判定; 強制はワンショット | 4 フック全ての `stop_hook_active` no-op（`gate_stop_pr_review_reply.py:282-283` ほか） | ブロックのラリーによる空転、または再 Stop での無検査退出 | 3 | 4 | 12 | ラリー未観測; すり抜けは設計上観測不能 | 新規（草稿 3） |
 | F4 | `gate_stop_pr_review_reply.py` | トランスクリプトに `get_me` がない場合の自己エコーブロック | 抑制は事前の `get_me` 結果に依存（`:193-194`） | 自分の返信エコーでセッションが空転 | 4 | 3 | 12 | #1932 が修正前の形を観測 | #1932（残余; 草稿 3） |
@@ -298,8 +302,8 @@ flowchart TD
 | F8 | セッションブランチ群 | 4 ゲートにまたがる共通原因 fail-open | 1 ファイル + 1 env 変数、全コンシューマが空集合で fail-open（`_session_branches.py:39-50`; D1 の葉） | サーバー 403 まで無許可作業が進行; やり直しコスト | 3 | 3 | 9 | #1658 のニアミス（commit 時の形） | #785, #1513（草稿 4 が拡張） |
 | F9 | `post_pr_create_body_fix.py` | 修正ループにサイクル上限なし | 収束は PostToolUse マッチャーのスコープに依存（`post_pr_create_body_fix.py:70,211`） | マッチャー 1 行の変更でループが無限化 | 3 | 4 | 12 | 未観測; 潜在 | pr-body-fix-loop Gap 1/5（open） |
 | F10 | `preflight_push_prek.py` | 死んだ配線; regex も rtk プレフィックスを欠く | 登録ゼロ; `:39` の `_GIT_PUSH_RE` と配線済みゲートの `(?:rtk\s+)?` の差 | 意図された web セッション用バックストップが発火しない | 2 | 4 | 8 | #1931 が同種の帰結を観測 | #901 |
-| F11 | Stop フック（4 つ全て） | Stop ブロックが audit で抑制可能 | 4 フック全てで `emit_decision` のデフォルト `auditable=True` | audit モードが Stop 強制も無効化する | 2 | 4 | 8 | 未観測 | 新規（草稿 1 スコープ） |
-| F12 | `gate_update_pr_branch.py` | deny が audit で抑制可能 | `auditable=False` のない `emit_decision`（`:70`） | サーバー側マージコミットがブランチ履歴を汚染 | 2 | 4 | 8 | 未観測 | 新規（草稿 1 スコープ） |
+| F11 | Stop フック（4 つ全て） | Stop ブロックが audit で抑制可能 | 4 フック全てで `emit_decision` のデフォルト `auditable=True` | audit モードが Stop 強制も無効化する | 2 | 4 | 8 | 未観測; #1280 は decision-handoff を意図的に auditable と分類; 後発のレビュー返信ゲートは記録された決定なしにデフォルトを継承 | オペレーター判断（草稿 1 スコープ） |
+| F12 | `gate_update_pr_branch.py` | deny が audit で抑制可能 | `auditable=False` のない `emit_decision`（`:70`） | サーバー側マージコミットがブランチ履歴を汚染 | 2 | 4 | 8 | 未観測; #1280 で意図的（"update-pr-branch" を auditable と明記） | #1280 の設計判断 |
 | F13 | `check_pr_mergeability.py` | 20 秒のポーリングタイムアウトが fail-closed の `unknown` deny になる | `_MAX_POLLS=10`, `_POLL_INTERVAL_SECONDS=2.0`（`:63-64`）をマージゲートが再利用 | clean な PR の一時的 false-deny; Root B の葉 B2 | 3 | 2 | 6 | 大型 PR で起こり得る; 未起票 | 新規（草稿 2） |
 | F14 | body-fix ループ | 命じられた update がターン境界で中断 | update は別のツール呼び出しで、どの Stop フックも確認しない | CI の body-policy まで破損ボディが残存 | 2 | 3 | 6 | pr-body-fix-loop Gap 3 | open |
 | F15 | prek チェーン | オフラインでスキャンが静かにスキップ | プロキシによるダウンロード遮断; `install-prek.sh:22-24` の fail-open | 欠陥が CI へ漏れ修復ループ化 | 2 | 2 | 4 | #1931 で観測 | #1931 |
@@ -311,7 +315,7 @@ flowchart TD
 
 | # | ギャップ `[analysis]` | 証拠 `[fact]`（file:line） | 追跡 |
 |---|---|---|---|
-| 1 | audit モードの非対称: fail-closed 設計の唯一のゲート（`gate_merge_safety`）とサーバーマージ deny（`gate_update_pr_branch`）、さらに 4 つの Stop ブロックは、`emit_decision` の `auditable` をデフォルト `True` のままにしているため `CLAUDE_GATE_MODE=audit` で抑制可能。一方、push/commit/セッション系ゲートは全て `auditable=False` でオプトアウトしている。抑制は stderr 警告のみで、エージェントの意思決定フローからは不可視。 | `gate_merge_safety.py:210`; `gate_update_pr_branch.py:70`; Stop フック各所の `emit_decision`; `_hook_runtime.py:110-132`; 対照は `preflight_push_base.py:82` ほか | issue 草稿 1 |
+| 1 | audit モードのギャップ: fail-closed 設計の唯一のゲート（`gate_merge_safety`, #1563）が、`emit_decision` の `auditable` をデフォルト `True` のままにしているため `CLAUDE_GATE_MODE=audit` で抑制可能。同ゲートは安全境界ゲート全てに `auditable=False` を割り当てた #1280 の設計パスより後に作られ、fail-closed の docstring を持ちながらそのリストに追加されなかった。（#1280 は `update-pr-branch` と decision-handoff を意図的に auditable と分類しており、それらのデフォルトは設計判断; 後発の Stop レビュー返信ゲートは記録された決定なしにデフォルトを継承。）抑制は stderr 警告のみで、エージェントの意思決定フローからは不可視。 | `gate_merge_safety.py:210`; `_hook_runtime.py:110-132`; issue #1280 本文（auditable/非 auditable リスト）; 対照は `preflight_push_base.py:82` ほか | issue 草稿 1 |
 | 2 | 共有コードによる安全等級の横断: fail-closed のマージゲートが advisory な poller のトークン取得と 20 秒ポーリング予算を無変更で import している; advisory 側のチューニング変更が黙ってマージゲートを再調整し、現行予算は既に GitHub の遅い mergeability 計算を fail-closed の `unknown` deny に変換する。対処文はゲート自身のタイムアウトに言及しない。 | `gate_merge_safety.py:60`; `check_pr_mergeability.py:29-33,63-64`; `gate_merge_safety.py:93-96,188-193` | issue 草稿 2（#1945 を補完） |
 | 3 | Stop フック合成が未モデル化で、強制がワンショット: 4 フックが同一 Stop イベントを独立に判定し、あるブロックを満たすために出力した文が次の Stop で兄弟フックを誤発火させ得る。継続 Stop では `stop_hook_active` により 4 フック全てが no-op になるため、非準拠のまま再停止すれば無検査で退出する。#1932 のエコー抑制もトランスクリプト内の事前 `get_me` 呼び出しの存在に条件づけられている。 | `agent_hooks_source.json:867-900`; 4 フック各所の `stop_hook_active` 判定; `gate_stop_pr_review_reply.py:193-194` | issue 草稿 3 |
 | 4 | セッションブランチの共通原因集合が 2 ゲートから 4 ゲートへ拡大（編集 authz と切替 authz が commit と push に合流）し、全てが 1 つの静かに書かれるファイルの空で fail-open する。書き手は依然「セッション未記録」と「セッション途中の記録喪失」を区別できない。 | `check_session_branch.py:71-77,105-110`; `_session_branches.py:39-50`; `preflight_session_branch_authz.py:240-242,260-262` | issue 草稿 4（#785, #1513 を拡張） |
@@ -321,11 +325,12 @@ flowchart TD
 
 ## 推奨方向（speculation）
 
-- `[analysis]` ギャップ 1 はゲートあたり 1 行の修正（`gate_merge_safety` と
-  `gate_update_pr_branch` に `auditable=False`; Stop フックは「Stop 強制は
-  安全境界か」のオペレーター判断の後に）、加えて audit モードがマージ deny を
-  沈黙させられないことを主張する回帰テスト。テーブル中最高の SxD であり、
-  最初に着手すべき。
+- `[analysis]` ギャップ 1 は 1 行の修正（`gate_merge_safety` に
+  `auditable=False` を渡し、実装を fail-closed の docstring と #1280 の
+  安全境界リストに整合させる）、加えて audit モードがマージ deny を
+  沈黙させられないことを主張する回帰テスト。Stop レビュー返信ゲートも
+  オプトアウトすべきかは、推測ではなく記録すべきオペレーター判断。
+  テーブル中最高の SxD であり、最初に着手すべき。
 - `[analysis]` ギャップ 2: マージゲートに固有のポーリング予算（または識別可能な
   `poll-timeout` deny 理由）を与え、import しているヘルパーの契約を固定する
   テストを追加して、advisory 側の再調整が安全等級を静かに越えられないようにする。

@@ -103,8 +103,13 @@ push gates pass `auditable=False` (`preflight_push_base.py:82`,
 `gate_unsigned_commit_bash.py:225`, `preflight_session_branch_authz.py:292`,
 `preflight_push_unsigned_commits.py:368`), so the environment variable cannot
 disable them; the merge gate, the one gate designed fail-closed, is the one
-that audit mode can silence. `gate_update_pr_branch.py:70` shares the same
-omission.
+that audit mode can silence. `[fact]` The design issue #1280 that introduced
+audit mode explicitly classified `update-pr-branch` and the decision-handoff
+Stop gate as auditable governance gates, so their `True` default is a
+deliberate decision, not an omission; `gate_merge_safety` (#1563) postdates
+that classification and was never added to the `auditable=False` list even
+though its docstring declares it fail-closed, which is where the omission
+lives.
 
 `[analysis]` The AND structure still holds because a non-clean PR is rejected
 server-side regardless of the client gate (the ruleset, not the hook, is the
@@ -296,7 +301,7 @@ failure modes the fault trees ground, ordered by SxD.
 
 | ID | Gate / hook | Failure mode | Cause `[fact]` | Effect | S | D | SxD | O memo | Tracking |
 |---|---|---|---|---|---|---|---|---|---|
-| F1 | `gate_merge_safety.py` | fail-closed deny silenced by audit mode | `emit_decision` default `auditable=True` (`gate_merge_safety.py:210`; `_hook_runtime.py:110-132`) | client merge layer vanishes while push gates stay protected; Root A leg A1a | 5 | 4 | 20 | not observed; latent since #1005 runtime | new (draft 1) |
+| F1 | `gate_merge_safety.py` | fail-closed deny silenced by audit mode | `emit_decision` default `auditable=True` (`gate_merge_safety.py:210`; `_hook_runtime.py:110-132`) | client merge layer vanishes while push gates stay protected; Root A leg A1a | 5 | 4 | 20 | not observed; latent since the #1280 audit runtime predating #1563 | new (draft 1) |
 | F2 | `gate_merge_safety.py` | regression imported from advisory sibling | shared `_get_token` / `_poll_mergeability` (`gate_merge_safety.py:60`) | a change tuned for the advisory path silently retunes the fail-closed gate | 4 | 4 | 16 | not observed; structural | new (draft 2) |
 | F3 | Stop composition | four hooks judge one Stop; one-shot enforcement | `stop_hook_active` no-op in all four (`gate_stop_pr_review_reply.py:282-283` et al.) | block-rally churn, or unchecked exit on the retry Stop | 3 | 4 | 12 | rally not observed; escape unobservable by design | new (draft 3) |
 | F4 | `gate_stop_pr_review_reply.py` | self-echo block when no `get_me` in transcript | suppression requires prior `get_me` result (`:193-194`) | session churns on its own reply echo | 4 | 3 | 12 | #1932 observed the pre-fix form | #1932 (residual; draft 3) |
@@ -306,8 +311,8 @@ failure modes the fault trees ground, ordered by SxD.
 | F8 | session-branch family | common-cause fail-open across FOUR gates | one file + one env var, all consumers fail open empty (`_session_branches.py:39-50`; D1 leaves) | unauthorized work proceeds until server 403; redo cost | 3 | 3 | 9 | #1658 near-miss (commit-time form) | #785, #1513 (draft 4 extends) |
 | F9 | `post_pr_create_body_fix.py` | no cycle cap on the fix loop | convergence rests on PostToolUse matcher scoping (`post_pr_create_body_fix.py:70,211`) | one-line matcher change makes the loop unbounded | 3 | 4 | 12 | not observed; latent | pr-body-fix-loop Gap 1/5 (open) |
 | F10 | `preflight_push_prek.py` | dead wiring; also regex lacks rtk prefix | zero registrations; `_GIT_PUSH_RE` at `:39` vs wired gates' `(?:rtk\s+)?` | intended web-session backstop never fires | 2 | 4 | 8 | #1931 shows the consequence class | #901 |
-| F11 | Stop hooks (all four) | Stop blocks audit-suppressible | `emit_decision` default `auditable=True` in all four | audit mode also disables Stop enforcement | 2 | 4 | 8 | not observed | new (draft 1 scope) |
-| F12 | `gate_update_pr_branch.py` | deny audit-suppressible | `emit_decision` without `auditable=False` (`:70`) | server-side merge commit pollutes branch history | 2 | 4 | 8 | not observed | new (draft 1 scope) |
+| F11 | Stop hooks (all four) | Stop blocks audit-suppressible | `emit_decision` default `auditable=True` in all four | audit mode also disables Stop enforcement | 2 | 4 | 8 | not observed; #1280 classified decision-handoff auditable by design; the later review-reply gate inherited the default without a recorded decision | operator decision (draft 1 scope) |
+| F12 | `gate_update_pr_branch.py` | deny audit-suppressible | `emit_decision` without `auditable=False` (`:70`) | server-side merge commit pollutes branch history | 2 | 4 | 8 | not observed; deliberate per #1280 ("update-pr-branch" listed auditable) | #1280 design decision |
 | F13 | `check_pr_mergeability.py` | 20s poll timeout becomes fail-closed `unknown` deny | `_MAX_POLLS=10`, `_POLL_INTERVAL_SECONDS=2.0` (`:63-64`) reused by the merge gate | transient false-deny of a clean PR; Root B leaf B2 | 3 | 2 | 6 | plausible on large PRs; not filed | new (draft 2) |
 | F14 | body-fix loop | mandated update interrupted at the turn boundary | update is a separate tool call; no Stop hook checks for it | corrupted body persists until CI body-policy | 2 | 3 | 6 | pr-body-fix-loop Gap 3 | open |
 | F15 | prek chain | offline scans silently skipped | proxy-blocked download; `install-prek.sh:22-24` fail-open | defects leak to CI; repair loops | 2 | 2 | 4 | #1931 observed | #1931 |
@@ -319,7 +324,7 @@ failure modes the fault trees ground, ordered by SxD.
 
 | # | Gap `[analysis]` | Evidence `[fact]` (file:line) | Tracking |
 |---|---|---|---|
-| 1 | Audit-mode asymmetry: the one gate designed fail-closed (`gate_merge_safety`) and the server-merge deny (`gate_update_pr_branch`) plus all four Stop blocks are suppressible by `CLAUDE_GATE_MODE=audit` because they leave `emit_decision`'s `auditable` at its `True` default, while every push/commit/session gate opts out with `auditable=False`. The suppression is a stderr warning, invisible to the agent's decision flow. | `gate_merge_safety.py:210`; `gate_update_pr_branch.py:70`; Stop hooks' `emit_decision` calls; `_hook_runtime.py:110-132`; contrast `preflight_push_base.py:82` et al. | issue draft 1 |
+| 1 | Audit-mode gap: the one gate designed fail-closed (`gate_merge_safety`, #1563) is suppressible by `CLAUDE_GATE_MODE=audit` because it leaves `emit_decision`'s `auditable` at its `True` default; it postdates the #1280 design pass that assigned `auditable=False` to every safety-boundary gate, and was never added to that list despite its fail-closed docstring. (#1280 deliberately classified `update-pr-branch` and decision-handoff as auditable, so those defaults are design decisions; the later Stop review-reply gate inherited the default with no recorded decision.) The suppression is a stderr warning, invisible to the agent's decision flow. | `gate_merge_safety.py:210`; `_hook_runtime.py:110-132`; issue #1280 body (auditable/non-auditable lists); contrast `preflight_push_base.py:82` et al. | issue draft 1 |
 | 2 | Safety-class crossing via shared code: the fail-closed merge gate imports the advisory poller's token getter and 20-second poll budget unchanged; any tuning of the advisory sibling silently retunes the merge gate, and the budget already converts a slow GitHub mergeability computation into a fail-closed `unknown` deny whose remediation text does not say the gate timed out. | `gate_merge_safety.py:60`; `check_pr_mergeability.py:29-33,63-64`; `gate_merge_safety.py:93-96,188-193` | issue draft 2 (complements #1945) |
 | 3 | Stop-hook composition is unmodeled and enforcement is one-shot: four hooks independently judge the same Stop event; text emitted to satisfy one block can trip a sibling on the next Stop, and `stop_hook_active` makes all four no-op on the continuation, so a non-compliant retry exits unchecked. The #1932 echo suppression is also conditional on a prior `get_me` call existing in the transcript. | `agent_hooks_source.json:867-900`; `stop_hook_active` checks in all four hooks; `gate_stop_pr_review_reply.py:193-194` | issue draft 3 |
 | 4 | The session-branch common-cause set has grown from two to four gates (edit authz and switch authz joined commit and push) all failing open on one silently-writable file, and the writer still cannot distinguish "no session recorded" from "record lost mid-session". | `check_session_branch.py:71-77,105-110`; `_session_branches.py:39-50`; `preflight_session_branch_authz.py:240-242,260-262` | issue draft 4 (extends #785, #1513) |
@@ -329,11 +334,12 @@ failure modes the fault trees ground, ordered by SxD.
 
 ## Recommended direction (speculation)
 
-- `[analysis]` Gap 1 is a one-line-per-gate fix (`auditable=False` on
-  `gate_merge_safety`, `gate_update_pr_branch`, and, after an operator
-  decision on whether Stop enforcement is a safety boundary, the Stop hooks),
-  plus a regression test asserting audit mode cannot silence a merge deny.
-  Highest SxD in the table; do this first.
+- `[analysis]` Gap 1 is a one-line fix (`auditable=False` on
+  `gate_merge_safety`, aligning the implementation with its fail-closed
+  docstring and the #1280 safety-boundary list), plus a regression test
+  asserting audit mode cannot silence a merge deny. Whether the Stop
+  review-reply gate should also opt out is an operator decision to record,
+  not assume. Highest SxD in the table; do this first.
 - `[analysis]` Gap 2: give the merge gate its own poll budget (or a
   distinguishable `poll-timeout` deny reason) and a test pinning the imported
   helpers' contract, so advisory retuning cannot silently cross the safety
