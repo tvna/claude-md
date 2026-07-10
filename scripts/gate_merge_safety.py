@@ -41,6 +41,13 @@ the tool/PR is unidentifiable; the catch-all ``gate_mcp_github_uncovered``
 does not cover merge, so a no-decision there simply lets the other merge
 preflights run; the operator still sees no false safety signal.)
 
+Safety-boundary classification (#2403): this gate is a security-boundary
+gate, the same class as the six push gates and
+``preflight_github_secrets``. ``main`` passes ``auditable=False`` to
+``emit_decision`` so ``CLAUDE_GATE_MODE=audit`` can never downgrade a merge
+deny to a stderr warning; audit mode may only relax governance/workflow
+gates, never this one.
+
 Wiring: PreToolUse matcher ``mcp__github__merge_pull_request`` in the generated
 agent configs (source: ``scripts/agent_hooks_source.json``, claude and codex).
 ``merge_pull_request`` is already in ``HOOK_COVERED_TOOLS`` in
@@ -199,6 +206,9 @@ def main(argv: list[str] | None = None) -> int:
     Always returns 0 (the process exit code is fail-open at the stdin-parse
     layer); the merge-specific fail-closed behaviour lives in :func:`decide`,
     which emits a deny rather than relying on a non-zero exit.
+
+    ``auditable=False`` so ``CLAUDE_GATE_MODE=audit`` can never disable this
+    security-boundary gate (#2403).
     """
     del argv
     event = read_event(_SCRIPT)
@@ -207,7 +217,7 @@ def main(argv: list[str] | None = None) -> int:
     split = split_tool_event(event, _SCRIPT)
     if split is None:
         return 0
-    emit_decision(decide(*split), _SCRIPT)
+    emit_decision(decide(*split), _SCRIPT, auditable=False)
     return 0
 
 

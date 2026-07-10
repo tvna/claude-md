@@ -268,6 +268,37 @@ class TestRecentRetros:
         assert "| 7 | open | retro:fp | t7 |" in out
 
 
+class TestPopulationTruncation:
+    """Issue #2413: the report must never silently cap the population; it
+    must state observed/total, declaring truncation explicitly when the
+    live population exceeds what was fetched."""
+
+    def test_truncated_population_declares_truncation_in_header(self) -> None:
+        past = [_retro(i, set(), set()) for i in range(5)]
+        report = ar.compute_triage_report(past, total_live=351)
+        assert report.truncated
+        out = ar.render_triage_report_markdown(report)
+        assert "Retros observed: **5 of 351 (truncated)**" in out
+
+    def test_full_population_is_not_truncated(self) -> None:
+        past = [_retro(i, set(), set()) for i in range(5)]
+        report = ar.compute_triage_report(past, total_live=5)
+        assert not report.truncated
+        out = ar.render_triage_report_markdown(report)
+        assert "Retros observed: **5**" in out
+        assert "truncated" not in out
+
+    def test_default_total_live_matches_observed_and_is_not_truncated(
+        self,
+    ) -> None:
+        """Callers that never pass total_live (the pre-#2413 shape) render
+        exactly as before: no truncation notice."""
+        past = [_retro(i, set(), set()) for i in range(3)]
+        report = ar.compute_triage_report(past)
+        assert not report.truncated
+        assert report.population_total == report.total == 3
+
+
 class TestFpTrend:
     """Retro-level FP-rate trend: all-time vs trailing window (#1386)."""
 

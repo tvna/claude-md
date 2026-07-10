@@ -5366,6 +5366,9 @@ class TestFetchPastRetroLabels:
             "consumer_labels",
             lambda path: ("ops:retro-opened", "harness:retro-opened"),
         )
+        monkeypatch.setattr(
+            ar._ssot, "consumer_discovery_only_labels", lambda path: ()
+        )
         monkeypatch.setattr(ar, "gh_api", lambda *_a, **_kw: json.dumps({"items": []}))
         with pytest.raises(RuntimeError, match="auto-retro registry labels"):
             ar.fetch_past_retro_labels("o/r")
@@ -5489,6 +5492,115 @@ class TestFetchPastRetroLabels:
         past = ar.fetch_past_retro_labels("o/r")
         assert past[0].signals == frozenset()
         assert rl.RETRO_FP in past[0].labels
+
+    def test_query_sorted_by_created_desc(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The fetch must sample the most RECENT retros when the live
+        population exceeds the fetch limit, not GitHub's best-match default
+        order (issue #2413 defect b)."""
+        captured: list[str] = []
+
+        def fake(method: str, path: str, *_a: Any, **_kw: Any) -> str:
+            captured.append(path)
+            return json.dumps({"items": []})
+
+        monkeypatch.setattr(ar, "gh_api", fake)
+        ar.fetch_past_retro_labels("o/r")
+        assert "sort=created&order=desc" in captured[0]
+
+    def test_discovery_query_includes_type_retrospective_family(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """type:retrospective is registered as a discovery-only label:
+        hand-triaged in-session retros carry it WITHOUT type:docs, so the
+        discovery query must OR it into the type: family clause instead of
+        structurally excluding that population (issue #2413 defect c)."""
+        captured: list[str] = []
+
+        def fake(method: str, path: str, *_a: Any, **_kw: Any) -> str:
+            captured.append(path)
+            return json.dumps({"items": []})
+
+        monkeypatch.setattr(ar, "gh_api", fake)
+        ar.fetch_past_retro_labels("o/r")
+        path = captured[0]
+        assert "label%3Atype%3Adocs%2Ctype%3Aretrospective" in path
+
+    def test_type_retrospective_only_retro_is_counted(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A retro carrying type:retrospective + layer:p3-harness WITHOUT
+        type:docs (the hand-triaged shape from #2011/#2114/#2121) must still
+        parse into a PastRetro and count toward the triage totals. Refs
+        #2413."""
+        payload = {
+            "total_count": 1,
+            "items": [
+                {
+                    "number": 2011,
+                    "labels": [
+                        {"name": "type:retrospective"},
+                        {"name": "layer:p3-harness"},
+                        {"name": rl.RETRO_TP},
+                    ],
+                    "body": "## Facts\n\n- Signals fired: multi_commit_pr\n",
+                }
+            ],
+        }
+        monkeypatch.setattr(ar, "gh_api", lambda *_a, **_kw: json.dumps(payload))
+        past, total = ar.fetch_past_retro_population("o/r")
+        assert total == 1
+        assert len(past) == 1
+        report = ar.compute_triage_report(past, total_live=total)
+        assert report.label_counts[rl.RETRO_TP] == 1
+
+    def test_pagination_fetches_beyond_first_page(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A population larger than one 100-item page (issue #2413's silent
+        PRIOR_FETCH_LIMIT=50 cap) must be paginated, not truncated to the
+        first page, up to *limit*."""
+        calls: list[str] = []
+
+        def fake(method: str, path: str, *_a: Any, **_kw: Any) -> str:
+            calls.append(path)
+            if "page=2" in path:
+                items = [
+                    {"number": i, "labels": [], "body": ""}
+                    for i in range(100, 150)
+                ]
+            else:
+                items = [
+                    {"number": i, "labels": [], "body": ""} for i in range(100)
+                ]
+            return json.dumps({"total_count": 150, "items": items})
+
+        monkeypatch.setattr(ar, "gh_api", fake)
+        past, total = ar.fetch_past_retro_population("o/r", limit=200)
+        assert total == 150
+        assert len(past) == 150
+        assert len(calls) == 2
+
+    def test_population_truncated_when_live_total_exceeds_search_cap(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A live population larger than the search API's hard 1000-result
+        ceiling must stop paginating and report the live total via
+        fetch_past_retro_population rather than silently under-counting."""
+
+        def fake(method: str, path: str, *_a: Any, **_kw: Any) -> str:
+            items = [{"number": i, "labels": [], "body": ""} for i in range(100)]
+            return json.dumps({"total_count": 1500, "items": items})
+
+        monkeypatch.setattr(ar, "gh_api", fake)
+        past, total = ar.fetch_past_retro_population(
+            "o/r", limit=rl.TRIAGE_REPORT_FETCH_LIMIT
+        )
+        assert total == 1500
+        assert len(past) == ar._SEARCH_API_MAX_RESULTS
+        report = ar.compute_triage_report(past, total_live=total)
+        assert report.truncated
 
 
 class TestCompatibilityReexports:

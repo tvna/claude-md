@@ -74,6 +74,15 @@ PRIOR_TENTATIVE_THRESHOLD: Final[float] = 0.3
 PRIOR_MIN_SAMPLE_SIZE: Final[int] = 5
 PRIOR_FETCH_LIMIT: Final[int] = 50
 
+# Default fetch cap for the descriptive triage report (refs #2413), distinct
+# from PRIOR_FETCH_LIMIT: the live skip decision above intentionally samples
+# only the most recent PRIOR_FETCH_LIMIT retros, but the report exists to
+# describe the FULL retro population, so it needs a much larger ceiling. 1000
+# is GitHub's own hard cap on a single search query (10 pages x per_page=100);
+# fetch_past_retro_population paginates up to this many results and reports
+# any live total beyond it as an explicit truncation rather than a silent cap.
+TRIAGE_REPORT_FETCH_LIMIT: Final[int] = 1000
+
 # Prior epoch boundary (refs #1227, advanced for #1236). Retros opened
 # before a signal-semantics fix measured the OLD (buggy) signal
 # definitions, so their ``retro:fp`` labels must not drive
