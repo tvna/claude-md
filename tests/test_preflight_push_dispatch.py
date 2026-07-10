@@ -16,6 +16,7 @@ from __future__ import annotations
 import io
 import json
 import subprocess
+from collections.abc import Mapping
 from typing import Any
 
 import preflight_push_base
@@ -36,31 +37,40 @@ def _completed(stdout: str = "", stderr: str = "", returncode: int = 0) -> subpr
     return subprocess.CompletedProcess(["git"], returncode, stdout=stdout, stderr=stderr)
 
 
-def _reason(decision: dict[str, Any]) -> str:
+def _reason(decision: Mapping[str, Any]) -> str:
     return decision["hookSpecificOutput"]["permissionDecisionReason"]
 
 
 # ---------------------------------------------------------------------------
-# Fast-pass surface (real _CHECKS; the top-level regex short-circuits)
+# Fast-pass surface (real _CHECKS; every delegated gate self-detects and passes)
 # ---------------------------------------------------------------------------
 
 
-def test_passthrough_non_bash_tool() -> None:
+def _not_remote(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("CLAUDE_CODE_REMOTE", raising=False)
+    monkeypatch.delenv("CODEX_CODE_REMOTE", raising=False)
+
+
+def test_passthrough_non_bash_tool(monkeypatch: pytest.MonkeyPatch) -> None:
+    _not_remote(monkeypatch)
     assert subject.decide({"tool_name": "Write", "tool_input": {"command": "git push"}}) is None
 
 
-def test_passthrough_non_push_command() -> None:
+def test_passthrough_non_push_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    _not_remote(monkeypatch)
     assert subject.decide(_bash_event("git status")) is None
     assert subject.decide(_bash_event("ls -la")) is None
     assert subject.decide(_bash_event("git commit -m msg")) is None
 
 
-def test_passthrough_empty_command() -> None:
+def test_passthrough_empty_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    _not_remote(monkeypatch)
     assert subject.decide({"tool_name": "Bash", "tool_input": {}}) is None
 
 
-def test_passthrough_push_word_embedded_in_commit_message() -> None:
+def test_passthrough_push_word_embedded_in_commit_message(monkeypatch: pytest.MonkeyPatch) -> None:
     # A commit message that merely mentions push mid-text must not trip the gate.
+    _not_remote(monkeypatch)
     assert subject.decide(_bash_event('git commit -m "blocks git\n  push calls"')) is None
 
 
@@ -196,6 +206,49 @@ def test_equivalence_push_unsigned_commits_deny(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(subject, "_CHECKS", (lambda e: preflight_push_unsigned_commits.decide(e, runner=fake_runner),))
     got = subject.decide(event)
     assert got == expected
+    assert got is not None
+    assert "UNSIGNED" in _reason(got)
+
+
+# ---------------------------------------------------------------------------
+# Regression: the dispatcher imposes no detection prefilter, so the
+# unsigned-commit gate's broader segment-aware detection still catches a push
+# chained after another command or behind an env assignment (Codex review on
+# this PR; the pre-consolidation behaviour from #2140 must survive).
+# ---------------------------------------------------------------------------
+
+
+def _unsigned_runner(args: list[str]) -> subprocess.CompletedProcess[str]:
+    if args[:1] == ["rev-parse"]:
+        ref = args[-1]
+        if ref.startswith("refs/remotes/"):
+            return _completed(returncode=1)
+        return _completed(stdout="c0ffee1234567890\n")
+    if args[:1] == ["rev-list"]:
+        return _completed(stdout="c0ffee1234567890\n")
+    if args[:1] == ["cat-file"]:
+        return _completed(stdout="tree deadbeef\nauthor x <x@x> 0 +0000\n\nmsg\n")
+    return _completed(returncode=1)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git commit -m x && git push origin HEAD:claude/issue-1-abc",
+        "FOO=1 git push origin HEAD:claude/issue-1-abc",
+    ],
+)
+def test_chained_or_env_prefixed_push_reaches_unsigned_gate(
+    monkeypatch: pytest.MonkeyPatch, command: str
+) -> None:
+    # A line-leading prefilter would drop these before the unsigned gate ran and
+    # let an unsigned commit push through; the pure-delegation dispatcher must
+    # still deny them.
+    monkeypatch.setenv("CLAUDE_CODE_REMOTE", "true")
+    monkeypatch.setattr(
+        subject, "_CHECKS", (lambda e: preflight_push_unsigned_commits.decide(e, runner=_unsigned_runner),)
+    )
+    got = subject.decide(_bash_event(command))
     assert got is not None
     assert "UNSIGNED" in _reason(got)
 
