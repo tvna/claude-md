@@ -90,7 +90,7 @@ sequenceDiagram
         Gate-->>GH: exit 0 (fail-open · warning only)
     end
 
-    Gate->>Lib: load_graph(docs/graph/doc-dependencies.toml)
+    Gate->>Lib: load_graph(.gitapex/doc-dependencies.toml)
     note over Lib: parse TOML → validate all edge from/to IDs
     alt unknown node ID
         Lib-->>Gate: GraphValidationError
@@ -188,8 +188,9 @@ classDiagram
     DocGraph ..> GraphValidationError : load_graph() raises
 ```
 
-`[fact]` Graph declaration lives in `docs/graph/doc-dependencies.toml`,
-CODEOWNERS-protected by `.github/CODEOWNERS`. New edges are code-reviewed as
+`[fact]` Graph declaration lives in `.gitapex/doc-dependencies.toml`
+(moved from `docs/graph/` by PR #2347),
+CODEOWNERS-protected by `.github/CODEOWNERS` (the `/.gitapex/` rule). New edges are code-reviewed as
 TOML diffs, making every governance relationship machine-readable and
 change-auditable.
 
@@ -198,9 +199,9 @@ change-auditable.
 | # | Gap `[analysis]` | Evidence `[fact]` (file:line) | Tracking |
 |---|---|---|---|
 | 1 | Single-producer gap (before): only `master_instructions` → `design_philosophy_prd` was machine-enforced; all other governs/compiled_to edges depended on reviewer memory. PR #1737 merged `master.instructions.md` without touching 5 governed PRDs. | `scan_design_philosophy_drift.py:437-470` (one coupling); PR #1737 merge commit. | #1754 |
-| 2 | TOML graph is the single source of truth for declared dependencies, but edges not yet declared in the TOML are invisible to the gate. Relationships outside the current 16 edges still rely on reviewer memory. | `docs/graph/doc-dependencies.toml` (16 edges at PR #1755). | #1754 |
+| 2 | TOML graph is the single source of truth for declared dependencies, but edges not yet declared in the TOML are invisible to the gate. Relationships outside the current 16 edges still rely on reviewer memory. | `.gitapex/doc-dependencies.toml` (16 edges at PR #1755). | #1754 |
 | 3 | Gate is advisory in Phase 1 (`continue-on-error: true`): a genuine missing co-change is annotated but cannot block merge until promoted to a required check in `.github/rulesets/main.json`. Promotion is gated on FP rate < 5% for 2 consecutive sprints. | `validate-doc-graph.yml:28`; `docs/runbooks/doc-dependency-graph.md` section 6.4. | #1754 |
-| 4 | `compiled_to` edges (`master_instructions` → `claude_md`, `agents_md`) are blocking in the graph but the compile drift is already enforced by a separate required gate (`scan_design_philosophy_drift.py verify-apm-drift`). Declared here for completeness; no double-failure risk because `compile_to` severity can be set to advisory when Phase 2 promotes the gate. | `docs/graph/doc-dependencies.toml:[[edges]]` compiled_to entries; `gate_doc_graph_pr.py:107-117`. | #1754 |
+| 4 | `compiled_to` edges (`master_instructions` → `claude_md`, `agents_md`) are blocking in the graph but the compile drift is already enforced by a separate required gate (`scan_design_philosophy_drift.py verify-apm-drift`). Declared here for completeness; no double-failure risk because `compile_to` severity can be set to advisory when Phase 2 promotes the gate. | `.gitapex/doc-dependencies.toml:[[edges]]` compiled_to entries; `gate_doc_graph_pr.py:107-117`. | #1754 |
 | 5 | Waiver audit trail lives only in the PR body text. A waiver applied by one PR does not persist as a recognized exception for subsequent PRs touching the same node pair. Each PR that intends to skip a blocking co-change must carry its own waiver line. | `gate_doc_graph_pr.py:59-67` (per-invocation parse); no cross-PR waiver store. | #1754 |
 
 ## Recommended direction (speculation)
@@ -212,7 +213,7 @@ change-auditable.
   is observed below 5% across two sprints; the promotion step is a one-line
   addition to `.github/rulesets/main.json`.
 - `[analysis]` Gap 5: if waiver audit trail becomes important, persist waivers
-  in a separate TOML file (e.g. `docs/graph/waivers.toml`) behind CODEOWNERS,
+  in a separate TOML file (e.g. `.gitapex/waivers.toml`) behind CODEOWNERS,
   making them durable across PRs and visible as reviewed diffs.
 
 ## Scope note
