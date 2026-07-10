@@ -1867,12 +1867,11 @@
         "type:docs",
         "layer:p3-harness",
         "area:ci-ops",
-        "layer:meta",
         "ops:retro-opened",
         "harness:retro-opened"
       ],
       "discovery_only_labels": ["type:retrospective"],
-      "note": "retrospective issue identity and terminal open-state labels; layer:meta successor decided at #1041 comment 4882932274; layer:meta is kept here (excluded from _identity_labels, the create-time set) only so _discovery_labels can still find pre-migration retros via a family-grouped OR; drop it once no open retro carries it. type:retrospective is a live (non-retired) label a separate hand-filed creation path applies to in-session retros without type:docs; it lives in discovery_only_labels, not labels, so _discovery_labels finds them while _identity_labels never applies it to a newly auto-opened retro. See #1041, #2313, #2413"
+      "note": "retrospective issue identity and terminal open-state labels; layer:meta successor decided at #1041 comment 4882932274; the retired layer:meta was dropped from this entry by #2393 after every open retro was backfilled with layer:p3-harness, so _discovery_labels keys on layer:p3-harness alone. type:retrospective is a live (non-retired) label a separate hand-filed creation path applies to in-session retros without type:docs; it lives in discovery_only_labels, not labels, so _discovery_labels finds them while _identity_labels never applies it to a newly auto-opened retro. See #1041, #2313, #2393, #2413"
     },
     {
       "path": "scripts/scan_retro_followup_drift.py",
@@ -1881,10 +1880,9 @@
         "retro:fp",
         "retro:fp-candidate",
         "type:docs",
-        "layer:meta",
         "layer:p3-harness"
       ],
-      "note": "retrospective follow-up true/false-positive labels; discovery query ORs layer:meta and layer:p3-harness (search_retro_issues groups same-family labels with comma-OR) so retros opened before and after the #1041 comment 4882932274 successor migration both stay discoverable; drop layer:meta once no open retro carries it. See #1041, #2313"
+      "note": "retrospective follow-up true/false-positive labels; discovery query keys on layer:p3-harness (search_retro_issues groups same-family labels with comma-OR); the retired layer:meta was dropped from this entry by #2393 after every open retro was backfilled with layer:p3-harness. See #1041, #2313, #2393"
     },
     {
       "path": "scripts/branch_cleanup.py",
