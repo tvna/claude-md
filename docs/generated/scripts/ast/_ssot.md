@@ -29,6 +29,17 @@ flowchart TD
     N002 --> N003
 ```
 
+## consumer_discovery_only_labels(...)
+
+```mermaid
+flowchart TD
+    N001["consumer_discovery_only_labels(...)"]
+    N002["for entry in _load().get('<str>', []):     if isinstance(entry, dict) and entry.get('<str>') == path:         labels = entry.get('<str>', [])         if not isinstance(labels, list):             raise TypeError(f'<str>{path!r}<str>{labels!r}<str>{_REGISTRY_PATH}')         return tuple(labels)"]
+    N003["raise KeyError(f'<str>{path!r}<str>{_REGISTRY_PATH}')"]
+    N001 -->|"start"| N002
+    N002 --> N003
+```
+
 ## routing_rules(...)
 
 ```mermaid
