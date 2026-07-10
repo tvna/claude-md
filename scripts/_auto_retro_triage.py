@@ -242,28 +242,49 @@ class TriageReport:
     fp_triaged: int = 0
     fp_rate_recent: float = 0.0
     fp_recent_triaged: int = 0
+    population_total: int = 0
 
     @property
     def anomalies(self) -> tuple[SignalStat, ...]:
         """Signals whose prior would skip a future retro; the headline set."""
         return tuple(s for s in self.signal_stats if s.is_anomaly)
 
+    @property
+    def truncated(self) -> bool:
+        """True when the observed sample is smaller than the live population.
+
+        Distinguishes a silent cap (issue #2413's root defect) from a
+        genuinely complete read: ``population_total`` is the caller-supplied
+        live count (defaults to ``total`` when unknown, so callers that never
+        pass it render exactly as before).
+        """
+        return self.population_total > self.total
+
 
 def compute_triage_report(
     past_retros: list[PastRetro],
     signal_names: tuple[str, ...] = _SIGNAL_NAMES,
+    total_live: int | None = None,
 ) -> TriageReport:
     """Aggregate *past_retros* into a :class:`TriageReport`.
 
     Pure and GitHub-independent: the caller supplies the population
-    (typically from :func:`fetch_past_retro_labels`). Triage-label tallies
+    (typically from :func:`fetch_past_retro_population`). Triage-label tallies
     count each label independently (a retro may carry several); the
     ``unlabelled`` bucket counts retros with none of
     :data:`ALL_RETRO_LABELS`. Per-signal FP statistics are taken verbatim
     from :func:`compute_prior_from_labels` so the report and the live skip
     decision can never disagree on the numbers. Refs #1042.
+
+    *total_live* is the live population size BEFORE any fetch cap (e.g. a
+    search API's ``total_count``); pass it whenever the caller knows the
+    population may be larger than ``len(past_retros)`` so the rendered
+    report can declare truncation instead of silently under-reporting
+    (refs #2413). Defaults to ``len(past_retros)`` (no truncation) when the
+    caller does not know or the population was read in full.
     """
     total = len(past_retros)
+    population_total = total if total_live is None else total_live
     label_counts: dict[str, int] = {
         label: sum(1 for r in past_retros if label in r.labels)
         for label in _TRIAGE_LABELS
@@ -319,6 +340,7 @@ def compute_triage_report(
         fp_triaged=fp_triaged,
         fp_rate_recent=fp_rate_recent,
         fp_recent_triaged=fp_recent_triaged,
+        population_total=population_total,
     )
 
 
@@ -333,6 +355,12 @@ def render_triage_report_markdown(report: TriageReport) -> str:
     GitHub label state, so it is a non-deterministic snapshot and is NOT
     part of the deterministic generated docs. Refs #1042, #1386.
     """
+    observed_line = f"Retros observed: **{report.total}**"
+    if report.truncated:
+        observed_line = (
+            f"Retros observed: **{report.total} of {report.population_total} "
+            "(truncated)**"
+        )
     lines: list[str] = [
         "# Auto-retro triage report",
         "",
@@ -343,7 +371,7 @@ def render_triage_report_markdown(report: TriageReport) -> str:
         "`post-merge.yml` workflow (which opens a pull request when the "
         "snapshot drifts) rather than as part of the deterministic generated docs.",
         "",
-        f"Retros observed: **{report.total}**",
+        observed_line,
         "",
         f"Open untriaged: **{report.open_untriaged}**",
         "",
