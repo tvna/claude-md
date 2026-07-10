@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import subprocess
 from typing import Any
 
@@ -135,51 +134,3 @@ def test_skip_flag_regex_not_fooled_by_substring() -> None:
     result = subject.decide(_bash_event("git push origin HEAD:feature-delete-thing"), runner=r)
     assert result is not None
     assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
-
-
-# ---------------------------------------------------------------------------
-# main() entry point
-# ---------------------------------------------------------------------------
-
-
-def test_main_emits_deny_json(monkeypatch: pytest.MonkeyPatch) -> None:
-    import io
-
-    event = _bash_event("git push origin HEAD:session")
-
-    def fake_decide(e: dict[str, Any], **_: Any) -> dict[str, Any] | None:
-        return subject.build_deny("test reason")
-
-    monkeypatch.setattr(subject, "decide", fake_decide)
-
-    output: list[str] = []
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(event)))
-    monkeypatch.setattr("sys.stdout", type("FakeOut", (), {"write": lambda self, s: output.append(s)})())
-
-    rc = subject.main()
-    assert rc == 0
-    parsed = json.loads("".join(output))
-    assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
-
-
-def test_main_silent_for_non_push(monkeypatch: pytest.MonkeyPatch) -> None:
-    import io
-
-    event = _bash_event("git status")
-    output: list[str] = []
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(event)))
-    monkeypatch.setattr("sys.stdout", type("FakeOut", (), {"write": lambda self, s: output.append(s)})())
-    monkeypatch.setattr(subject, "decide", lambda e, **kw: None)
-
-    rc = subject.main()
-    assert rc == 0
-    assert output == []
-
-
-def test_main_handles_malformed_json(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    import io
-
-    monkeypatch.setattr("sys.stdin", io.StringIO("{bad json"))
-    rc = subject.main()
-    assert rc == 0
-    assert "malformed" in capsys.readouterr().err

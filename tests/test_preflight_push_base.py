@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import subprocess
 from typing import Any
 
@@ -96,55 +95,3 @@ def test_decide_detects_rtk_rewritten_push() -> None:
     result = subject.decide(_bash_event("rtk git push origin my-branch"), runner=fake_runner)
     assert result is not None
     assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
-
-
-# ---------------------------------------------------------------------------
-# main() entry point
-# ---------------------------------------------------------------------------
-
-
-def test_main_emits_deny_json(monkeypatch: pytest.MonkeyPatch) -> None:
-    import io
-
-    event = _bash_event("git push origin my-branch")
-
-    def fake_decide(e: dict[str, Any], **_: Any) -> dict[str, Any] | None:
-        return subject.build_deny("test reason")
-
-    monkeypatch.setattr(subject, "decide", fake_decide)
-
-    output: list[str] = []
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(event)))
-    monkeypatch.setattr("sys.stdout", type("FakeOut", (), {"write": lambda self, s: output.append(s)})())
-
-    rc = subject.main()
-    assert rc == 0
-    parsed = json.loads("".join(output))
-    assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
-
-
-def test_main_silent_for_non_push(monkeypatch: pytest.MonkeyPatch) -> None:
-    import io
-
-    event = _bash_event("git status")
-    output: list[str] = []
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(event)))
-    monkeypatch.setattr("sys.stdout", type("FakeOut", (), {"write": lambda self, s: output.append(s)})())
-
-    def fake_runner(cmd: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
-        raise AssertionError("should not be called for non-push")
-
-    monkeypatch.setattr(subject, "decide", lambda e, **kw: None)
-
-    rc = subject.main()
-    assert rc == 0
-    assert output == []
-
-
-def test_main_handles_malformed_json(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    import io
-
-    monkeypatch.setattr("sys.stdin", io.StringIO("{bad json"))
-    rc = subject.main()
-    assert rc == 0
-    assert "malformed" in capsys.readouterr().err

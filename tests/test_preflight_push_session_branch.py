@@ -8,8 +8,6 @@ local:remote refspec syntax).
 
 from __future__ import annotations
 
-import io
-import json
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -301,53 +299,3 @@ class TestReadAuthorizedBranches:
     def test_empty_set_when_file_missing(self, tmp_path: Path) -> None:
         with patch.object(subject, "_SESSION_BRANCH_FILE", tmp_path / "MISSING"):
             assert subject._read_authorized_branches() == set()
-
-
-# ---------------------------------------------------------------------------
-# main() entry point
-# ---------------------------------------------------------------------------
-
-
-def test_main_emits_deny_json(monkeypatch: pytest.MonkeyPatch) -> None:
-    _with_session(_SESSION_BRANCH, monkeypatch)
-    event = _bash_event("git push origin feat/wrong")
-    output: list[str] = []
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(event)))
-    monkeypatch.setattr(
-        "sys.stdout",
-        type("FakeOut", (), {"write": lambda self, s: output.append(s)})(),
-    )
-    rc = subject.main()
-    assert rc == 0
-    parsed = json.loads("".join(output))
-    assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
-
-
-def test_main_silent_for_allowed_push(monkeypatch: pytest.MonkeyPatch) -> None:
-    _with_session(_SESSION_BRANCH, monkeypatch)
-    event = _bash_event(f"git push origin {_SESSION_BRANCH}")
-    output: list[str] = []
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(event)))
-    monkeypatch.setattr(
-        "sys.stdout",
-        type("FakeOut", (), {"write": lambda self, s: output.append(s)})(),
-    )
-    rc = subject.main()
-    assert rc == 0
-    assert output == []
-
-
-def test_main_handles_malformed_json(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    monkeypatch.setattr("sys.stdin", io.StringIO("{bad json"))
-    rc = subject.main()
-    assert rc == 0
-    assert "malformed" in capsys.readouterr().err
-
-
-def test_main_handles_non_dict_json(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("sys.stdin", io.StringIO("[1, 2, 3]"))
-    rc = subject.main()
-    assert rc == 0

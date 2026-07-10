@@ -396,28 +396,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_unsigned_commits.py",
-            "statusMessage": "Checking pushed commits are signed"
-          }
-        ]
-      },
-      {
-        "matcher": "^Bash$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_base.py",
-            "statusMessage": "Checking branch base before push"
-          }
-        ]
-      },
-      {
-        "matcher": "^Bash$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_session_branch.py",
-            "statusMessage": "Checking session push target before push"
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_dispatch.py",
+            "statusMessage": "Checking push gates"
           }
         ]
       },
@@ -488,26 +468,6 @@
             "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/gate_instruction_body_advisory.py",
             "statusMessage": "Reminding about instruction-text PR body sections"
-          }
-        ]
-      },
-      {
-        "matcher": "^Bash$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_nonempty.py",
-            "statusMessage": "Checking push ships new work"
-          }
-        ]
-      },
-      {
-        "matcher": "^Bash$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/preflight_push_nonempty.py",
-            "statusMessage": "Checking push ships new work before push"
           }
         ]
       },

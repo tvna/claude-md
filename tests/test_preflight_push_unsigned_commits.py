@@ -15,8 +15,6 @@ command (``git commit && git push``) is still detected.
 
 from __future__ import annotations
 
-import io
-import json
 import subprocess
 from typing import Any
 
@@ -457,48 +455,9 @@ class TestIterPushSpecs:
 # ---------------------------------------------------------------------------
 
 
-# ---------------------------------------------------------------------------
-# main() entry point (stdin/stdout boundary)
-# ---------------------------------------------------------------------------
-
-
-def _run_main(payload: object, monkeypatch: pytest.MonkeyPatch) -> str:
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
-    out: list[str] = []
-    monkeypatch.setattr(
-        "sys.stdout", type("FakeOut", (), {"write": lambda self, s: out.append(s)})()
-    )
-    rc = subject.main()
-    assert rc == 0
-    return "".join(out)
-
-
-def test_main_silent_for_allowed_push(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("CLAUDE_CODE_REMOTE", raising=False)
-    monkeypatch.delenv("CODEX_CODE_REMOTE", raising=False)
-    assert _run_main(_bash_event("git push origin feat/x"), monkeypatch) == ""
-
-
-def test_main_handles_malformed_json(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.setattr("sys.stdin", io.StringIO("{bad json"))
-    assert subject.main() == 0
-    assert "malformed" in capsys.readouterr().err
-
-
 def test_default_runner_returns_completed_process() -> None:
     # The production runner shells out to real git; a harmless read confirms it
     # returns a CompletedProcess (covers the default-runner seam).
     result = subject._default_runner(["rev-parse", "--git-dir"])
     assert isinstance(result, subprocess.CompletedProcess)
     assert result.returncode == 0
-
-
-def test_main_block_exits_via_runpy(monkeypatch: pytest.MonkeyPatch) -> None:
-    import runpy
-
-    monkeypatch.setattr("sys.stdin", type("Input", (), {"read": lambda self: ""})())
-    with pytest.raises(SystemExit) as exc_info:
-        runpy.run_module("preflight_push_unsigned_commits", run_name="__main__")
-    assert exc_info.value.code == 0
