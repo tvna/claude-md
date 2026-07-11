@@ -52,6 +52,15 @@ ALL_RETRO_LABELS: Final[frozenset[str]] = frozenset(
     {RETRO_TP, RETRO_FP, RETRO_FP_CANDIDATE, RETRO_TENTATIVE, RETRO_EXPIRED}
 )
 
+# The retrospective issue's identity label. Not a retro:* feedback-loop label,
+# so it is deliberately absent from ALL_RETRO_LABELS, but it shares the same
+# labels.json prune-safety coupling (tests/test_retro_labels_in_sot.py) and the
+# same runtime source: it is a live label applied by the retro creation path,
+# not authored in .github/label-policy.toml. Defined here as the single source
+# so consumers (e.g. scripts/scan_label_sot_drift.py) import it instead of
+# freezing the string.
+TYPE_RETROSPECTIVE: Final[str] = "type:retrospective"
+
 # Thresholds for the label-derived prior consumed by
 # ``scripts/auto_retro.py`` (PR2 of the TP/FP retrofit, refs #582).
 #

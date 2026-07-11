@@ -90,6 +90,7 @@ import scan_hook_coverage_drift
 import scan_hook_predicate_surface_drift
 import scan_input_contract_drift
 import scan_issue_anchor_drift
+import scan_label_sot_drift
 import scan_maintainability_metrics
 import scan_markdown_links
 import scan_mermaid_syntax
@@ -250,6 +251,7 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_apm_lock_drift.py", "verify"): "test_scan_apm_lock_drift_verify_matches_workflow_args",
     ("scan_compile_from_source.py", "verify"): "test_scan_compile_from_source_verify_matches_workflow_args",
     ("scan_commit_type_label_drift.py", "verify"): "test_scan_commit_type_label_drift_verify_matches_workflow_args",
+    ("scan_label_sot_drift.py", "verify"): "test_scan_label_sot_drift_verify_matches_workflow_args",
     ("scan_devcontainer_tool_drift.py", "verify"): "test_scan_devcontainer_tool_drift_verify_matches_workflow_args",
     ("scan_doc_workflow_refs.py", "verify"): "test_scan_doc_workflow_refs_verify_matches_workflow_args",
     ("scan_docs_inventory.py", "verify"): "test_scan_docs_inventory_verify_matches_workflow_args",
@@ -1855,6 +1857,12 @@ def test_scan_commit_type_label_drift_verify_matches_workflow_args() -> None:
     """Mirrors the ``Verify type:* labels match title-policy commit types``
     step in ``.github/workflows/verify-agents.yml`` (issue #2081)."""
     assert scan_commit_type_label_drift.main(["verify"]) == 0
+
+
+def test_scan_label_sot_drift_verify_matches_workflow_args() -> None:
+    """Mirrors the ``Verify labels.json matches label-policy.toml`` step in
+    ``.github/workflows/verify-agents.yml`` (issue #2442)."""
+    assert scan_label_sot_drift.main(["verify"]) == 0
 
 
 def test_scan_devcontainer_tool_drift_verify_matches_workflow_args() -> None:
