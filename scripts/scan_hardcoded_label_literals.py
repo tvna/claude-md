@@ -32,10 +32,11 @@ The known-family set is DERIVED from ``.github/label-policy.toml`` at run time,
 not hardcoded: it unions the live ``[[families]]`` names with the family
 prefixes of ``[[retired_labels]]`` (so a retired family such as ``threat`` or
 ``agent`` is still scanned, which is the whole point of catching a retired-label
-regression), plus the runtime-only ``retro`` family defined in
-``scripts/_retro_labels.py`` and deliberately absent from the catalog. A family
-added to (or retired in) the policy therefore extends coverage with no gate
-edit.
+regression), plus any runtime-only families in :data:`RUNTIME_ONLY_FAMILIES`. A
+family added to (or retired in) the policy therefore extends coverage with no
+gate edit. The ``retro`` family was runtime-only until #2442 batch 1 folded the
+retro:* labels into ``[[labels]]``; it is now a live catalog family and
+:data:`RUNTIME_ONLY_FAMILIES` is empty.
 
 Sanctioned homes (the allowlist)
 --------------------------------
@@ -85,10 +86,12 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SCRIPTS_DIR = "scripts"
 _LABEL_POLICY_PATH = ".github/label-policy.toml"
 
-# Families that are real but live in neither label-policy table: ``retro`` is
-# defined in scripts/_retro_labels.py and deliberately absent from the catalog
-# (#1041 follow-up comment B). Unioned into the derived family set.
-RUNTIME_ONLY_FAMILIES: frozenset[str] = frozenset({"retro"})
+# Families that are real but live in neither label-policy table. Empty since
+# #2442 batch 1 folded the retro:* labels into label-policy.toml [[labels]] (the
+# ``retro`` family is now catalog-declared, so policy_family_names covers it).
+# The mechanism is retained: a future runtime-only family is added here and gets
+# unioned into the derived family set with no other gate edit.
+RUNTIME_ONLY_FAMILIES: frozenset[str] = frozenset()
 
 # The name segment after ``family:`` in a full label token.
 _NAME_SEGMENT = r"[A-Za-z0-9][A-Za-z0-9._-]*"
@@ -97,7 +100,10 @@ _NAME_SEGMENT = r"[A-Za-z0-9][A-Za-z0-9._-]*"
 # literal in these is definitional, not drift, so the whole file is exempt.
 SSOT_HOME_FILES: dict[str, str] = {
     "scripts/_retro_labels.py": (
-        "The retro:* SSoT: the four retro classification labels are defined " "here and nowhere else (#558)."
+        "The retro:* NAME source: the five retro classification label names are "
+        "defined here as Python constants (imported widely at runtime); their "
+        "identity lives in label-policy.toml [[labels]], coupled by "
+        "tests/test_retro_labels_in_policy.py (#558, #2442)."
     ),
     "scripts/_ssot.py": (
         "The .gitapex/ssot.json registry reader; the label names it returns "
