@@ -8,7 +8,12 @@ Open untriaged: **34**
 
 ## Anomalies
 
-None: no fired signal clears both the FP-rate and sample-size thresholds.
+- **unlabelled ratio 0.95**: 89 of 94 observed retros carry no `retro:*` label (>= 0.50, n >= 5); retros are being opened faster than they are triaged.
+
+## Loop health
+
+- Triage rate: **5 / 94** (5%) of observed retros carry a `retro:*` label; **89** (95%) remain unlabelled.
+- Sentinel disposal: **0** (0%) auto-closed via `retro:expired` without operator engagement.
 
 ## Triage status
 
