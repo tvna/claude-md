@@ -88,17 +88,16 @@ def index_policy_labels(policy: dict[str, Any]) -> tuple[dict[str, dict[str, Any
     """Return ``({name: entry}, diagnostics)`` for ``label-policy.toml`` ``[[labels]]``.
 
     ``diagnostics`` is empty when the array is well-formed. It carries an error
-    when the ``[[labels]]`` array is structurally malformed (not a list), or when
-    a ``name`` is declared more than once: the parity gate treats
-    ``label-policy.toml`` as the single authored label identity SoT, so a
-    duplicate name (two conflicting definitions) must fail loudly rather than be
-    silently resolved to whichever copy happens to be last (which could let a
-    conflicting policy still print OK as long as the surviving copy matched
-    ``labels.json``). Entries without a string ``name`` are skipped rather than
-    indexed: their structural validity is owned by other gates
-    (``scan_commit_type_label_drift``, ``scan_ssot_schema``), and a
-    ``labels.json`` entry expecting one will still surface here as a missing
-    counterpart.
+    when the ``[[labels]]`` array is structurally malformed (not a list), when a
+    dict entry has a missing or non-string ``name``, or when a ``name`` is
+    declared more than once: the parity gate treats ``label-policy.toml`` as the
+    single authored label identity SoT, so a duplicate name (two conflicting
+    definitions) must fail loudly rather than be silently resolved to whichever
+    copy happens to be last (which could let a conflicting policy still print OK
+    as long as the surviving copy matched ``labels.json``), and a malformed name
+    must fail loudly rather than silently drop the entry (which would surface as
+    a misleading "missing counterpart" against ``labels.json``). Non-dict
+    entries cannot occur in a TOML array of tables and are skipped defensively.
     """
     labels_raw = policy.get("labels", [])
     if not isinstance(labels_raw, list):
@@ -110,6 +109,14 @@ def index_policy_labels(policy: dict[str, Any]) -> tuple[dict[str, dict[str, Any
             continue
         name = entry.get("name")
         if not isinstance(name, str) or not name:
+            errors.append(
+                _err(
+                    f"a label-policy.toml [[labels]] entry has a missing or non-string "
+                    f"'name' (got {name!r}); every policy label must declare a unique "
+                    "string name.",
+                    LABEL_POLICY_PATH,
+                )
+            )
             continue
         if name in index:
             errors.append(
@@ -135,6 +142,7 @@ def verify_parity(catalog: Any, policy: dict[str, Any]) -> list[str]:
         return diagnostics
 
     errors: list[str] = []
+    seen: set[str] = set()
     for entry in catalog:
         if not isinstance(entry, dict):
             errors.append(_err(f"labels.json entry is not an object: {entry!r}"))
@@ -144,8 +152,33 @@ def verify_parity(catalog: Any, policy: dict[str, Any]) -> list[str]:
             errors.append(_err(f"labels.json entry is missing a string 'name' (got {name!r})"))
             continue
 
-        # Sourced from scripts/_retro_labels.py, not label-policy.toml.
+        # Each name must appear once. labels.json is the live catalog, so a
+        # duplicate would make apply-labels.yml process the same label twice and
+        # let a conflicting second definition ride along undetected. This mirrors
+        # the uniqueness index_policy_labels enforces on the policy side.
+        if name in seen:
+            errors.append(
+                _err(
+                    f"label {name!r} is declared more than once in labels.json; each label "
+                    "name must be unique in the live catalog. Remove the duplicate entry."
+                )
+            )
+            continue
+        seen.add(name)
+
+        # Sourced from scripts/_retro_labels.py, not label-policy.toml. Such a
+        # label must NOT also be authored in the policy: two homes for one label
+        # is the same single-SoT drift this gate exists to prevent, in reverse.
         if name in RETRO_SOURCED_LABELS:
+            if name in policy_index:
+                errors.append(
+                    _err(
+                        f"label {name!r} is sourced from scripts/_retro_labels.py but also "
+                        "has a [[labels]] entry in label-policy.toml; it must have exactly "
+                        "one authoritative home. Remove the policy entry.",
+                        LABEL_POLICY_PATH,
+                    )
+                )
             continue
 
         policy_entry = policy_index.get(name)
@@ -198,10 +231,14 @@ def verify(root: Path = REPO_ROOT) -> list[str]:
         catalog = load_json(catalog_file)
     except json.JSONDecodeError as exc:
         return [_err(f"labels.json is not valid JSON: {exc}")]
+    except (UnicodeDecodeError, OSError) as exc:
+        return [_err(f"labels.json could not be read: {exc}")]
     try:
         policy = load_toml(policy_file)
     except tomllib.TOMLDecodeError as exc:
         return [_err(f"label-policy.toml is not valid TOML: {exc}", LABEL_POLICY_PATH)]
+    except (UnicodeDecodeError, OSError) as exc:
+        return [_err(f"label-policy.toml could not be read: {exc}", LABEL_POLICY_PATH)]
     return verify_parity(catalog, policy)
 
 

@@ -96,10 +96,15 @@ def test_verify_parity_flags_non_list_policy_labels() -> None:
     ]
 
 
-def test_index_policy_labels_skips_nameless_entries() -> None:
+def test_index_policy_labels_flags_nameless_entry() -> None:
+    # A dict [[labels]] entry with a missing/non-string name fails loudly rather
+    # than being silently dropped (which would surface as a misleading missing
+    # counterpart against labels.json).
     index, diagnostics = gate.index_policy_labels(_policy([{"family": "type"}, _label("type:fix", "d", "c")]))
-    assert diagnostics == []
     assert set(index) == {"type:fix"}
+    assert len(diagnostics) == 1
+    assert "missing or non-string 'name'" in diagnostics[0]
+    assert diagnostics[0].startswith("::error file=.github/label-policy.toml::")
 
 
 def test_verify_parity_flags_duplicate_policy_label() -> None:
@@ -115,6 +120,28 @@ def test_verify_parity_flags_duplicate_policy_label() -> None:
     errors = gate.verify_parity(catalog, policy)
     assert len(errors) == 1
     assert "declared more than once" in errors[0]
+    assert errors[0].startswith("::error file=.github/label-policy.toml::")
+
+
+def test_verify_parity_flags_duplicate_catalog_label() -> None:
+    # A duplicate name in labels.json (the live catalog) must fail loudly too,
+    # symmetric to the policy-side uniqueness check.
+    label = _label("type:fix", "Defect or broken workflow.", "d73a4a")
+    errors = gate.verify_parity([label, dict(label)], _policy([label]))
+    assert len(errors) == 1
+    assert "more than once in labels.json" in errors[0]
+    assert errors[0].startswith("::error file=.github/labels.json::")
+
+
+def test_verify_parity_flags_retro_label_dual_sourced_in_policy() -> None:
+    # A retro-sourced label must not ALSO be authored in label-policy.toml;
+    # two homes for one label is single-SoT drift in the reverse direction.
+    retro = sorted(gate.RETRO_SOURCED_LABELS)[0]
+    catalog = [_label(retro, "d", "0e8a16")]
+    policy = _policy([_label(retro, "d", "0e8a16")])
+    errors = gate.verify_parity(catalog, policy)
+    assert len(errors) == 1
+    assert "one authoritative home" in errors[0]
     assert errors[0].startswith("::error file=.github/label-policy.toml::")
 
 
@@ -161,6 +188,18 @@ def test_verify_reports_malformed_label_policy_toml(tmp_path: Path) -> None:
     assert errors[0].startswith(
         "::error file=.github/label-policy.toml::label-policy.toml is not valid TOML:"
     )
+
+
+def test_verify_reports_unreadable_labels_json(tmp_path: Path) -> None:
+    # A non-UTF-8 (or otherwise unreadable) catalog file yields a scoped
+    # annotation, not a raw traceback, honoring the docstring Contract.
+    github = tmp_path / ".github"
+    github.mkdir()
+    (github / "labels.json").write_bytes(b"\xff\xfe\x00")
+    (github / "label-policy.toml").write_text("", encoding="utf-8")
+    errors = gate.verify(tmp_path)
+    assert len(errors) == 1
+    assert errors[0].startswith("::error file=.github/labels.json::labels.json could not be read:")
 
 
 def test_verify_end_to_end_detects_drift(tmp_path: Path) -> None:
