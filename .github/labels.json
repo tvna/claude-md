@@ -136,7 +136,7 @@
   },
   {
     "name": "retro:expired",
-    "description": "Sentinel closed this retro as not_planned after the inactivity window with no operator engagement (weak fp signal, counted separately from tp/fp).",
+    "description": "Sentinel closed as not_planned after inactivity; weak fp signal, counted apart from tp/fp.",
     "color": "cfd3d7"
   },
   {

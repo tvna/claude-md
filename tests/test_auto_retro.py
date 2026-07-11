@@ -4443,7 +4443,7 @@ class TestSentinelRun:
             comments_by_number={700: []},
         )
         assert ar.sentinel_run("o/r", "2026-05-20T00:00:00Z", 14) == 0
-        # Comment posted, then retro:expired labelled, then issue patched
+        # retro:expired labelled, then comment posted, then issue patched
         # closed/not_planned.
         post = [
             (m, p, b) for m, p, b in seen
@@ -4466,32 +4466,36 @@ class TestSentinelRun:
         assert len(patch) == 1
         assert patch[0][2] == {"state": "closed", "state_reason": "not_planned"}
 
-    def test_post_precedes_close(
+    def test_label_precedes_post_precedes_close(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Sentinel comment must land before the retro:expired label,
-        which must land before the close patch, so the operator-visible
-        explanation and the learning-channel label are both in place
-        when the closed webhook fires."""
+        """The retro:expired label must land before the sentinel comment,
+        which must land before the close patch.
+
+        Label-first is deliberate: the idempotency gate
+        (:func:`ar.has_sentinel_marker`) keys on the comment marker, not
+        the label, so a label failure leaves no marker behind and the
+        next cron tick retries this retro from scratch instead of
+        getting stuck (Refs #2439 review)."""
         seen = _sentinel_recorder(
             monkeypatch,
             open_retros=[_open_retro(701)],
             comments_by_number={701: []},
         )
         ar.sentinel_run("o/r", "2026-05-20T00:00:00Z", 14)
-        post_idx = next(
-            i for i, (m, p, _b) in enumerate(seen)
-            if m == "POST" and p == "/repos/o/r/issues/701/comments"
-        )
         label_idx = next(
             i for i, (m, p, _b) in enumerate(seen)
             if m == "POST" and p == "/repos/o/r/issues/701/labels"
+        )
+        post_idx = next(
+            i for i, (m, p, _b) in enumerate(seen)
+            if m == "POST" and p == "/repos/o/r/issues/701/comments"
         )
         patch_idx = next(
             i for i, (m, p, _b) in enumerate(seen)
             if m == "PATCH" and p == "/repos/o/r/issues/701"
         )
-        assert post_idx < label_idx < patch_idx
+        assert label_idx < post_idx < patch_idx
 
     def test_skips_retro_inside_window(
         self, monkeypatch: pytest.MonkeyPatch
@@ -4634,7 +4638,8 @@ class TestSentinelRun:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """If the sentinel comment POST fails, the close must NOT fire
-        (operator would see a silent close without explanation)."""
+        (operator would see a silent close without explanation). The
+        label step runs first and already succeeded on this tick."""
         seen = _sentinel_recorder(
             monkeypatch,
             open_retros=[_open_retro(709)],
@@ -4646,7 +4651,7 @@ class TestSentinelRun:
             m == "PATCH" and p == "/repos/o/r/issues/709"
             for m, p, _b in seen
         )
-        assert not any(
+        assert any(
             m == "POST" and p == "/repos/o/r/issues/709/labels"
             for m, p, _b in seen
         )
@@ -4654,9 +4659,11 @@ class TestSentinelRun:
     def test_label_failure_does_not_close(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """If the retro:expired label POST fails, the close must NOT
-        fire (a sentinel close without the label would defeat the
-        learning-channel fix, Refs #2433)."""
+        """If the retro:expired label POST fails, neither the sentinel
+        comment nor the close must fire on this tick: label runs first
+        (Refs #2439 review) so a failure here leaves no sentinel-comment
+        marker behind, and the next cron tick retries this retro from
+        scratch instead of getting stuck."""
         seen = _sentinel_recorder(
             monkeypatch,
             open_retros=[_open_retro(715)],
@@ -4668,9 +4675,7 @@ class TestSentinelRun:
             m == "PATCH" and p == "/repos/o/r/issues/715"
             for m, p, _b in seen
         )
-        # The comment was already posted on this tick before the label
-        # attempt failed.
-        assert any(
+        assert not any(
             m == "POST" and p == "/repos/o/r/issues/715/comments"
             for m, p, _b in seen
         )
