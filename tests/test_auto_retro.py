@@ -5819,8 +5819,8 @@ class TestRepairFreeMergeLedgerPure:
         body = "\n".join(
             [
                 ledger._ROWS_OPEN,
-                "| PR | Merged at (UTC) | Repair-free | Origin |",
-                "|---|---|---|---|",
+                "| PR | Merged at (UTC) | Repair-free |",
+                "|---|---|---|",
                 ledger.render_row(row),
                 ledger._ROWS_CLOSE,
             ]
@@ -5877,8 +5877,10 @@ class TestRepairFreeMergeLedgerPure:
         ]
         stats = ledger.compute_weekly_stats(rows)
         assert len(stats) == ledger.MOVING_AVERAGE_WINDOW
+        rates = [s.rate for s in stats if s.rate is not None]
+        assert len(rates) == ledger.MOVING_AVERAGE_WINDOW  # no gap weeks here
         assert stats[-1].moving_avg == pytest.approx(
-            sum(s.rate for s in stats) / ledger.MOVING_AVERAGE_WINDOW
+            sum(rates) / ledger.MOVING_AVERAGE_WINDOW
         )
 
     def test_ledger_weekly_table_windows_explicitly_past_the_display_window(
@@ -5923,6 +5925,59 @@ class TestRepairFreeMergeLedgerPure:
         content_again, changed_again = ledger.upsert_ledger_markdown(content, row)
         assert not changed_again
         assert content_again == content
+
+    def test_ledger_moving_average_spans_calendar_weeks_not_observed_weeks(
+        self,
+    ) -> None:
+        """A Codex review on PR #2443 found that the moving average silently
+        averaged the last 4 *observed* (merge-having) weeks even when they
+        span far more than 4 calendar weeks. compute_weekly_stats must now
+        fill merge-free gap weeks so the average genuinely spans 4
+        consecutive calendar weeks."""
+        rows = [
+            ledger.LedgerRow(1, "2026-01-05T09:00:00Z", True),  # 2026-W02
+            ledger.LedgerRow(2, "2026-01-12T09:00:00Z", True),  # 2026-W03
+            ledger.LedgerRow(3, "2026-01-19T09:00:00Z", False),  # 2026-W04
+            # 10-week merge-free gap, then one more merge.
+            ledger.LedgerRow(4, "2026-03-30T09:00:00Z", True),  # 2026-W14
+        ]
+        stats = ledger.compute_weekly_stats(rows)
+        # The gap weeks are explicit zero-merge entries, so the full
+        # sequence spans every calendar week from W02 to W14 inclusive.
+        assert len(stats) == 13
+        by_week = {s.iso_week: s for s in stats}
+        assert by_week["2026-W02"].merges == 1
+        assert by_week["2026-W05"].merges == 0
+        assert by_week["2026-W05"].rate is None
+        assert by_week["2026-W14"].merges == 1
+        # At W14 the trailing 4 calendar weeks are W11-W14, all merge-free
+        # except W14 itself; the moving average must NOT reach back to
+        # W01-W03's rates (the pre-fix bug).
+        assert by_week["2026-W14"].moving_avg == pytest.approx(
+            by_week["2026-W14"].rate
+        )
+
+    def test_ledger_weekly_table_shows_gap_weeks_as_no_merges(self) -> None:
+        rows = [
+            ledger.LedgerRow(1, "2026-01-05T09:00:00Z", True),
+            ledger.LedgerRow(2, "2026-01-19T09:00:00Z", True),  # 2-week gap
+        ]
+        stats = ledger.compute_weekly_stats(rows)
+        table = ledger.render_weekly_table(stats)
+        assert "n/a (no merges)" in table
+
+    def test_fetch_repo_file_raises_instead_of_silently_treating_oversized_file_as_absent(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A Codex review on PR #2443: GitHub returns encoding: "none" (no
+        inline content) for blobs over ~1MB; fetch_repo_file must not treat
+        that the same as a 404, or the next ledger write would discard the
+        entire history believing it is the first-ever recorded merge."""
+        monkeypatch.setattr(
+            ar, "gh_api", lambda *_a, **_kw: json.dumps({"encoding": "none"})
+        )
+        with pytest.raises(RuntimeError, match="unexpected encoding"):
+            ar.fetch_repo_file("o/r", "docs/generated/scripts/x.md", "main")
 
 
 class TestRunRepairFreeMergeLedgerWiring:
@@ -6060,3 +6115,99 @@ class TestRunRepairFreeMergeLedgerWiring:
         event = merged_event(number=604, merged_at="2026-07-08T10:00:00Z")
         assert ar.run(event, "o/r", ledger_token="tok") == 0
         assert "::warning::" in capsys.readouterr().err
+
+    def test_ledger_upsert_retries_and_succeeds_after_a_transient_conflict(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A losing writer in a genuine concurrent-merge race must retry
+        the read-merge-write cycle rather than permanently drop its row
+        (Codex review on PR #2443's concurrency finding)."""
+        orchestrator_recorder(monkeypatch, review_comments=[])
+        attempts: list[int] = []
+
+        def flaky_upsert(**kw: Any) -> str:
+            attempts.append(1)
+            if len(attempts) < 2:
+                raise RuntimeError("createCommitOnBranch errors: stale expectedHeadOid")
+            return "committed:1"
+
+        monkeypatch.setattr(ar, "upsert_single_file_pr", flaky_upsert)
+        event = merged_event(number=605, merged_at="2026-07-08T10:00:00Z")
+        assert ar.run(event, "o/r", ledger_token="tok") == 0
+        assert len(attempts) == 2
+
+    def test_ledger_upsert_gives_up_after_max_attempts_and_warns_softly(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        orchestrator_recorder(monkeypatch, review_comments=[])
+        attempts: list[int] = []
+
+        def always_boom(**_kw: Any) -> str:
+            attempts.append(1)
+            raise RuntimeError("createCommitOnBranch errors: stale expectedHeadOid")
+
+        monkeypatch.setattr(ar, "upsert_single_file_pr", always_boom)
+        event = merged_event(number=606, merged_at="2026-07-08T10:00:00Z")
+        assert ar.run(event, "o/r", ledger_token="tok") == 0
+        assert len(attempts) == ar._LEDGER_UPSERT_MAX_ATTEMPTS
+        assert "::warning::" in capsys.readouterr().err
+
+    def test_ledger_missing_merged_at_is_soft_and_does_not_crash_run(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A ValueError from _iso_week (malformed/empty merged_at) must be
+        caught by _record_ledger_row_soft, not escape run() as exit code 1
+        (Codex review on PR #2443, reproduced by direct execution)."""
+        orchestrator_recorder(monkeypatch, review_comments=[])
+        calls: list[dict[str, Any]] = []
+        monkeypatch.setattr(ar, "upsert_single_file_pr", _recording_upsert(calls))
+        event = merged_event(number=607, merged_at="")
+        assert ar.run(event, "o/r", ledger_token="tok") == 0
+        assert calls == []
+        assert "::warning::" in capsys.readouterr().err
+
+    def test_ledger_records_row_when_fix_append_fails(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The fix()-PR append branch's GitHubApiError handler must still
+        record a repair-free=False ledger row: this PR never gets its own
+        retro (it targets a different one), so this is the only chance to
+        record it (Codex review on PR #2443)."""
+        retro_body = (
+            "## Scope\n\nx\n"
+            "<!-- auto-filled:repair-history -->\n"
+            "| # | Repair | What |\n"
+            "|---|--------|------|\n"
+            "<!-- /auto-filled:repair-history -->\n"
+        )
+
+        def fake_api(method: str, path: str, body: Any = None, **_kw: Any) -> str:
+            if method == "GET" and "/contents/" in path:
+                raise GitHubApiError(404, "GET", path, "Not Found")
+            if method == "GET" and path.startswith("/search/issues"):
+                return json.dumps({"items": []})
+            if method == "GET" and path == "/repos/o/r/issues/66":
+                return json.dumps(
+                    {
+                        "title": "fix(auto-retro): review PR #20 repair loops",
+                        "body": retro_body,
+                    }
+                )
+            if method == "PATCH":
+                raise GitHubApiError(500, "PATCH", path, "boom")
+            return ""
+
+        monkeypatch.setattr(ar, "gh_api", fake_api)
+        calls: list[dict[str, Any]] = []
+        monkeypatch.setattr(ar, "upsert_single_file_pr", _recording_upsert(calls))
+        event = merged_event(
+            number=608,
+            title="fix(harness): patch",
+            body="Refs #66\n",
+            merged_at="2026-07-08T10:00:00Z",
+        )
+        assert ar.run(event, "o/r", ledger_token="tok") == 0
+        assert len(calls) == 1
+        content = calls[0]["content"].decode("utf-8")
+        assert "#608" in content
+        assert "| no |" in content

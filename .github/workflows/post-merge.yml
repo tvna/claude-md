@@ -61,8 +61,17 @@ jobs:
           python3 scripts/codebase_maturity_summary.py summary >> "$GITHUB_STEP_SUMMARY" \
             || echo "::warning::maturity summary render failed; continuing to open the retro"
 
+      # continue-on-error: opening the retro issue below is the load-bearing
+      # audit action (same principle as the maturity-summary step's `||`
+      # guard above) and must not be blocked by a secondary feature. A mint
+      # failure (rotated secret, App uninstalled, transient outage) leaves
+      # steps.app-token.outputs.token empty, so AUTO_RETRO_LEDGER_TOKEN below
+      # is empty too -- auto_retro.py's run() already treats an empty
+      # ledger_token as an inert no-op (see its docstring), so the retro
+      # step proceeds normally, just without a ledger row that one time.
       - name: Mint GitHub App token
         id: app-token
+        continue-on-error: true
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           app-id: ${{ secrets.DEVCONTAINER_PIN_APP_ID }}

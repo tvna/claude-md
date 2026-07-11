@@ -90,6 +90,13 @@ def orchestrator_recorder(
 
     def fake_api(method, path, body=None, **_kw):
         seen.append((method, path, body))
+        if method == "GET" and "/contents/" in path:
+            # Simulates the repair-free-merge-ledger file not existing yet
+            # (the common case in tests that don't care about the ledger
+            # feature): a 404, not an empty body, so
+            # auto_retro.fetch_repo_file's real 404-vs-unexpected-encoding
+            # distinction is exercised the same way live GitHub behaves.
+            raise GitHubApiError(404, "GET", path, "Not Found")
         if method == "GET" and path.startswith("/search/issues"):
             return json.dumps({"items": existing})
         if method == "GET" and "/pulls/" in path and "/comments" in path:

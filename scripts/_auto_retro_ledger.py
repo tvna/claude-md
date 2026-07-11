@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 LEDGER_TITLE = "# Repair-free merge rate ledger"
 
@@ -32,7 +32,7 @@ _ROWS_OPEN = "<!-- auto-retro-ledger:rows -->"
 _ROWS_CLOSE = "<!-- /auto-retro-ledger:rows -->"
 
 _ROW_RE = re.compile(
-    r"^\|\s*#(\d+)\s*\|\s*(\S+)\s*\|\s*(yes|no)\s*\|\s*(.*?)\s*\|\s*$",
+    r"^\|\s*#(\d+)\s*\|\s*(\S+)\s*\|\s*(yes|no)\s*\|\s*$",
     re.MULTILINE,
 )
 
@@ -46,7 +46,9 @@ WEEKLY_DISPLAY_WINDOW = 12
 
 # Moving-average width for the stop-rule signal (CLAUDE.md section 5:
 # "When the measured proportion of quality to volume degrades, stop and
-# re-plan").
+# re-plan"). compute_weekly_stats fills any merge-free calendar week with an
+# explicit zero-merge entry so this genuinely spans MOVING_AVERAGE_WINDOW
+# calendar weeks, not just the last N weeks that happened to have a merge.
 MOVING_AVERAGE_WINDOW = 4
 
 
@@ -57,9 +59,6 @@ class LedgerRow:
     pr_number: int
     merged_at: str
     repair_free: bool
-    # Reserved for #2417 (session/bot origin attribution); empty until that
-    # issue lands a producer for it.
-    origin: str = ""
 
 
 @dataclass(frozen=True)
@@ -67,17 +66,13 @@ class WeeklyStat:
     iso_week: str
     merges: int
     repair_free_count: int
-    rate: float  # percentage, 0.0-100.0
-    moving_avg: float | None  # percentage; None until MOVING_AVERAGE_WINDOW weeks observed
-
-
-def _escape_cell(text: str) -> str:
-    return text.replace("|", "\\|").replace("\n", " ").strip()
+    rate: float | None  # percentage, 0.0-100.0; None for a merge-free week
+    moving_avg: float | None  # percentage; None until MOVING_AVERAGE_WINDOW calendar weeks observed
 
 
 def render_row(row: LedgerRow) -> str:
     flag = "yes" if row.repair_free else "no"
-    return f"| #{row.pr_number} | {row.merged_at} | {flag} | {_escape_cell(row.origin)} |"
+    return f"| #{row.pr_number} | {row.merged_at} | {flag} |"
 
 
 def parse_rows(body: str) -> list[LedgerRow]:
@@ -93,13 +88,12 @@ def parse_rows(body: str) -> list[LedgerRow]:
     block = body[open_idx:close_idx]
     rows: list[LedgerRow] = []
     for match in _ROW_RE.finditer(block):
-        number_s, merged_at, flag, origin = match.groups()
+        number_s, merged_at, flag = match.groups()
         rows.append(
             LedgerRow(
                 pr_number=int(number_s),
                 merged_at=merged_at,
                 repair_free=(flag == "yes"),
-                origin=origin,
             )
         )
     return rows
@@ -132,9 +126,26 @@ def _iso_week(merged_at: str) -> str:
     return f"{year:04d}-W{week:02d}"
 
 
+def _iso_week_monday(iso_week: str) -> datetime:
+    """Return the Monday (00:00 UTC) of a ``GGGG-Www`` ISO week label."""
+    return datetime.strptime(f"{iso_week}-1", "%G-W%V-%u").replace(tzinfo=UTC)
+
+
+def _next_iso_week(iso_week: str) -> str:
+    """Return the ISO week label immediately following *iso_week*."""
+    year, week, _weekday = (_iso_week_monday(iso_week) + timedelta(weeks=1)).isocalendar()
+    return f"{year:04d}-W{week:02d}"
+
+
 def compute_weekly_stats(rows: list[LedgerRow]) -> list[WeeklyStat]:
     """Group *rows* by ISO week and compute the repair-free rate + moving avg.
 
+    Fills every merge-free calendar week between the first and last
+    observed week with an explicit zero-merge :class:`WeeklyStat` (``rate``
+    ``None``), so a merge-cadence gap cannot silently compress the "4-week
+    moving average" into an average of 4 *non-adjacent* weeks: it always
+    spans exactly :data:`MOVING_AVERAGE_WINDOW` consecutive calendar weeks,
+    skipping merge-free weeks (``rate is None``) when forming the average.
     Weeks are returned oldest-first so the moving average reads
     left-to-right over the full (unwindowed) history; :func:`render_weekly_table`
     windows only the *display*, so the moving average stays exact.
@@ -142,18 +153,30 @@ def compute_weekly_stats(rows: list[LedgerRow]) -> list[WeeklyStat]:
     by_week: dict[str, list[LedgerRow]] = {}
     for row in rows:
         by_week.setdefault(_iso_week(row.merged_at), []).append(row)
+    if not by_week:
+        return []
+
+    observed_weeks = sorted(by_week)
+    full_weeks = [observed_weeks[0]]
+    while full_weeks[-1] != observed_weeks[-1]:
+        full_weeks.append(_next_iso_week(full_weeks[-1]))
 
     stats: list[WeeklyStat] = []
-    rates: list[float] = []
-    for week in sorted(by_week):
-        week_rows = by_week[week]
+    window_rates: list[float | None] = []
+    for week in full_weeks:
+        week_rows = by_week.get(week, [])
         merges = len(week_rows)
-        repair_free_count = sum(1 for r in week_rows if r.repair_free)
-        rate = (repair_free_count / merges) * 100.0
-        rates.append(rate)
+        if merges:
+            repair_free_count = sum(1 for r in week_rows if r.repair_free)
+            rate: float | None = (repair_free_count / merges) * 100.0
+        else:
+            repair_free_count = 0
+            rate = None
+        window_rates.append(rate)
+        trailing = [r for r in window_rates[-MOVING_AVERAGE_WINDOW:] if r is not None]
         moving_avg = (
-            sum(rates[-MOVING_AVERAGE_WINDOW:]) / MOVING_AVERAGE_WINDOW
-            if len(rates) >= MOVING_AVERAGE_WINDOW
+            sum(trailing) / len(trailing)
+            if len(window_rates) >= MOVING_AVERAGE_WINDOW and trailing
             else None
         )
         stats.append(WeeklyStat(week, merges, repair_free_count, rate, moving_avg))
@@ -176,10 +199,11 @@ def render_weekly_table(
     lines.append("| ISO week | Merges | Repair-free | Rate | 4-week moving avg |")
     lines.append("|---|---|---|---|---|")
     for stat in windowed:
+        rate = f"{stat.rate:.1f}%" if stat.rate is not None else "n/a (no merges)"
         avg = f"{stat.moving_avg:.1f}%" if stat.moving_avg is not None else "n/a"
         lines.append(
             f"| {stat.iso_week} | {stat.merges} | {stat.repair_free_count} | "
-            f"{stat.rate:.1f}% | {avg} |"
+            f"{rate} | {avg} |"
         )
     return "\n".join(lines) + "\n"
 
@@ -191,7 +215,9 @@ _STOP_RULE = (
     "weeks, stop scaling and re-plan per CLAUDE.md section 5 (\"When the "
     "measured proportion of quality to volume degrades, stop and "
     "re-plan\") instead of adding more scale on top of a regressing "
-    "repair-free rate.\n"
+    "repair-free rate. The moving average spans 4 consecutive calendar "
+    "weeks (a merge-free week counts toward the span with no rate of its "
+    "own), not merely the last 4 weeks that happened to have a merge.\n"
 )
 
 
@@ -219,8 +245,8 @@ def render_ledger_markdown(rows: list[LedgerRow]) -> str:
         "## Per-merge history\n"
         "\n"
         f"{_ROWS_OPEN}\n"
-        "| PR | Merged at (UTC) | Repair-free | Origin |\n"
-        "|---|---|---|---|\n"
+        "| PR | Merged at (UTC) | Repair-free |\n"
+        "|---|---|---|\n"
         f"{rows_block}\n"
         f"{_ROWS_CLOSE}\n"
     )
