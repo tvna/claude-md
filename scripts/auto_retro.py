@@ -211,6 +211,7 @@ __all__ = [
     "_CHECK_RUN_DISPLAY_CAP",
     "_CHECK_RUN_FAIL_CONCLUSIONS",
     "_FP_TREND_WINDOW",
+    "_INTERIM_COFIRE_MARKER",
     "_MERGE_FROM_MAIN_PREFIXES",
     "_POLICY_ARTIFACT_MARKER",
     "_RECENT_RETRO_COUNT",
@@ -964,6 +965,16 @@ _DEFAULT_SENTINEL_DAYS: int = 14
 # is a soft ceiling rather than a correctness constraint.
 _SENTINEL_SEARCH_PAGE_SIZE: int = 50
 
+# Greppable marker for the interim co-fire skip reason (issue #2436). Both skip
+# paths that suppress a multi_commit_pr-alone would-be retro (the label-prior
+# gate and the downstream exempt-rows gate) embed this exact substring in
+# their recorded reason, so the Phase 2 measurement can count the whole
+# lone-signal population with a single grep instead of missing the cases the
+# prior gate catches first. Interim, pending the Phase 2 signal redesign.
+_INTERIM_COFIRE_MARKER: str = (
+    "interim co-fire gate (refs #2436): multi_commit_pr"
+)
+
 
 def find_existing_back_link_id(
     repo: str, pr_number: int, marker: str = _BACK_LINK_MARKER
@@ -1432,6 +1443,15 @@ def run(event: dict[str, Any], repo: str) -> int:
     )
     prior_skip, prior_reason = should_skip_by_prior(signals, prior)
     if prior_skip:
+        # The prior gate sits ahead of the interim co-fire branch below, so a
+        # multi_commit_pr-alone PR whose lone signal has a high historical FP
+        # rate skips here first. Tag the same greppable co-fire marker (#2436)
+        # onto the prior reason for that single-signal case so the Phase 2
+        # measurement of multi_commit_pr-alone suppressions is complete rather
+        # than split between two skip paths. Behavior is unchanged; only the
+        # recorded reason gains the marker. Refs #2463 review.
+        if fired == frozenset({"multi_commit_pr"}):
+            prior_reason = f"{prior_reason} [{_INTERIM_COFIRE_MARKER}]"
         print(f"skip: {prior_reason}")
         _append_summary(_build_summary(pr, "skip", prior_reason))
         _post_skip_comment_soft(repo, pr.number, prior_reason)
@@ -1487,8 +1507,8 @@ def run(event: dict[str, Any], repo: str) -> int:
         # signal redesign.
         if fired == frozenset({"multi_commit_pr"}):
             msg = (
-                "interim co-fire gate (refs #2436): multi_commit_pr fired "
-                f"alone with no actionable repair row ({signal_summary})"
+                f"{_INTERIM_COFIRE_MARKER} fired alone with no actionable "
+                f"repair row ({signal_summary})"
             )
         elif repair_rows:
             msg = f"only policy-artifact repair rows generated ({signal_summary})"
