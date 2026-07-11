@@ -50,6 +50,15 @@ and the scoped `[rollout].area_addition_exception` entry in
 `.github/label-policy.toml`. No other area label is affected; the remaining
 #972 area batch stays deferred.
 
+For the labels shared by both files, `.github/label-policy.toml` `[[labels]]`
+is the single authored source of truth for label identity (name, description,
+color); `.github/labels.json` must match it. `scripts/scan_label_sot_drift.py`
+is the deterministic gate that enforces this parity and fails on any drift
+(Refs #2442, Phase A). The `retro:*` labels and `type:retrospective` are
+exempt because they are sourced from `scripts/_retro_labels.py`, not the TOML;
+the 11 `area:*` labels declared only in `[[labels]]` are not yet in the live
+catalog and are validated only in the labels.json-to-policy direction.
+
 ## Final Label Families
 
 Every final label belongs to exactly one declared family.
