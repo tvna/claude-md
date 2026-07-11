@@ -2359,7 +2359,12 @@ def _cmd_post_merge_rescan(args: argparse.Namespace) -> int:
         if args.hours is not None
         else os.environ.get("AUTO_RETRO_RESCAN_HOURS")
     )
-    if hours_raw is None:
+    # On a schedule trigger the workflow env AUTO_RETRO_RESCAN_HOURS is set
+    # from ${{ inputs.hours }}, which expands to '' (present but empty). Treat
+    # empty / whitespace-only the same as unset so the default applies instead
+    # of crashing on int(''). An explicitly invalid non-empty value still
+    # fails loud below. Refs #2448.
+    if hours_raw is None or (isinstance(hours_raw, str) and not hours_raw.strip()):
         hours = _DEFAULT_RESCAN_HOURS
     else:
         try:
@@ -2395,7 +2400,12 @@ def _cmd_sentinel(args: argparse.Namespace) -> int:
         if args.days is not None
         else os.environ.get("AUTO_RETRO_SENTINEL_DAYS")
     )
-    if days_raw is None:
+    # On a schedule trigger the workflow env AUTO_RETRO_SENTINEL_DAYS is set
+    # from ${{ inputs.days }}, which expands to '' (present but empty). Treat
+    # empty / whitespace-only the same as unset so the default applies instead
+    # of crashing on int(''). An explicitly invalid non-empty value still
+    # fails loud below. Refs #2448.
+    if days_raw is None or (isinstance(days_raw, str) and not days_raw.strip()):
         days = _DEFAULT_SENTINEL_DAYS
     else:
         try:

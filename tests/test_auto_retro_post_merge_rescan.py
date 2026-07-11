@@ -628,6 +628,28 @@ class TestPostMergeRescanCli:
         assert ar.main(["post-merge-rescan"]) == 0
         assert captured["hours"] == 72
 
+    @pytest.mark.parametrize("empty", ["", "   "])
+    def test_cli_empty_hours_env_uses_default(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        empty: str,
+    ) -> None:
+        """Regression #2448: a schedule trigger sets
+        AUTO_RETRO_RESCAN_HOURS from ${{ inputs.hours }}, which expands to
+        '' (present but empty). Empty/whitespace must fall back to the
+        default instead of crashing on int('')."""
+        monkeypatch.setenv("REPO", "o/r")
+        monkeypatch.setenv("AUTO_RETRO_RESCAN_HOURS", empty)
+        captured: dict[str, Any] = {}
+
+        def fake_run(repo: str, now_iso: str, hours: int) -> int:
+            captured["hours"] = hours
+            return 0
+
+        monkeypatch.setattr(ar, "post_merge_rescan_run", fake_run)
+        assert ar.main(["post-merge-rescan"]) == 0
+        assert captured["hours"] == ar._DEFAULT_RESCAN_HOURS
+
 
 # ---------------------------------------------------------------------------
 # Workflow file contract

@@ -4839,6 +4839,28 @@ class TestSentinelCli:
         assert ar.main(["sentinel"]) == 0
         assert captured["days"] == ar._DEFAULT_SENTINEL_DAYS
 
+    @pytest.mark.parametrize("empty", ["", "   "])
+    def test_cli_empty_days_env_uses_default(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        empty: str,
+    ) -> None:
+        """Regression #2448: a schedule trigger sets
+        AUTO_RETRO_SENTINEL_DAYS from ${{ inputs.days }}, which expands to
+        '' (present but empty). Empty/whitespace must fall back to the
+        default instead of crashing on int('')."""
+        monkeypatch.setenv("REPO", "o/r")
+        monkeypatch.setenv("AUTO_RETRO_SENTINEL_DAYS", empty)
+        captured: dict[str, Any] = {}
+
+        def fake_run(repo: str, now_iso: str, days: int) -> int:
+            captured["days"] = days
+            return 0
+
+        monkeypatch.setattr(ar, "sentinel_run", fake_run)
+        assert ar.main(["sentinel"]) == 0
+        assert captured["days"] == ar._DEFAULT_SENTINEL_DAYS
+
 
 def test_sentinel_workflow_file_exists_and_runs_sentinel_subcommand() -> None:
     """The schedule workflow that backs sentinel_run must exist and
