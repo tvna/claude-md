@@ -333,6 +333,81 @@ flowchart TD
     N002 --> N003
 ```
 
+## fetch_repo_file(...)
+
+```mermaid
+flowchart TD
+    N001["fetch_repo_file(...)"]
+    N002["try"]
+    N003["raw = gh_api(...)"]
+    N004["except GitHubApiError"]
+    N005["if exc.code == 404"]
+    N006["return None"]
+    N007["raise"]
+    N008["data = json.loads(raw) if raw.strip() else {}"]
+    N009["encoding = get(...)"]
+    N010["content = get(...)"]
+    N011["if encoding != 'base64' or not isinstance(content, str)"]
+    N012["raise RuntimeError(f'<str>{encoding!r}<str>{path}<str>{ref}<str>')"]
+    N013["return base64.b64decode(content)"]
+    N001 -->|"start"| N002
+    N002 -->|"try"| N003
+    N002 -->|"raises"| N004
+    N004 --> N005
+    N005 -->|"true"| N006
+    N005 -->|"false"| N007
+    N003 --> N008
+    N008 --> N009
+    N009 --> N010
+    N010 --> N011
+    N011 -->|"true"| N012
+    N011 -->|"false"| N013
+```
+
+## record_repair_free_merge(...)
+
+```mermaid
+flowchart TD
+    N001["record_repair_free_merge(...)"]
+    N002["new_row = LedgerRow(...)"]
+    N003["last_exc = None"]
+    N004["for _attempt in range(1, _LEDGER_UPSERT_MAX_ATTEMPTS + 1):     existing = fetch_repo_file(repo, str(_LEDGER_DOC_PATH), _LEDGER_PR_BRANCH)     if existing is None:         existing = fetch_repo_file(repo, str(_LEDGER_DOC_PATH), ledger_base)     new_content, changed = _ledger.upsert_ledger_markdown(existing, new_row)     if not changed:         return f'<str>{pr.number}<str>'     try:         return upsert_single_file_pr(repo=repo, path=str(_LEDGER_DOC_PATH), content=new_content, base=ledger_base, branch=_LEDGER_PR_BRANCH, title=_LEDGER_PR_TITLE, body=_LEDGER_PR_BODY, commit_subject=_LEDGER_PR_TITLE, commit_body=_LEDGER_COMMIT_TRAILER, token=ledger_token, recreate=False)     except (GitHubApiError, RuntimeError) as exc:         last_exc = exc         continue"]
+    N005["if last_exc is None"]
+    N006["raise RuntimeError('<str>')"]
+    N007["raise last_exc"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+    N005 -->|"true"| N006
+    N005 -->|"false"| N007
+```
+
+## _record_ledger_row_soft(...)
+
+```mermaid
+flowchart TD
+    N001["_record_ledger_row_soft(...)"]
+    N002["if not ledger_token"]
+    N003["return"]
+    N004["try"]
+    N005["detail = record_repair_free_merge(...)"]
+    N006["except (GitHubApiError, RuntimeError, ValueError)"]
+    N007["print(...)"]
+    N008["return"]
+    N009["print(...)"]
+    N010["end"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+    N004 -->|"try"| N005
+    N004 -->|"raises"| N006
+    N006 --> N007
+    N007 --> N008
+    N005 --> N009
+    N009 --> N010
+```
+
 ## append_repair_history_row(...)
 
 ```mermaid
@@ -634,262 +709,278 @@ flowchart TD
 flowchart TD
     N001["run(...)"]
     N002["pr = parse_event(...)"]
-    N003["if not pr.merged"]
-    N004["msg = f'<str>{pr.number}<str>'"]
-    N005["print(...)"]
-    N006["_append_summary(...)"]
-    N007["return 0"]
-    N008["(skip, reason) = should_skip(...)"]
-    N009["if skip"]
-    N010["print(...)"]
-    N011["_append_summary(...)"]
-    N012["return 0"]
-    N013["existing_items = search_retro_issues(...)"]
-    N014["existing = find_existing_retro(...)"]
-    N015["if existing is not None"]
-    N016["msg = f'<str>{existing}<str>{pr.number}'"]
-    N017["print(...)"]
-    N018["_append_summary(...)"]
-    N019["return 0"]
-    N020["if pr.title.lstrip().lower().startswith('fix(')"]
-    N021["body_without_comments = strip_html_comments(...)"]
-    N022["candidate_refs = extract_refs(...)"]
-    N023["if candidate_refs"]
-    N024["try"]
-    N025["titles = fetch_issue_titles(...)"]
-    N026["except GitHubApiError"]
-    N027["print(...)"]
-    N028["titles = {}"]
-    N029["target = find_target_retro_from_refs(...)"]
-    N030["if target is not None"]
-    N031["try"]
-    N032["(changed, detail) = append_repair_history_row(...)"]
-    N033["except GitHubApiError"]
-    N034["print(...)"]
-    N035["_append_summary(...)"]
-    N036["return 0"]
-    N037["action = '<str>' if changed else '<str>'"]
-    N038["print(...)"]
-    N039["_append_summary(...)"]
-    N040["return 0"]
-    N041["try"]
-    N042["has_inline_comments = has_review_comments(...)"]
-    N043["except GitHubApiError"]
-    N044["print(...)"]
-    N045["has_inline_comments = True"]
-    N046["commit_subjects = None"]
-    N047["if pr.commits > 1"]
-    N048["try"]
-    N049["commit_subjects = fetch_pr_commits(...)"]
-    N050["except GitHubApiError"]
-    N051["print(...)"]
-    N052["commit_subjects = None"]
-    N053["signals = compute_repair_signals(...)"]
-    N054["signal_summary = render_repair_signals(...)"]
-    N055["fired = frozenset(...)"]
-    N056["if not any(signals.values())"]
-    N057["msg = f'<str>{signal_summary}<str>'"]
-    N058["print(...)"]
-    N059["_append_summary(...)"]
-    N060["_post_skip_comment_soft(...)"]
-    N061["return 0"]
-    N062["past_retros = fetch_past_retro_labels(...)"]
-    N063["prior = compute_prior_from_labels(...)"]
-    N064["(prior_skip, prior_reason) = should_skip_by_prior(...)"]
-    N065["if prior_skip"]
-    N066["if fired == frozenset({'multi_commit_pr'})"]
-    N067["prior_reason = f'{prior_reason}<str>{_INTERIM_COFIRE_MARKER}<str>'"]
-    N068["print(...)"]
-    N069["_append_summary(...)"]
-    N070["_post_skip_comment_soft(...)"]
-    N071["return 0"]
-    N072["tentative = is_tentative_by_prior(...)"]
-    N073["if commit_subjects is None"]
-    N074["commit_subjects = fetch_pr_commits(...)"]
-    N075["check_runs_unknown = False"]
-    N076["try"]
-    N077["check_runs = fetch_check_runs(...)"]
-    N078["except GitHubApiError"]
-    N079["print(...)"]
-    N080["check_runs = []"]
-    N081["check_runs_unknown = True"]
-    N082["verification_pairs = extract_verification_pairs(...)"]
-    N083["pr_type = (extract_type_scope(pr.title) or '<str>').split('<str>', 1)[0]"]
-    N084["repair_rows = _repair_history_rows(...)"]
-    N085["if not check_runs_unknown and (not repair_rows or (not has_inline_comments and _has_only_exempt_policy_artifact_rows(repair_rows)))"]
-    N086["if fired == frozenset({'multi_commit_pr'})"]
-    N087["msg = f'{_INTERIM_COFIRE_MARKER}<str>{signal_summary}<str>'"]
-    N088["if repair_rows"]
-    N089["msg = f'<str>{signal_summary}<str>'"]
-    N090["msg = f'<str>{signal_summary}<str>'"]
-    N091["print(...)"]
-    N092["_append_summary(...)"]
-    N093["_post_skip_comment_soft(...)"]
-    N094["return 0"]
-    N095["title = build_retro_title(...)"]
-    N096["body = build_retro_body(...)"]
-    N097["inherited_layers = tuple(...)"]
-    N098["labels = issue_labels(...)"]
-    N099["_terminal_labels(...)"]
-    N100["created = create_issue(...)"]
-    N101["new_number = get(...)"]
-    N102["new_url = created.get('<str>') or '<str>'"]
-    N103["back_link_status = '<str>'"]
-    N104["terminal_label_status = '<str>'"]
-    N105["if isinstance(new_number, int)"]
-    N106["if not _pr_comments_enabled()"]
-    N107["back_link_status = '<str>'"]
-    N108["try"]
-    N109["back_link_status = post_back_link_comment(...)"]
-    N110["except GitHubApiError"]
-    N111["print(...)"]
-    N112["back_link_status = '<str>'"]
-    N113["try"]
-    N114["apply_terminal_label(...)"]
-    N115["terminal_label_status = '<str>'"]
-    N116["except GitHubApiError"]
-    N117["print(...)"]
-    N118["terminal_label_status = '<str>'"]
-    N119["msg = f'<str>{new_number}<str>{new_url}<str>{back_link_status}<str>{terminal_label_status}'"]
-    N120["print(...)"]
-    N121["_append_summary(...)"]
-    N122["return 0"]
+    N003["def _record_ledger(repair_free: bool) -> None:     _record_ledger_row_soft(repo, pr, repair_free, ledger_token, ledger_base)"]
+    N004["if not pr.merged"]
+    N005["msg = f'<str>{pr.number}<str>'"]
+    N006["print(...)"]
+    N007["_append_summary(...)"]
+    N008["return 0"]
+    N009["(skip, reason) = should_skip(...)"]
+    N010["if skip"]
+    N011["print(...)"]
+    N012["_append_summary(...)"]
+    N013["return 0"]
+    N014["existing_items = search_retro_issues(...)"]
+    N015["existing = find_existing_retro(...)"]
+    N016["if existing is not None"]
+    N017["msg = f'<str>{existing}<str>{pr.number}'"]
+    N018["print(...)"]
+    N019["_append_summary(...)"]
+    N020["_record_ledger(...)"]
+    N021["return 0"]
+    N022["if pr.title.lstrip().lower().startswith('fix(')"]
+    N023["body_without_comments = strip_html_comments(...)"]
+    N024["candidate_refs = extract_refs(...)"]
+    N025["if candidate_refs"]
+    N026["try"]
+    N027["titles = fetch_issue_titles(...)"]
+    N028["except GitHubApiError"]
+    N029["print(...)"]
+    N030["titles = {}"]
+    N031["target = find_target_retro_from_refs(...)"]
+    N032["if target is not None"]
+    N033["try"]
+    N034["(changed, detail) = append_repair_history_row(...)"]
+    N035["except GitHubApiError"]
+    N036["print(...)"]
+    N037["_append_summary(...)"]
+    N038["_record_ledger(...)"]
+    N039["return 0"]
+    N040["action = '<str>' if changed else '<str>'"]
+    N041["print(...)"]
+    N042["_append_summary(...)"]
+    N043["_record_ledger(...)"]
+    N044["return 0"]
+    N045["try"]
+    N046["has_inline_comments = has_review_comments(...)"]
+    N047["except GitHubApiError"]
+    N048["print(...)"]
+    N049["has_inline_comments = True"]
+    N050["commit_subjects = None"]
+    N051["if pr.commits > 1"]
+    N052["try"]
+    N053["commit_subjects = fetch_pr_commits(...)"]
+    N054["except GitHubApiError"]
+    N055["print(...)"]
+    N056["commit_subjects = None"]
+    N057["signals = compute_repair_signals(...)"]
+    N058["signal_summary = render_repair_signals(...)"]
+    N059["fired = frozenset(...)"]
+    N060["if not any(signals.values())"]
+    N061["msg = f'<str>{signal_summary}<str>'"]
+    N062["print(...)"]
+    N063["_append_summary(...)"]
+    N064["_post_skip_comment_soft(...)"]
+    N065["_record_ledger(...)"]
+    N066["return 0"]
+    N067["past_retros = fetch_past_retro_labels(...)"]
+    N068["prior = compute_prior_from_labels(...)"]
+    N069["(prior_skip, prior_reason) = should_skip_by_prior(...)"]
+    N070["if prior_skip"]
+    N071["if fired == frozenset({'multi_commit_pr'})"]
+    N072["prior_reason = f'{prior_reason}<str>{_INTERIM_COFIRE_MARKER}<str>'"]
+    N073["print(...)"]
+    N074["_append_summary(...)"]
+    N075["_post_skip_comment_soft(...)"]
+    N076["_record_ledger(...)"]
+    N077["return 0"]
+    N078["tentative = is_tentative_by_prior(...)"]
+    N079["if commit_subjects is None"]
+    N080["commit_subjects = fetch_pr_commits(...)"]
+    N081["check_runs_unknown = False"]
+    N082["try"]
+    N083["check_runs = fetch_check_runs(...)"]
+    N084["except GitHubApiError"]
+    N085["print(...)"]
+    N086["check_runs = []"]
+    N087["check_runs_unknown = True"]
+    N088["verification_pairs = extract_verification_pairs(...)"]
+    N089["pr_type = (extract_type_scope(pr.title) or '<str>').split('<str>', 1)[0]"]
+    N090["repair_rows = _repair_history_rows(...)"]
+    N091["if not check_runs_unknown and (not repair_rows or (not has_inline_comments and _has_only_exempt_policy_artifact_rows(repair_rows)))"]
+    N092["if fired == frozenset({'multi_commit_pr'})"]
+    N093["msg = f'{_INTERIM_COFIRE_MARKER}<str>{signal_summary}<str>'"]
+    N094["if repair_rows"]
+    N095["msg = f'<str>{signal_summary}<str>'"]
+    N096["msg = f'<str>{signal_summary}<str>'"]
+    N097["print(...)"]
+    N098["_append_summary(...)"]
+    N099["_post_skip_comment_soft(...)"]
+    N100["_record_ledger(...)"]
+    N101["return 0"]
+    N102["title = build_retro_title(...)"]
+    N103["body = build_retro_body(...)"]
+    N104["inherited_layers = tuple(...)"]
+    N105["labels = issue_labels(...)"]
+    N106["_terminal_labels(...)"]
+    N107["created = create_issue(...)"]
+    N108["new_number = get(...)"]
+    N109["new_url = created.get('<str>') or '<str>'"]
+    N110["back_link_status = '<str>'"]
+    N111["terminal_label_status = '<str>'"]
+    N112["if isinstance(new_number, int)"]
+    N113["if not _pr_comments_enabled()"]
+    N114["back_link_status = '<str>'"]
+    N115["try"]
+    N116["back_link_status = post_back_link_comment(...)"]
+    N117["except GitHubApiError"]
+    N118["print(...)"]
+    N119["back_link_status = '<str>'"]
+    N120["try"]
+    N121["apply_terminal_label(...)"]
+    N122["terminal_label_status = '<str>'"]
+    N123["except GitHubApiError"]
+    N124["print(...)"]
+    N125["terminal_label_status = '<str>'"]
+    N126["msg = f'<str>{new_number}<str>{new_url}<str>{back_link_status}<str>{terminal_label_status}'"]
+    N127["print(...)"]
+    N128["_append_summary(...)"]
+    N129["_record_ledger(...)"]
+    N130["return 0"]
     N001 -->|"start"| N002
     N002 --> N003
-    N003 -->|"true"| N004
-    N004 --> N005
+    N003 --> N004
+    N004 -->|"true"| N005
     N005 --> N006
     N006 --> N007
-    N003 -->|"false"| N008
-    N008 --> N009
-    N009 -->|"true"| N010
-    N010 --> N011
+    N007 --> N008
+    N004 -->|"false"| N009
+    N009 --> N010
+    N010 -->|"true"| N011
     N011 --> N012
-    N009 -->|"false"| N013
-    N013 --> N014
+    N012 --> N013
+    N010 -->|"false"| N014
     N014 --> N015
-    N015 -->|"true"| N016
-    N016 --> N017
+    N015 --> N016
+    N016 -->|"true"| N017
     N017 --> N018
     N018 --> N019
-    N015 -->|"false"| N020
-    N020 -->|"true"| N021
-    N021 --> N022
-    N022 --> N023
-    N023 -->|"true"| N024
-    N024 -->|"try"| N025
-    N024 -->|"raises"| N026
-    N026 --> N027
-    N027 --> N028
-    N025 --> N029
+    N019 --> N020
+    N020 --> N021
+    N016 -->|"false"| N022
+    N022 -->|"true"| N023
+    N023 --> N024
+    N024 --> N025
+    N025 -->|"true"| N026
+    N026 -->|"try"| N027
+    N026 -->|"raises"| N028
     N028 --> N029
     N029 --> N030
-    N030 -->|"true"| N031
-    N031 -->|"try"| N032
-    N031 -->|"raises"| N033
-    N033 --> N034
-    N034 --> N035
+    N027 --> N031
+    N030 --> N031
+    N031 --> N032
+    N032 -->|"true"| N033
+    N033 -->|"try"| N034
+    N033 -->|"raises"| N035
     N035 --> N036
-    N032 --> N037
+    N036 --> N037
     N037 --> N038
     N038 --> N039
-    N039 --> N040
-    N030 -->|"false"| N041
-    N023 -->|"false"| N041
-    N020 -->|"false"| N041
-    N041 -->|"try"| N042
-    N041 -->|"raises"| N043
+    N034 --> N040
+    N040 --> N041
+    N041 --> N042
+    N042 --> N043
     N043 --> N044
-    N044 --> N045
-    N042 --> N046
-    N045 --> N046
-    N046 --> N047
-    N047 -->|"true"| N048
-    N048 -->|"try"| N049
-    N048 -->|"raises"| N050
+    N032 -->|"false"| N045
+    N025 -->|"false"| N045
+    N022 -->|"false"| N045
+    N045 -->|"try"| N046
+    N045 -->|"raises"| N047
+    N047 --> N048
+    N048 --> N049
+    N046 --> N050
+    N049 --> N050
     N050 --> N051
-    N051 --> N052
-    N049 --> N053
-    N052 --> N053
-    N047 -->|"false"| N053
-    N053 --> N054
+    N051 -->|"true"| N052
+    N052 -->|"try"| N053
+    N052 -->|"raises"| N054
     N054 --> N055
     N055 --> N056
-    N056 -->|"true"| N057
+    N053 --> N057
+    N056 --> N057
+    N051 -->|"false"| N057
     N057 --> N058
     N058 --> N059
     N059 --> N060
-    N060 --> N061
-    N056 -->|"false"| N062
+    N060 -->|"true"| N061
+    N061 --> N062
     N062 --> N063
     N063 --> N064
     N064 --> N065
-    N065 -->|"true"| N066
-    N066 -->|"true"| N067
+    N065 --> N066
+    N060 -->|"false"| N067
     N067 --> N068
-    N066 -->|"false"| N068
     N068 --> N069
     N069 --> N070
-    N070 --> N071
-    N065 -->|"false"| N072
+    N070 -->|"true"| N071
+    N071 -->|"true"| N072
     N072 --> N073
-    N073 -->|"true"| N074
+    N071 -->|"false"| N073
+    N073 --> N074
     N074 --> N075
-    N073 -->|"false"| N075
     N075 --> N076
-    N076 -->|"try"| N077
-    N076 -->|"raises"| N078
+    N076 --> N077
+    N070 -->|"false"| N078
     N078 --> N079
-    N079 --> N080
+    N079 -->|"true"| N080
     N080 --> N081
-    N077 --> N082
+    N079 -->|"false"| N081
     N081 --> N082
-    N082 --> N083
-    N083 --> N084
+    N082 -->|"try"| N083
+    N082 -->|"raises"| N084
     N084 --> N085
-    N085 -->|"true"| N086
-    N086 -->|"true"| N087
-    N086 -->|"false"| N088
-    N088 -->|"true"| N089
-    N088 -->|"false"| N090
-    N087 --> N091
-    N089 --> N091
+    N085 --> N086
+    N086 --> N087
+    N083 --> N088
+    N087 --> N088
+    N088 --> N089
+    N089 --> N090
     N090 --> N091
-    N091 --> N092
-    N092 --> N093
-    N093 --> N094
-    N085 -->|"false"| N095
-    N095 --> N096
+    N091 -->|"true"| N092
+    N092 -->|"true"| N093
+    N092 -->|"false"| N094
+    N094 -->|"true"| N095
+    N094 -->|"false"| N096
+    N093 --> N097
+    N095 --> N097
     N096 --> N097
     N097 --> N098
     N098 --> N099
     N099 --> N100
     N100 --> N101
-    N101 --> N102
+    N091 -->|"false"| N102
     N102 --> N103
     N103 --> N104
     N104 --> N105
-    N105 -->|"true"| N106
-    N106 -->|"true"| N107
-    N106 -->|"false"| N108
-    N108 -->|"try"| N109
-    N108 -->|"raises"| N110
+    N105 --> N106
+    N106 --> N107
+    N107 --> N108
+    N108 --> N109
+    N109 --> N110
     N110 --> N111
     N111 --> N112
-    N107 --> N113
-    N109 --> N113
-    N112 --> N113
-    N113 -->|"try"| N114
-    N114 --> N115
-    N113 -->|"raises"| N116
-    N116 --> N117
+    N112 -->|"true"| N113
+    N113 -->|"true"| N114
+    N113 -->|"false"| N115
+    N115 -->|"try"| N116
+    N115 -->|"raises"| N117
     N117 --> N118
-    N115 --> N119
     N118 --> N119
-    N105 -->|"false"| N119
+    N114 --> N120
+    N116 --> N120
     N119 --> N120
-    N120 --> N121
+    N120 -->|"try"| N121
     N121 --> N122
+    N120 -->|"raises"| N123
+    N123 --> N124
+    N124 --> N125
+    N122 --> N126
+    N125 --> N126
+    N112 -->|"false"| N126
+    N126 --> N127
+    N127 --> N128
+    N128 --> N129
+    N129 --> N130
 ```
 
 ## _now_utc_iso(...)
@@ -1213,7 +1304,9 @@ flowchart TD
     N012["except (OSError, json.JSONDecodeError)"]
     N013["print(...)"]
     N014["return 1"]
-    N015["return run(event, repo)"]
+    N015["ledger_token = get(...)"]
+    N016["ledger_base = os.environ.get('<str>') or '<str>'"]
+    N017["return run(event, repo, ledger_token=ledger_token, ledger_base=ledger_base)"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -1228,6 +1321,8 @@ flowchart TD
     N012 --> N013
     N013 --> N014
     N011 --> N015
+    N015 --> N016
+    N016 --> N017
 ```
 
 ## _cmd_decision_tree(...)
