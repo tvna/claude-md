@@ -27,6 +27,7 @@ from _retro_labels import (
     PRIOR_MIN_SAMPLE_SIZE,
     PRIOR_SKIP_THRESHOLD,
     PRIOR_TENTATIVE_THRESHOLD,
+    RETRO_EXPIRED,
     RETRO_FP,
     RETRO_FP_CANDIDATE,
     RETRO_TENTATIVE,
@@ -120,12 +121,17 @@ def compute_prior_from_labels(
 
 # Triage labels in the fixed display order used by the triage report.
 # Mirrors the universe in :data:`ALL_RETRO_LABELS` but is ordered so the
-# rendered pie/table is byte-stable across runs. Refs #1042.
+# rendered pie/table is byte-stable across runs. Refs #1042. RETRO_EXPIRED
+# is last: it is a weak, unconfirmed signal (the sentinel closed the retro
+# without operator engagement), so an operator-set retro:tp/fp/fp-candidate/
+# tentative label always wins the display priority over it. Refs #2433,
+# #2439 review.
 _TRIAGE_LABELS: tuple[str, ...] = (
     RETRO_TP,
     RETRO_FP,
     RETRO_FP_CANDIDATE,
     RETRO_TENTATIVE,
+    RETRO_EXPIRED,
 )
 _UNLABELLED_KEY: str = "unlabelled"
 

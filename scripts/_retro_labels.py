@@ -49,7 +49,7 @@ RETRO_TENTATIVE: Final[str] = "retro:tentative"
 RETRO_EXPIRED: Final[str] = "retro:expired"
 
 ALL_RETRO_LABELS: Final[frozenset[str]] = frozenset(
-    {RETRO_TP, RETRO_FP, RETRO_FP_CANDIDATE, RETRO_TENTATIVE}
+    {RETRO_TP, RETRO_FP, RETRO_FP_CANDIDATE, RETRO_TENTATIVE, RETRO_EXPIRED}
 )
 
 # Thresholds for the label-derived prior consumed by

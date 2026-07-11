@@ -18,6 +18,7 @@ import scan_retro_followup_drift as srfd
 from _github_api import GitHubApiError
 from _retro_labels import (
     ALL_RETRO_LABELS,
+    RETRO_EXPIRED,
     RETRO_FP,
     RETRO_FP_CANDIDATE,
     RETRO_TENTATIVE,
@@ -32,12 +33,18 @@ pytestmark = pytest.mark.shard_ci_ops_2
 
 
 class TestLabelSoT:
-    def test_four_labels_present(self) -> None:
+    def test_five_labels_present(self) -> None:
+        # RETRO_EXPIRED (#2433) joined the set as of #2439: it is not a
+        # drift-scanner consumer label (this module never reads it), but
+        # ALL_RETRO_LABELS is the shared "any retro classification label"
+        # universe the triage report uses to distinguish a sentinel-closed
+        # retro from one that was never labelled at all.
         assert {
             RETRO_TP,
             RETRO_FP,
             RETRO_FP_CANDIDATE,
             RETRO_TENTATIVE,
+            RETRO_EXPIRED,
         } == ALL_RETRO_LABELS
 
     def test_label_strings_are_namespaced(self) -> None:

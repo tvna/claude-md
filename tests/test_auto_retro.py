@@ -5142,6 +5142,63 @@ class TestComputePriorFromLabels:
         gated = ar.compute_prior_from_labels(past, epoch_min_number=1228)
         assert gated["multi_commit_pr"] == (0.0, 1)
 
+    def test_expired_label_does_not_affect_fp_rate(self) -> None:
+        """retro:expired is a weak signal only: it must never be counted
+        as a false positive by compute_prior_from_labels (which keys on
+        RETRO_FP alone), even though it is now part of ALL_RETRO_LABELS
+        for triage-report display purposes. Refs #2433, #2439 review."""
+        past = [
+            ar.PastRetro(
+                number=1,
+                signals=frozenset({"multi_commit_pr"}),
+                labels=frozenset({rl.RETRO_EXPIRED}),
+            )
+        ]
+        prior = ar.compute_prior_from_labels(past)
+        assert prior["multi_commit_pr"] == (0.0, 1)
+
+
+class TestRetroExpiredTriageWiring:
+    """RETRO_EXPIRED must be visible to the triage report so a
+    sentinel-closed retro is distinguishable from evidence that was
+    never labelled at all. Refs #2433, #2439 review."""
+
+    def test_expired_only_retro_is_not_counted_as_unlabelled(self) -> None:
+        past = [
+            ar.PastRetro(
+                number=1,
+                signals=frozenset({"multi_commit_pr"}),
+                labels=frozenset({rl.RETRO_EXPIRED}),
+            )
+        ]
+        report = ar.compute_triage_report(past)
+        assert report.label_counts[rl.RETRO_EXPIRED] == 1
+        assert report.label_counts["unlabelled"] == 0
+
+    def test_truly_unlabelled_retro_still_counts_as_unlabelled(self) -> None:
+        past = [
+            ar.PastRetro(
+                number=1,
+                signals=frozenset({"multi_commit_pr"}),
+                labels=frozenset(),
+            )
+        ]
+        report = ar.compute_triage_report(past)
+        assert report.label_counts[rl.RETRO_EXPIRED] == 0
+        assert report.label_counts["unlabelled"] == 1
+
+    def test_retro_status_reports_expired(self) -> None:
+        assert ar._retro_status(frozenset({rl.RETRO_EXPIRED})) == rl.RETRO_EXPIRED
+
+    def test_retro_status_prefers_operator_label_over_expired(self) -> None:
+        # A retro the sentinel closed but an operator later triaged must
+        # display the stronger, operator-set status, not the weak
+        # sentinel signal.
+        assert (
+            ar._retro_status(frozenset({rl.RETRO_EXPIRED, rl.RETRO_TP}))
+            == rl.RETRO_TP
+        )
+
 
 class TestShouldSkipByPrior:
     """Skip-band verdict over the active signal set."""
