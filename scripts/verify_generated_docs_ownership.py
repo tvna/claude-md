@@ -106,6 +106,10 @@ OWNERSHIP: tuple[OwnedSurface, ...] = (
     # chore/refresh-auto-retro-triage-report; registered so the decision-tree
     # sweep never touches the sibling job's artifact.
     OwnedSurface(pattern="scripts/auto-retro-triage-report.md", producer="scripts/auto_retro.py"),
+    # Repair-free merge rate ledger (#2415): appended to by run() via its own
+    # bot branch chore/refresh-repair-free-merge-ledger, same non-deterministic
+    # -snapshot treatment as the triage report above.
+    OwnedSurface(pattern="scripts/repair-free-merge-ledger.md", producer="scripts/auto_retro.py"),
     # One if-branch diagram per workflow; the producer prunes inside
     # workflows/ itself on a full regeneration (#1771).
     OwnedSurface(pattern="workflows/*-if-branches.md", producer="scripts/workflow_diagram.py"),

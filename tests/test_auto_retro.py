@@ -10,16 +10,20 @@ is monkeypatched. Refs #234.
 
 from __future__ import annotations
 
+import base64
 import json
 from collections.abc import Mapping
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, ClassVar
 
+import _auto_retro_ledger as ledger
 import _retro_labels as rl
 import auto_retro as ar
 import body_policy as bp
 import pytest
 from _github_api import GitHubApiError
+from auto_retro_test_helpers import merged_event, orchestrator_recorder
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -2244,7 +2248,7 @@ def test_main_maps_runtime_error_to_error_exit(
     event_file = tmp_path / "event.json"
     event_file.write_text(json.dumps(_merged_event()), encoding="utf-8")
 
-    def _raise(event: dict[str, Any], repo: str) -> int:
+    def _raise(event: dict[str, Any], repo: str, **_kw: Any) -> int:
         raise RuntimeError("auto-retro registry labels: boom")
 
     monkeypatch.setattr(ar, "run", _raise)
@@ -5657,3 +5661,244 @@ class TestCompatibilityReexports:
         # not a divergent copy.
         assert ar.RETRO_FP is rl.RETRO_FP
         assert ar.ALL_RETRO_LABELS is rl.ALL_RETRO_LABELS
+
+
+def _recording_upsert(
+    calls: list[dict[str, Any]], result: str = "created:1"
+) -> Any:
+    """Return a fake ``upsert_single_file_pr`` that records its kwargs."""
+
+    def _upsert(**kwargs: Any) -> str:
+        calls.append(kwargs)
+        return result
+
+    return _upsert
+
+
+def _weekly_ledger_rows(
+    n_weeks: int, *, start: str = "2026-01-05T09:00:00Z", repair_free: bool = True
+) -> list[ledger.LedgerRow]:
+    """*n_weeks* rows, one per ISO week, 7 days apart from *start*."""
+    base = datetime.strptime(start, "%Y-%m-%dT%H:%M:%SZ")
+    return [
+        ledger.LedgerRow(
+            pr_number=100 + i,
+            merged_at=(base + timedelta(weeks=i)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            repair_free=repair_free,
+        )
+        for i in range(n_weeks)
+    ]
+
+
+class TestRepairFreeMergeLedgerPure:
+    """Pure ``_auto_retro_ledger.py`` layer (issue #2415): row schema,
+    idempotent insert, weekly repair-free rate aggregation, windowed
+    rendering. auto_retro.py's GitHub IO glue is covered separately by
+    TestRunRepairFreeMergeLedgerWiring below.
+    """
+
+    def test_ledger_row_render_parse_roundtrip(self) -> None:
+        row = ledger.LedgerRow(
+            pr_number=42, merged_at="2026-07-08T10:00:00Z", repair_free=True
+        )
+        body = "\n".join(
+            [
+                ledger._ROWS_OPEN,
+                "| PR | Merged at (UTC) | Repair-free | Origin |",
+                "|---|---|---|---|",
+                ledger.render_row(row),
+                ledger._ROWS_CLOSE,
+            ]
+        )
+        assert ledger.parse_rows(body) == [row]
+
+    def test_ledger_parse_rows_empty_when_markers_absent(self) -> None:
+        assert ledger.parse_rows("no ledger yet") == []
+
+    def test_ledger_insert_row_idempotent_on_rerun(self) -> None:
+        row = ledger.LedgerRow(
+            pr_number=7, merged_at="2026-07-01T00:00:00Z", repair_free=False
+        )
+        rows, changed = ledger.insert_row([], row)
+        assert changed
+        assert rows == [row]
+        rows_again, changed_again = ledger.insert_row(rows, row)
+        assert not changed_again
+        assert rows_again == rows
+
+    def test_ledger_weekly_rate_matches_synthetic_two_week_fixture(self) -> None:
+        """Two synthetic ISO weeks: week 1 has 3 merges (2 repair-free),
+        week 2 has 2 merges (1 repair-free). The rendered weekly rate must
+        match those row counts exactly. Refs the issue #2415 verification
+        command (``pytest tests/test_auto_retro.py -k ledger``)."""
+        rows = [
+            ledger.LedgerRow(1, "2026-06-30T09:00:00Z", True),  # 2026-W27
+            ledger.LedgerRow(2, "2026-07-01T09:00:00Z", True),  # 2026-W27
+            ledger.LedgerRow(3, "2026-07-02T09:00:00Z", False),  # 2026-W27
+            ledger.LedgerRow(4, "2026-07-07T09:00:00Z", True),  # 2026-W28
+            ledger.LedgerRow(5, "2026-07-08T09:00:00Z", False),  # 2026-W28
+        ]
+        stats = ledger.compute_weekly_stats(rows)
+        assert [s.iso_week for s in stats] == ["2026-W27", "2026-W28"]
+        assert (stats[0].merges, stats[0].repair_free_count) == (3, 2)
+        assert stats[0].rate == pytest.approx(200.0 / 3.0)
+        assert (stats[1].merges, stats[1].repair_free_count) == (2, 1)
+        assert stats[1].rate == pytest.approx(50.0)
+        # Fewer than MOVING_AVERAGE_WINDOW (4) weeks observed: no average yet.
+        assert stats[0].moving_avg is None
+        assert stats[1].moving_avg is None
+
+    def test_ledger_moving_average_after_window_weeks_observed(self) -> None:
+        rows = [
+            ledger.LedgerRow(i, ts, repair_free=(i % 2 == 0))
+            for i, ts in enumerate(
+                [
+                    "2026-06-01T09:00:00Z",
+                    "2026-06-08T09:00:00Z",
+                    "2026-06-15T09:00:00Z",
+                    "2026-06-22T09:00:00Z",
+                ]
+            )
+        ]
+        stats = ledger.compute_weekly_stats(rows)
+        assert len(stats) == ledger.MOVING_AVERAGE_WINDOW
+        assert stats[-1].moving_avg == pytest.approx(
+            sum(s.rate for s in stats) / ledger.MOVING_AVERAGE_WINDOW
+        )
+
+    def test_ledger_weekly_table_windows_explicitly_past_the_display_window(
+        self,
+    ) -> None:
+        rows = _weekly_ledger_rows(ledger.WEEKLY_DISPLAY_WINDOW + 3)
+        stats = ledger.compute_weekly_stats(rows)
+        table = ledger.render_weekly_table(stats)
+        assert (
+            f"most recent {ledger.WEEKLY_DISPLAY_WINDOW} of {len(stats)} ISO weeks"
+            in table
+        )
+        assert "window=" in table
+
+    def test_ledger_weekly_table_no_window_note_within_the_window(self) -> None:
+        rows = _weekly_ledger_rows(3)
+        stats = ledger.compute_weekly_stats(rows)
+        table = ledger.render_weekly_table(stats)
+        assert "most recent" not in table
+
+    def test_ledger_markdown_is_ascii(self) -> None:
+        rows = _weekly_ledger_rows(5)
+        markdown = ledger.render_ledger_markdown(rows)
+        assert all(ord(char) < 128 for char in markdown)
+
+    def test_ledger_markdown_documents_stop_rule(self) -> None:
+        markdown = ledger.render_ledger_markdown(_weekly_ledger_rows(1))
+        assert "## Stop rule" in markdown
+        assert "4-week moving average" in markdown
+
+    def test_ledger_upsert_markdown_first_write_then_idempotent_rerun(
+        self,
+    ) -> None:
+        row = ledger.LedgerRow(
+            pr_number=42, merged_at="2026-07-08T10:00:00Z", repair_free=True
+        )
+        content, changed = ledger.upsert_ledger_markdown(None, row)
+        assert changed
+        assert b"#42" in content
+        assert all(byte < 128 for byte in content)
+
+        content_again, changed_again = ledger.upsert_ledger_markdown(content, row)
+        assert not changed_again
+        assert content_again == content
+
+
+class TestRunRepairFreeMergeLedgerWiring:
+    """``run()`` -> repair-free-merge-ledger glue (issue #2415).
+
+    ``ledger_token`` defaults to ``""`` so the hundreds of pre-existing
+    ``run()`` call sites across this test suite (none of which pass it)
+    stay unaffected; the feature is exercised here by passing it
+    explicitly, matching how ``_cmd_run`` supplies it in production from
+    ``$AUTO_RETRO_LEDGER_TOKEN``.
+    """
+
+    def test_ledger_not_recorded_when_token_not_configured(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        orchestrator_recorder(monkeypatch, review_comments=[])
+        calls: list[dict[str, Any]] = []
+        monkeypatch.setattr(ar, "upsert_single_file_pr", _recording_upsert(calls))
+        assert ar.run(merged_event(number=600), "o/r") == 0
+        assert calls == []
+
+    def test_ledger_records_repair_free_row_when_no_signal_fired(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        orchestrator_recorder(monkeypatch, review_comments=[])
+        calls: list[dict[str, Any]] = []
+        monkeypatch.setattr(ar, "upsert_single_file_pr", _recording_upsert(calls))
+        event = merged_event(number=601, merged_at="2026-07-08T10:00:00Z")
+        assert ar.run(event, "o/r", ledger_token="tok") == 0
+        assert len(calls) == 1
+        assert calls[0]["token"] == "tok"
+        content = calls[0]["content"].decode("utf-8")
+        assert "#601" in content
+        assert "| yes |" in content
+
+    def test_ledger_records_non_repair_free_row_when_retro_created(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        orchestrator_recorder(monkeypatch)  # default review_comments fires a signal
+        calls: list[dict[str, Any]] = []
+        monkeypatch.setattr(ar, "upsert_single_file_pr", _recording_upsert(calls))
+        event = merged_event(number=602, merged_at="2026-07-08T10:00:00Z")
+        assert ar.run(event, "o/r", ledger_token="tok") == 0
+        assert len(calls) == 1
+        content = calls[0]["content"].decode("utf-8")
+        assert "#602" in content
+        assert "| no |" in content
+
+    def test_ledger_upsert_skipped_when_pr_already_recorded(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Idempotency under a rerun: when the fetched ledger file already
+        carries this PR's row, run() must not call upsert_single_file_pr
+        again (issue #2415's "exactly one row per merge" criterion)."""
+        existing_row = ledger.LedgerRow(
+            pr_number=603, merged_at="2026-07-08T10:00:00Z", repair_free=True
+        )
+        existing_bytes = ledger.render_ledger_markdown([existing_row]).encode(
+            "utf-8"
+        )
+        orchestrator_recorder(monkeypatch, review_comments=[])
+        base_fake_api = ar.gh_api
+
+        def fake_api_with_contents(
+            method: str, path: str, body: Any = None, **kw: Any
+        ) -> str:
+            if method == "GET" and "/contents/" in path:
+                return json.dumps(
+                    {
+                        "encoding": "base64",
+                        "content": base64.b64encode(existing_bytes).decode("ascii"),
+                    }
+                )
+            return base_fake_api(method, path, body, **kw)
+
+        monkeypatch.setattr(ar, "gh_api", fake_api_with_contents)
+        calls: list[dict[str, Any]] = []
+        monkeypatch.setattr(ar, "upsert_single_file_pr", _recording_upsert(calls))
+        event = merged_event(number=603, merged_at="2026-07-08T10:00:00Z")
+        assert ar.run(event, "o/r", ledger_token="tok") == 0
+        assert calls == []
+
+    def test_ledger_failure_is_soft_and_does_not_change_exit_code(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        orchestrator_recorder(monkeypatch, review_comments=[])
+
+        def boom(**_kw: Any) -> str:
+            raise GitHubApiError(500, "PUT", "/repos/o/r/contents/x", "boom")
+
+        monkeypatch.setattr(ar, "upsert_single_file_pr", boom)
+        event = merged_event(number=604, merged_at="2026-07-08T10:00:00Z")
+        assert ar.run(event, "o/r", ledger_token="tok") == 0
+        assert "::warning::" in capsys.readouterr().err
