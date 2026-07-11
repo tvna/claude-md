@@ -166,6 +166,7 @@ from _retro_labels import (
     PRIOR_MIN_SAMPLE_SIZE,
     PRIOR_SKIP_THRESHOLD,
     PRIOR_TENTATIVE_THRESHOLD,
+    RETRO_EXPIRED,
     RETRO_FP,
     RETRO_FP_CANDIDATE,
     RETRO_TENTATIVE,
@@ -195,6 +196,7 @@ __all__ = [
     "PRIOR_MIN_SAMPLE_SIZE",
     "PRIOR_SKIP_THRESHOLD",
     "PRIOR_TENTATIVE_THRESHOLD",
+    "RETRO_EXPIRED",
     "RETRO_FP",
     "RETRO_FP_CANDIDATE",
     "RETRO_TENTATIVE",
@@ -1212,6 +1214,27 @@ def apply_terminal_label(
         )
 
 
+def apply_expired_label(repo: str, number: int) -> None:
+    """POST :data:`RETRO_EXPIRED` to the retro issue's own labels endpoint.
+
+    Called by :func:`sentinel_run` before the sentinel comment and the
+    ``not_planned`` close, so a sentinel-closed retro carries a visible
+    weak-signal label instead of the evidence being discarded unlabelled.
+    Ordered first (ahead of the comment) because the sentinel's
+    idempotency gate keys on the comment marker, not this label; POSTing
+    the label before the marker exists means a label failure is retried
+    cleanly on the next cron tick instead of leaving the retro stuck.
+    Counted separately from ``retro:tp``/``retro:fp`` by
+    :func:`_auto_retro_triage.compute_prior_from_labels`. Refs #2433,
+    #2439 review.
+    """
+    gh_api(
+        "POST",
+        f"/repos/{repo}/issues/{number}/labels",
+        {"labels": [RETRO_EXPIRED]},
+    )
+
+
 def post_skip_comment(repo: str, pr_number: int, reason: str) -> str:
     """PATCH an existing skip comment, else POST a new one.
 
@@ -1749,8 +1772,21 @@ def sentinel_run(repo: str, now_iso: str, days: int) -> int:
     2. Skip when a prior sentinel comment marker is present (idempotent).
     3. Skip when the retro shows operator engagement
        (:func:`is_retro_untouched` returns False).
-    4. Otherwise POST the sentinel comment, then PATCH the issue to
-       ``closed`` / ``not_planned``.
+    4. Otherwise POST the :data:`_retro_labels.RETRO_EXPIRED` label,
+       POST the sentinel comment, then PATCH the issue to ``closed`` /
+       ``not_planned``.
+
+    The label is applied BEFORE the comment deliberately: step 2's
+    idempotency gate keys on the sentinel *comment* marker, not the
+    label, so a label-POST failure leaves no marker behind and the next
+    cron tick retries this retro from step 1 (the label POST is itself
+    idempotent, per :func:`apply_terminal_label`'s docstring). Ordering
+    the label after the comment would instead leave a labelled-but-open
+    retro stuck forever once the comment marker exists (Refs #2439
+    review). A comment-POST failure after a successful label add still
+    leaves the retro stuck until manual attention (unchanged from the
+    pre-existing close-after-comment-failure behavior); only the label
+    step gained this tick's retry safety.
 
     Returns 0 always; the step summary records the close / skip
     breakdown so an operator can audit the run.
@@ -1794,6 +1830,18 @@ def sentinel_run(repo: str, now_iso: str, days: int) -> int:
         body = item.get("body") or ""
         if not is_retro_untouched(body, comments):
             skipped.append((number, "operator engagement detected"))
+            continue
+        try:
+            apply_expired_label(repo, number)
+        except GitHubApiError as exc:
+            print(
+                f"::warning::apply_expired_label failed for retro "
+                f"#{number} (HTTP {exc.code}); NOT posting the sentinel "
+                "comment or closing this tick so the next tick retries "
+                "from scratch (no marker was written yet)",
+                file=sys.stderr,
+            )
+            skipped.append((number, "expired label add failed"))
             continue
         try:
             post_sentinel_comment(repo, number, days)
