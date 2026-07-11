@@ -479,7 +479,7 @@ paths = [
   "scripts/labels_apply.py", "tests/test_labels_apply.py",
   "scripts/issue_anchors.py",
   "scripts/scan_area_path_coverage.py", "scripts/scan_harness_doc_coverage.py",
-  "scripts/scan_commit_type_label_drift.py",
+  "scripts/scan_commit_type_label_drift.py", "scripts/scan_label_sot_drift.py",
   ".github/workflows/apply-labels.yml",
 ]
 

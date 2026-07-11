@@ -525,6 +525,15 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_commit_type_label_drift.py", "verify"),
     ),
     Step(
+        # Refs #2442. Fails when .github/labels.json drifts from
+        # .github/label-policy.toml [[labels]] on name/description/color, so
+        # the two label sources cannot silently diverge while the TOML is the
+        # single authored SoT. retro:* and type:retrospective are sourced from
+        # scripts/_retro_labels.py and are exempt.
+        name="scan_label_sot_drift",
+        argv=("python3", "scripts/scan_label_sot_drift.py", "verify"),
+    ),
+    Step(
         # Refs #1099. Runs waza spec-compliance over every skill under
         # .agents/skills. spec failure = fail, token budget = warning only.
         # Needs the pinned waza binary (scripts/install_waza.sh); soft so a
