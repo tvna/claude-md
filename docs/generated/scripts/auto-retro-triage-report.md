@@ -19,6 +19,7 @@ pie showData
     "retro:fp" : 0
     "retro:fp-candidate" : 0
     "retro:tentative" : 0
+    "retro:expired" : 0
     "unlabelled" : 88
 ```
 
