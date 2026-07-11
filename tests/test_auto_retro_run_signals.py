@@ -287,9 +287,15 @@ class TestRunAggregateSignals:
             m == "POST" and p == "/repos/o/r/issues" for m, p, _ in seen
         )
         printed = capsys.readouterr().out
-        assert "only policy-artifact repair rows generated" in printed
-        assert "only policy-artifact repair rows generated" in summary.read_text(
-            encoding="utf-8"
+        # multi_commit_pr is the sole fired signal here (Refs prose is not a
+        # signal, inline/fix-typed are false), so the interim co-fire gate
+        # (#2436) now names the skip explicitly. Same skip OUTCOME as before
+        # (the exempt-rows gate already suppressed this); only the reason
+        # wording changed.
+        assert "interim co-fire gate (refs #2436): multi_commit_pr fired" in printed
+        assert (
+            "interim co-fire gate (refs #2436): multi_commit_pr fired"
+            in summary.read_text(encoding="utf-8")
         )
         assert any(
             m == "POST"
@@ -411,6 +417,76 @@ class TestRunAggregateSignals:
         assert "multi_commit_pr=false" in printed
         # Step summary also carries the same reason for the audit trail.
         assert "no repair signal fired" in summary.read_text(encoding="utf-8")
+
+    def test_interim_gate_skips_when_multi_commit_pr_is_only_signal(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Acceptance #2436 criterion 1: a PR whose ONLY fired signal is
+        multi_commit_pr (two plain dev commits; no review comment, no
+        fix-typed title, no failing check run) does not open a retro, and the
+        interim co-fire gate names the skip explicitly in stdout and the step
+        summary for Phase 2 measurement. This is the same skip outcome the
+        exempt-rows gate already enforced; only the reason wording is new.
+        """
+        summary = tmp_path / "summary.md"
+        monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+        seen = orchestrator_recorder(
+            monkeypatch,
+            review_comments=[],
+            commits=[
+                {"commit": {"message": "feat(x): add a"}},
+                {"commit": {"message": "feat(x): add b"}},
+            ],
+        )
+        event = merged_event(
+            number=2436,
+            title="feat(x): rework feature",
+            body="",
+            commits=2,
+        )
+        assert ar.run(event, "o/r") == 0
+        assert not any(
+            m == "POST" and p == "/repos/o/r/issues" for m, p, _ in seen
+        )
+        printed = capsys.readouterr().out
+        assert (
+            "interim co-fire gate (refs #2436): multi_commit_pr fired" in printed
+        )
+        assert "multi_commit_pr=true" in printed
+        assert (
+            "interim co-fire gate (refs #2436): multi_commit_pr fired"
+            in summary.read_text(encoding="utf-8")
+        )
+
+    def test_two_cofiring_signals_still_open_after_interim_gate(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Acceptance #2436 criterion 2: two co-firing signals (an inline
+        review comment plus multi_commit_pr) still open a retro unchanged.
+        The deliberate deviation from criterion 1's most literal reading
+        (multi_commit_pr alone + a genuine CI-failure / iteration row still
+        opens) is regression-pinned by the sibling
+        ``test_policy_artifact_rows_plus_ci_failure_still_creates`` and
+        ``test_policy_artifact_rows_plus_iteration_commit_still_creates``.
+        """
+        seen = orchestrator_recorder(
+            monkeypatch,
+            review_comments=[{"id": 1, "body": "please rework this"}],
+            commits=[
+                {"commit": {"message": "feat(x): add a"}},
+                {"commit": {"message": "feat(x): add b"}},
+            ],
+        )
+        event = merged_event(
+            number=2437, title="feat(x): add feature", commits=2
+        )
+        assert ar.run(event, "o/r") == 0
+        assert any(
+            m == "POST" and p == "/repos/o/r/issues" for m, p, _ in seen
+        )
 
 
 # ---------------------------------------------------------------------------
