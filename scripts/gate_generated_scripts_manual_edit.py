@@ -98,8 +98,15 @@ def _is_protected(path: str) -> bool:
 # - chore/refresh-auto-retro-triage-report: the ``triage-report`` job, which
 #   writes docs/generated/scripts/auto-retro-triage-report.md via
 #   createCommitOnBranch (auto_retro._TRIAGE_REPORT_PR_BRANCH). Refs #1553.
+# - chore/refresh-repair-free-merge-ledger: the ``open-retro`` job's ledger
+#   recording, which writes docs/generated/scripts/repair-free-merge-ledger.md
+#   via createCommitOnBranch (auto_retro._LEDGER_PR_BRANCH). Refs #2415.
 EXEMPT_BRANCHES = frozenset(
-    {"chore/update-generated-docs", "chore/refresh-auto-retro-triage-report"}
+    {
+        "chore/update-generated-docs",
+        "chore/refresh-auto-retro-triage-report",
+        "chore/refresh-repair-free-merge-ledger",
+    }
 )
 
 

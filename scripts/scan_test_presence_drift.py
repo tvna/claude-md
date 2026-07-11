@@ -92,6 +92,14 @@ _GITHUB_API_BOUNDARY = frozenset({"_github_api", "github_api"})
 # test module (or whose helper is deleted) is reported stale and must be
 # removed, so the exemption set can only shrink.
 ALLOW_NO_TEST_MODULE: dict[str, str] = {
+    "_auto_retro_ledger": (
+        "Pure repair-free-merge-ledger parse/render layer for auto_retro.py "
+        "(#2415); imported directly (not re-exported through auto_retro's "
+        "__all__) and exercised via tests/test_auto_retro.py's "
+        "TestRepairFreeMergeLedgerPure and "
+        "TestRunRepairFreeMergeLedgerWiring classes, per the issue's own "
+        "verification command (pytest tests/test_auto_retro.py -k ledger)."
+    ),
     "_auto_retro_parse": (
         "Pure parser/signal layer extracted from auto_retro.py (refs #1725); "
         "every moved symbol is re-exported by auto_retro and exercised "
