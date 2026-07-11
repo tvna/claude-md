@@ -337,3 +337,130 @@ class TestFpTrend:
         assert "## False-positive rate trend" in out
         assert "All-time:" in out
         assert f"Last {ar._FP_TREND_WINDOW} retros:" in out
+
+
+class TestLoopHealthMetrics:
+    """Loop-health panel metrics: triage rate, sentinel disposal, unlabelled
+    ratio (issue #2434). All three derive from ``total`` + ``label_counts``."""
+
+    def test_triage_rate_counts_any_retro_label_as_triaged(self) -> None:
+        past = [
+            _retro(1, set(), {rl.RETRO_TP}),
+            _retro(2, set(), {rl.RETRO_FP}),
+            _retro(3, set(), set()),
+            _retro(4, set(), set()),
+        ]
+        report = ar.compute_triage_report(past)
+        assert report.triaged == 2
+        assert report.unlabelled == 2
+        assert abs(report.triage_rate - 0.5) < 1e-9
+        assert abs(report.unlabelled_ratio - 0.5) < 1e-9
+
+    def test_sentinel_disposal_counts_retro_expired(self) -> None:
+        # retro:expired is a retro label, so an expired retro is "triaged"
+        # (labelled), not unlabelled.
+        past = [
+            _retro(1, set(), {rl.RETRO_EXPIRED}),
+            _retro(2, set(), {rl.RETRO_EXPIRED}),
+            _retro(3, set(), {rl.RETRO_TP}),
+            _retro(4, set(), set()),
+        ]
+        report = ar.compute_triage_report(past)
+        assert report.sentinel_disposed == 2
+        assert abs(report.sentinel_disposal_rate - 0.5) < 1e-9
+        assert report.unlabelled == 1
+        assert report.triaged == 3
+
+    def test_empty_population_metrics_are_zero(self) -> None:
+        report = ar.compute_triage_report([])
+        assert report.triaged == 0
+        assert report.triage_rate == 0.0
+        assert report.sentinel_disposed == 0
+        assert report.sentinel_disposal_rate == 0.0
+        assert report.unlabelled_ratio == 0.0
+        assert report.unlabelled_anomaly is False
+
+
+class TestUnlabelledAnomaly:
+    """The unlabelled ratio is an Anomaly in its own right: a "no anomalies"
+    headline must not be able to mean "nothing was ever labelled" (#2434)."""
+
+    def test_all_unlabelled_large_population_is_anomaly(self) -> None:
+        past = [
+            _retro(i, {"multi_commit_pr"}, set())
+            for i in range(ar._UNLABELLED_MIN_SAMPLE)
+        ]
+        report = ar.compute_triage_report(past)
+        assert report.unlabelled_ratio == 1.0
+        assert report.unlabelled_anomaly is True
+        # No per-signal FP anomaly fires (nothing is retro:fp), so this is
+        # exactly the degenerate the per-signal gate is blind to.
+        assert report.anomalies == ()
+
+    def test_below_sample_floor_is_not_anomaly(self) -> None:
+        past = [
+            _retro(i, set(), set())
+            for i in range(ar._UNLABELLED_MIN_SAMPLE - 1)
+        ]
+        report = ar.compute_triage_report(past)
+        assert report.unlabelled_ratio == 1.0
+        assert report.unlabelled_anomaly is False
+
+    def test_below_ratio_is_not_anomaly(self) -> None:
+        # 5 retros, only 2 unlabelled -> ratio 0.4 < 0.5.
+        past = [
+            _retro(1, set(), {rl.RETRO_TP}),
+            _retro(2, set(), {rl.RETRO_TP}),
+            _retro(3, set(), {rl.RETRO_FP}),
+            _retro(4, set(), set()),
+            _retro(5, set(), set()),
+        ]
+        report = ar.compute_triage_report(past)
+        assert abs(report.unlabelled_ratio - 0.4) < 1e-9
+        assert report.unlabelled_anomaly is False
+
+    def test_at_ratio_threshold_is_anomaly(self) -> None:
+        # Exactly 0.5 unlabelled at the sample floor -> fires (>= boundary).
+        labelled = [_retro(i, set(), {rl.RETRO_TP}) for i in range(1, 4)]
+        unlabelled = [_retro(i, set(), set()) for i in range(100, 103)]
+        report = ar.compute_triage_report(labelled + unlabelled)
+        assert abs(report.unlabelled_ratio - 0.5) < 1e-9
+        assert report.unlabelled_anomaly is True
+
+
+class TestLoopHealthRender:
+    """Rendering of the loop-health panel and its headline anomaly wiring."""
+
+    def test_loop_health_section_present_with_metrics(self) -> None:
+        past = [
+            _retro(1, set(), {rl.RETRO_TP}),
+            _retro(2, set(), {rl.RETRO_EXPIRED}),
+            _retro(3, set(), set()),
+        ]
+        out = ar.render_triage_report_markdown(ar.compute_triage_report(past))
+        assert "## Loop health" in out
+        assert "Triage rate:" in out
+        assert "Sentinel disposal:" in out
+
+    def test_unlabelled_anomaly_listed_in_headline_not_none(self) -> None:
+        past = [
+            _retro(i, {"multi_commit_pr"}, set())
+            for i in range(ar._UNLABELLED_MIN_SAMPLE)
+        ]
+        out = ar.render_triage_report_markdown(ar.compute_triage_report(past))
+        # Headline Anomalies block carries the unlabelled-ratio bullet ...
+        assert "unlabelled ratio" in out
+        # ... and does NOT collapse to the "None" message.
+        anomalies_block = out.split("## Loop health")[0]
+        assert "None:" not in anomalies_block
+
+    def test_healthy_population_headline_says_none(self) -> None:
+        # Fully triaged, no FP anomaly, low unlabelled ratio -> "None".
+        past = [_retro(i, set(), {rl.RETRO_TP}) for i in range(1, 6)]
+        out = ar.render_triage_report_markdown(ar.compute_triage_report(past))
+        anomalies_block = out.split("## Loop health")[0]
+        assert "None:" in anomalies_block
+
+    def test_empty_population_loop_health_placeholder(self) -> None:
+        out = ar.render_triage_report_markdown(ar.compute_triage_report([]))
+        assert "## Loop health" in out
