@@ -16,8 +16,8 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 | `issue_link` | 7 | `_auto_retro_parse`, `_auto_retro_render`, `auto_retro`, `body_policy`, `gate_pr_body_retro_issue_link`, `preflight_angle_token_drop`, `scan_retro_followup_drift` |
 | `_ref_classifier` | 6 | `gate_retro_close_keyword_commit`, `issue_link`, `np_strategy_tracking`, `pr_body_close_keyword_gate`, `preflight_pr_body`, `verify_linked_issue_titles` |
 | `issue_anchors` | 6 | `_security_drift_issues`, `ci_budget_issue`, `coverage_failure_issue`, `devcontainer_pin_pr`, `scan_issue_anchor_drift`, `security_drift_report` |
+| `_retro_labels` | 5 | `_auto_retro_render`, `_auto_retro_triage`, `auto_retro`, `scan_label_sot_drift`, `scan_retro_followup_drift` |
 | `_shell_lines` | 5 | `scan_ruff_format`, `scan_workflow_gh_calls`, `scan_workflow_llm_budget`, `scan_workflow_pip`, `scan_workflow_unsigned_commit` |
-| `_retro_labels` | 4 | `_auto_retro_render`, `_auto_retro_triage`, `auto_retro`, `scan_retro_followup_drift` |
 | `_session_branches` | 4 | `check_session_branch`, `preflight_commit_session_branch`, `preflight_push_session_branch`, `preflight_session_branch_authz` |
 | `_apm_managed_paths` | 3 | `gate_agents_skills_edit`, `scan_repo_double_hyphen`, `scan_repo_em_dash` |
 | `_auto_retro_parse` | 3 | `_auto_retro_render`, `_auto_retro_triage`, `auto_retro` |
@@ -271,6 +271,7 @@ flowchart TD
     scan_gitapex_schema --> _json_schema_subset
     scan_input_contract_drift --> scan_ssot_drift
     scan_issue_anchor_drift --> issue_anchors
+    scan_label_sot_drift --> _retro_labels
     scan_module_size_distribution --> scan_maintainability_metrics
     scan_non_ascii --> _github_api
     scan_non_ascii --> _trusted_bots
