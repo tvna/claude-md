@@ -4317,6 +4317,7 @@ def _sentinel_recorder(
     search_error: bool = False,
     comments_error_for: set[int] | None = None,
     post_error_for: set[int] | None = None,
+    label_error_for: set[int] | None = None,
     patch_error_for: set[int] | None = None,
 ) -> list[tuple[str, str, Any]]:
     """Record gh_api calls for sentinel_run tests.
@@ -4330,6 +4331,7 @@ def _sentinel_recorder(
     comments_by_number = comments_by_number or {}
     comments_error_for = comments_error_for or set()
     post_error_for = post_error_for or set()
+    label_error_for = label_error_for or set()
     patch_error_for = patch_error_for or set()
     seen: list[tuple[str, str, Any]] = []
 
@@ -4356,6 +4358,11 @@ def _sentinel_recorder(
             number = _number_from_path(path)
             if number in post_error_for:
                 raise GitHubApiError(500, "GET", "/x", "post boom")
+            return ""
+        if method == "POST" and path.endswith("/labels"):
+            number = _number_from_path(path)
+            if number in label_error_for:
+                raise GitHubApiError(500, "GET", "/x", "label boom")
             return ""
         if method == "PATCH" and "/issues/" in path:
             number = _number_from_path(path)
@@ -4436,10 +4443,15 @@ class TestSentinelRun:
             comments_by_number={700: []},
         )
         assert ar.sentinel_run("o/r", "2026-05-20T00:00:00Z", 14) == 0
-        # Comment posted, then issue patched closed/not_planned.
+        # retro:expired labelled, then comment posted, then issue patched
+        # closed/not_planned.
         post = [
             (m, p, b) for m, p, b in seen
             if m == "POST" and p == "/repos/o/r/issues/700/comments"
+        ]
+        label = [
+            (m, p, b) for m, p, b in seen
+            if m == "POST" and p == "/repos/o/r/issues/700/labels"
         ]
         patch = [
             (m, p, b) for m, p, b in seen
@@ -4449,21 +4461,32 @@ class TestSentinelRun:
         assert ar._SENTINEL_CLOSE_MARKER in post[0][2]["body"]
         assert "14 days" in post[0][2]["body"]
         assert "#414" in post[0][2]["body"]
+        assert len(label) == 1
+        assert label[0][2] == {"labels": [rl.RETRO_EXPIRED]}
         assert len(patch) == 1
         assert patch[0][2] == {"state": "closed", "state_reason": "not_planned"}
 
-    def test_post_precedes_close(
+    def test_label_precedes_post_precedes_close(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Sentinel comment must land before the close patch so the
-        operator-visible explanation is in place when the closed
-        webhook fires."""
+        """The retro:expired label must land before the sentinel comment,
+        which must land before the close patch.
+
+        Label-first is deliberate: the idempotency gate
+        (:func:`ar.has_sentinel_marker`) keys on the comment marker, not
+        the label, so a label failure leaves no marker behind and the
+        next cron tick retries this retro from scratch instead of
+        getting stuck (Refs #2439 review)."""
         seen = _sentinel_recorder(
             monkeypatch,
             open_retros=[_open_retro(701)],
             comments_by_number={701: []},
         )
         ar.sentinel_run("o/r", "2026-05-20T00:00:00Z", 14)
+        label_idx = next(
+            i for i, (m, p, _b) in enumerate(seen)
+            if m == "POST" and p == "/repos/o/r/issues/701/labels"
+        )
         post_idx = next(
             i for i, (m, p, _b) in enumerate(seen)
             if m == "POST" and p == "/repos/o/r/issues/701/comments"
@@ -4472,7 +4495,7 @@ class TestSentinelRun:
             i for i, (m, p, _b) in enumerate(seen)
             if m == "PATCH" and p == "/repos/o/r/issues/701"
         )
-        assert post_idx < patch_idx
+        assert label_idx < post_idx < patch_idx
 
     def test_skips_retro_inside_window(
         self, monkeypatch: pytest.MonkeyPatch
@@ -4615,7 +4638,8 @@ class TestSentinelRun:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """If the sentinel comment POST fails, the close must NOT fire
-        (operator would see a silent close without explanation)."""
+        (operator would see a silent close without explanation). The
+        label step runs first and already succeeded on this tick."""
         seen = _sentinel_recorder(
             monkeypatch,
             open_retros=[_open_retro(709)],
@@ -4625,6 +4649,34 @@ class TestSentinelRun:
         ar.sentinel_run("o/r", "2026-05-20T00:00:00Z", 14)
         assert not any(
             m == "PATCH" and p == "/repos/o/r/issues/709"
+            for m, p, _b in seen
+        )
+        assert any(
+            m == "POST" and p == "/repos/o/r/issues/709/labels"
+            for m, p, _b in seen
+        )
+
+    def test_label_failure_does_not_close(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """If the retro:expired label POST fails, neither the sentinel
+        comment nor the close must fire on this tick: label runs first
+        (Refs #2439 review) so a failure here leaves no sentinel-comment
+        marker behind, and the next cron tick retries this retro from
+        scratch instead of getting stuck."""
+        seen = _sentinel_recorder(
+            monkeypatch,
+            open_retros=[_open_retro(715)],
+            comments_by_number={715: []},
+            label_error_for={715},
+        )
+        ar.sentinel_run("o/r", "2026-05-20T00:00:00Z", 14)
+        assert not any(
+            m == "PATCH" and p == "/repos/o/r/issues/715"
+            for m, p, _b in seen
+        )
+        assert not any(
+            m == "POST" and p == "/repos/o/r/issues/715/comments"
             for m, p, _b in seen
         )
 
@@ -4648,10 +4700,12 @@ class TestSentinelRun:
     ) -> None:
         """Acceptance #414 #5: ops:retro-opened label gate preserved.
 
-        The sentinel must never PATCH/POST/DELETE source-PR labels --
-        the label was applied at retro-create time and survives the
-        sentinel close. Verified by asserting no /labels endpoint is
-        hit during the sentinel run.
+        The sentinel must never PATCH/POST/DELETE the SOURCE PR's
+        labels; that label was applied at retro-create time and
+        survives the sentinel close. The sentinel does POST to the
+        retro ISSUE's own labels endpoint (to add retro:expired,
+        Refs #2433); this test asserts every /labels call seen targets
+        only the retro issue itself (#711), never any other number.
         """
         seen = _sentinel_recorder(
             monkeypatch,
@@ -4659,7 +4713,10 @@ class TestSentinelRun:
             comments_by_number={711: []},
         )
         ar.sentinel_run("o/r", "2026-05-20T00:00:00Z", 14)
-        assert not any(p.endswith("/labels") for _m, p, _b in seen)
+        label_calls = [(m, p, b) for m, p, b in seen if p.endswith("/labels")]
+        assert label_calls == [
+            ("POST", "/repos/o/r/issues/711/labels", {"labels": [rl.RETRO_EXPIRED]})
+        ]
 
     def test_non_retro_titled_issue_is_filtered(
         self, monkeypatch: pytest.MonkeyPatch
@@ -5084,6 +5141,63 @@ class TestComputePriorFromLabels:
         # With the epoch boundary the pre-epoch fp retro is excluded.
         gated = ar.compute_prior_from_labels(past, epoch_min_number=1228)
         assert gated["multi_commit_pr"] == (0.0, 1)
+
+    def test_expired_label_does_not_affect_fp_rate(self) -> None:
+        """retro:expired is a weak signal only: it must never be counted
+        as a false positive by compute_prior_from_labels (which keys on
+        RETRO_FP alone), even though it is now part of ALL_RETRO_LABELS
+        for triage-report display purposes. Refs #2433, #2439 review."""
+        past = [
+            ar.PastRetro(
+                number=1,
+                signals=frozenset({"multi_commit_pr"}),
+                labels=frozenset({rl.RETRO_EXPIRED}),
+            )
+        ]
+        prior = ar.compute_prior_from_labels(past)
+        assert prior["multi_commit_pr"] == (0.0, 1)
+
+
+class TestRetroExpiredTriageWiring:
+    """RETRO_EXPIRED must be visible to the triage report so a
+    sentinel-closed retro is distinguishable from evidence that was
+    never labelled at all. Refs #2433, #2439 review."""
+
+    def test_expired_only_retro_is_not_counted_as_unlabelled(self) -> None:
+        past = [
+            ar.PastRetro(
+                number=1,
+                signals=frozenset({"multi_commit_pr"}),
+                labels=frozenset({rl.RETRO_EXPIRED}),
+            )
+        ]
+        report = ar.compute_triage_report(past)
+        assert report.label_counts[rl.RETRO_EXPIRED] == 1
+        assert report.label_counts["unlabelled"] == 0
+
+    def test_truly_unlabelled_retro_still_counts_as_unlabelled(self) -> None:
+        past = [
+            ar.PastRetro(
+                number=1,
+                signals=frozenset({"multi_commit_pr"}),
+                labels=frozenset(),
+            )
+        ]
+        report = ar.compute_triage_report(past)
+        assert report.label_counts[rl.RETRO_EXPIRED] == 0
+        assert report.label_counts["unlabelled"] == 1
+
+    def test_retro_status_reports_expired(self) -> None:
+        assert ar._retro_status(frozenset({rl.RETRO_EXPIRED})) == rl.RETRO_EXPIRED
+
+    def test_retro_status_prefers_operator_label_over_expired(self) -> None:
+        # A retro the sentinel closed but an operator later triaged must
+        # display the stronger, operator-set status, not the weak
+        # sentinel signal.
+        assert (
+            ar._retro_status(frozenset({rl.RETRO_EXPIRED, rl.RETRO_TP}))
+            == rl.RETRO_TP
+        )
 
 
 class TestShouldSkipByPrior:
