@@ -164,21 +164,21 @@ color = "ff7619"
 [[labels]]
 name = "semver:major"
 family = "semver"
-status = "add"
+status = "keep"
 description = "Universal-text change breaks backward compatibility; bumps apm.yml MAJOR."
 color = "006b75"
 
 [[labels]]
 name = "semver:minor"
 family = "semver"
-status = "add"
+status = "keep"
 description = "Universal-text change is a backward-compatible addition or clarification; bumps apm.yml MINOR."
 color = "006b75"
 
 [[labels]]
 name = "semver:patch"
 family = "semver"
-status = "add"
+status = "keep"
 description = "Universal-text change is non-normative surface only; bumps apm.yml PATCH."
 color = "006b75"
 
@@ -248,7 +248,7 @@ color = "0366d6"
 [[labels]]
 name = "area:security-intel"
 family = "area"
-status = "add"
+status = "keep"
 description = "Threat triage, security drift, non-ASCII defense, and security runbooks."
 color = "ee0701"
 
@@ -269,14 +269,14 @@ color = "c5def5"
 [[labels]]
 name = "area:ci-ops"
 family = "area"
-status = "add"
+status = "keep"
 description = "CI automation scripts, issue/PR operation utilities, and maintenance workflows."
 color = "0e8a16"
 
 [[labels]]
 name = "area:governance"
 family = "area"
-status = "add"
+status = "keep"
 description = "Repo structure analysis, document dependency graph, and governance tooling."
 color = "5319e7"
 
