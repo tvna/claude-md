@@ -54,10 +54,15 @@ For the labels shared by both files, `.github/label-policy.toml` `[[labels]]`
 is the single authored source of truth for label identity (name, description,
 color); `.github/labels.json` must match it. `scripts/scan_label_sot_drift.py`
 is the deterministic gate that enforces this parity and fails on any drift
-(Refs #2442, Phase A). The `retro:*` labels and `type:retrospective` are
-exempt because they are sourced from `scripts/_retro_labels.py`, not the TOML;
-the 11 `area:*` labels declared only in `[[labels]]` are not yet in the live
-catalog and are validated only in the labels.json-to-policy direction.
+(Refs #2442, Phase A). The five `retro:*` labels are authored in `[[labels]]`
+under the `retro` family (Refs #2442, batch 1); their identity lives in the
+TOML while their names remain a Python constant in `scripts/_retro_labels.py`,
+and `tests/test_retro_labels_in_policy.py` couples the two so they cannot drift.
+Only `type:retrospective` is still exempt from the parity gate: its SoT home
+stays with `scripts/_retro_labels.py` / `labels.json` pending its #972
+retirement decision. The 11 `area:*` labels declared only in `[[labels]]` are
+not yet in the live catalog and are validated only in the labels.json-to-policy
+direction.
 
 ## Final Label Families
 
@@ -72,6 +77,7 @@ Every final label belongs to exactly one declared family.
 | `area:*` | One or more for active implementation | File and directory ownership or conflict domain |
 | `ops:*` | As required by deterministic workflows | Workflow, bot, or maintenance state |
 | `semver:*` | Exactly one for universal-text PRs | Declared semantic-version severity of a universal-text change |
+| `retro:*` | Zero or more for the retro feedback loop | Retrospective TP/FP feedback-loop classification |
 
 Labels outside these families are retired unless the policy file adds an
 explicit grandfathered exception with a removal deadline.
@@ -262,6 +268,34 @@ Do not add broad labels such as `ops:quality`. Lint, type, security,
 maintainability, and coverage checks are quality gates. They become `ops:*`
 labels only when a deterministic writer and reader create a machine-tracked
 operational queue.
+
+## Retro Labels
+
+The `retro:*` family records the true-positive / false-positive verdict of an
+auto-opened retrospective as its follow-ups settle. It is an operational
+feedback loop, not a triage axis, so its cardinality is zero-or-more (a retro
+issue may carry more than one over its life, for example `retro:tentative` at
+open and `retro:expired` at close) and it is never required at issue creation.
+
+| Label | Meaning |
+|---|---|
+| `retro:tp` | Operator-confirmed true positive: follow-up landed and is reducing repair loops |
+| `retro:fp` | Confirmed false positive: retro fired on weak signals with no genuine repair loop |
+| `retro:fp-candidate` | Scanner-detected drift: follow-up stale or unresolved; operator confirms fp or relabels tp |
+| `retro:tentative` | Auto-opened with low prior confidence (label-derived prior below the skip threshold) |
+| `retro:expired` | Sentinel closed as not_planned after inactivity; weak fp signal, counted apart from tp/fp |
+
+The writer is the operator plus `scripts/scan_retro_followup_drift.py`; the
+readers are the label-derived prior in `scripts/auto_retro.py` and the retro
+triage report. Source of truth: the label names are the Python constants in
+`scripts/_retro_labels.py` (`ALL_RETRO_LABELS`), imported at runtime; their
+identity (description/color) is authored in `.github/label-policy.toml`
+`[[labels]]` under `family = "retro"`. `tests/test_retro_labels_in_policy.py`
+couples the two, and `scripts/scan_label_sot_drift.py` keeps `labels.json` in
+parity with the policy. The related `type:retrospective` label is not part of
+this family and is not authored in the policy; it awaits its #972 retirement
+decision (see the operator runbook `docs/runbooks/retro-labels.md`). Refs #2442,
+#558.
 
 ## Retired Labels
 

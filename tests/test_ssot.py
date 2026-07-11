@@ -235,6 +235,7 @@ class TestRequiredIssueAxes:
             "one_or_more_for_active_implementation",
             "unbounded_but_each_label_requires_writer_reader_lifecycle",
             "exactly_one_for_universal_text_prs",
+            "zero_or_more_for_retro_feedback_loop",
         }
         # Every mandatory-at-create string must still exist in the live policy; a
         # reworded mandatory cardinality would drop out of this subset and fail.

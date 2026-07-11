@@ -13,13 +13,15 @@ for label identity and reconciling ``labels.json`` to it. This gate keeps them
 from drifting again: every ``labels.json`` entry must match a ``[[labels]]``
 entry in ``label-policy.toml`` by name, description, and color.
 
-Five ``labels.json`` entries are sourced from ``scripts/_retro_labels.py``
-instead of the policy file: the four ``retro:*`` feedback-loop constants
-(``ALL_RETRO_LABELS``) plus ``type:retrospective``. That coupling is enforced by
-``tests/test_retro_labels_in_sot.py``; those labels have no ``[[labels]]``
-counterpart yet (their SoT home is decided later with #843/#972), so this gate
-reads the exception set from ``_retro_labels`` rather than hardcoding it and
-skips those entries. The 11 ``area:*`` labels declared only in ``[[labels]]``
+One ``labels.json`` entry is still sourced from ``scripts/_retro_labels.py``
+instead of the policy file: ``type:retrospective``. Its SoT home stays with the
+Python constant / ``labels.json`` pending its #972 retirement decision, so this
+gate reads the exception from ``_retro_labels`` rather than hardcoding it and
+skips that entry. The five ``retro:*`` feedback-loop labels used to be exempt
+too; #2442 batch 1 folded them into ``label-policy.toml`` ``[[labels]]`` (under
+the ``retro`` family), so they are now validated like any other label and the
+name set is coupled to ``ALL_RETRO_LABELS`` by
+``tests/test_retro_labels_in_policy.py``. The 11 ``area:*`` labels declared only in ``[[labels]]``
 (not yet in the live catalog) are out of scope here: the gate validates
 ``labels.json`` against the policy, not the reverse, so a policy-only label is
 not a drift.
@@ -56,15 +58,13 @@ LABELS_JSON_PATH = Path(".github/labels.json")
 LABEL_POLICY_PATH = Path(".github/label-policy.toml")
 
 # labels.json entries sourced from scripts/_retro_labels.py, not
-# label-policy.toml. Mirrors tests/test_retro_labels_in_sot.py: the four
-# retro:* feedback-loop constants plus type:retrospective (which is not a
-# retro:* label so it is not in ALL_RETRO_LABELS, but shares the same
-# prune-safety coupling to the JSON SoT). Both are read from the constant
-# module so the exception set cannot drift from the retro registry, and no
-# label literal is frozen in this scanned file.
-RETRO_SOURCED_LABELS = frozenset(
-    _retro_labels.ALL_RETRO_LABELS | {_retro_labels.TYPE_RETROSPECTIVE}
-)
+# label-policy.toml. Only type:retrospective remains: it is not a retro:*
+# feedback-loop label (so it is not in ALL_RETRO_LABELS), and its SoT home stays
+# with the Python constant / labels.json pending its #972 retirement decision.
+# The five retro:* labels were folded into label-policy.toml [[labels]] in #2442
+# batch 1 and are no longer exempt here. Read from the constant module so the
+# exception cannot drift, and no label literal is frozen in this scanned file.
+RETRO_SOURCED_LABELS = frozenset({_retro_labels.TYPE_RETROSPECTIVE})
 
 
 def load_json(path: Path) -> Any:

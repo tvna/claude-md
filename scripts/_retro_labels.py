@@ -42,6 +42,13 @@ from __future__ import annotations
 
 from typing import Final
 
+# These constants are the single source for the retro:* label NAMES: this module
+# is imported widely at runtime and stays side-effect-free (no file reads), so
+# the names live here rather than being parsed from label-policy.toml at import.
+# The labels' IDENTITY (description/color) lives in .github/label-policy.toml
+# [[labels]] under the ``retro`` family (#2442 batch 1); the two are kept in lock
+# step by tests/test_retro_labels_in_policy.py, which fails if the policy's retro
+# family and ALL_RETRO_LABELS ever diverge.
 RETRO_TP: Final[str] = "retro:tp"
 RETRO_FP: Final[str] = "retro:fp"
 RETRO_FP_CANDIDATE: Final[str] = "retro:fp-candidate"
@@ -53,12 +60,13 @@ ALL_RETRO_LABELS: Final[frozenset[str]] = frozenset(
 )
 
 # The retrospective issue's identity label. Not a retro:* feedback-loop label,
-# so it is deliberately absent from ALL_RETRO_LABELS, but it shares the same
-# labels.json prune-safety coupling (tests/test_retro_labels_in_sot.py) and the
-# same runtime source: it is a live label applied by the retro creation path,
-# not authored in .github/label-policy.toml. Defined here as the single source
-# so consumers (e.g. scripts/scan_label_sot_drift.py) import it instead of
-# freezing the string.
+# so it is deliberately absent from ALL_RETRO_LABELS. Unlike the retro:* labels
+# (whose identity moved to label-policy.toml in #2442 batch 1), this one is NOT
+# folded into the policy: its SoT home stays here / labels.json pending its #972
+# retirement decision. It shares the labels.json prune-safety coupling
+# (tests/test_retro_labels_in_sot.py) and is defined here as the single source so
+# consumers (e.g. scripts/scan_label_sot_drift.py, which still exempts it) import
+# it instead of freezing the string.
 TYPE_RETROSPECTIVE: Final[str] = "type:retrospective"
 
 # Thresholds for the label-derived prior consumed by

@@ -47,6 +47,11 @@ name = "semver"
 purpose = "Declared semantic-version severity of a universal-text change; read by the source version drift gate."
 cardinality = "exactly_one_for_universal_text_prs"
 
+[[families]]
+name = "retro"
+purpose = "Retrospective TP/FP feedback-loop classification recorded by operators and the retro drift scanner."
+cardinality = "zero_or_more_for_retro_feedback_loop"
+
 [[labels]]
 name = "layer:p1-goal-plan"
 family = "layer"
@@ -296,6 +301,47 @@ color = "0e8a16"
 writer = "auto-retro and post-merge retrospective automation"
 reader = "auto-retro sentinel, rescan, and duplicate-retro prevention"
 lifecycle = "Added after retrospective creation is confirmed; retained as durable PR audit state."
+
+# The retro:* feedback-loop labels. Their NAMES are the Python single source in
+# scripts/_retro_labels.py (ALL_RETRO_LABELS), imported widely at runtime; this
+# file is the single source for their identity (description/color). The two are
+# coupled by tests/test_retro_labels_in_policy.py so the name set cannot drift.
+# type:retrospective is deliberately NOT here: its SoT home stays labels.json /
+# scripts/_retro_labels.py pending its #972 retirement decision (Refs #2442).
+[[labels]]
+name = "retro:tp"
+family = "retro"
+status = "keep"
+description = "Operator-confirmed true positive: follow-up landed and is reducing repair loops."
+color = "0e8a16"
+
+[[labels]]
+name = "retro:fp"
+family = "retro"
+status = "keep"
+description = "Confirmed false positive: retro fired on weak signals with no genuine repair loop."
+color = "ededed"
+
+[[labels]]
+name = "retro:fp-candidate"
+family = "retro"
+status = "keep"
+description = "Scanner-detected drift: follow-up stale or unresolved; operator confirms fp or relabels tp."
+color = "fbca04"
+
+[[labels]]
+name = "retro:tentative"
+family = "retro"
+status = "keep"
+description = "Auto-opened with low prior confidence (label-derived prior below the skip threshold)."
+color = "d4c5f9"
+
+[[labels]]
+name = "retro:expired"
+family = "retro"
+status = "keep"
+description = "Sentinel closed as not_planned after inactivity; weak fp signal, counted apart from tp/fp."
+color = "cfd3d7"
 
 [[retired_labels]]
 name = "layer:meta"

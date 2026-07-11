@@ -53,17 +53,27 @@ class TestKnownFamilies:
         assert gate.retired_family_names(policy) == frozenset({"threat", "agent", "layer"})
 
     def test_known_families_unions_live_retired_runtime(self) -> None:
+        # RUNTIME_ONLY_FAMILIES is empty since #2442 batch 1 (retro moved into the
+        # catalog), so the derived set is exactly live [[families]] + retired
+        # family prefixes for a synthetic policy that declares no retro family.
         policy = {
             "families": [{"name": "layer"}, {"name": "type"}],
             "retired_labels": [{"name": "threat:x"}, {"name": "agent:y"}],
         }
-        assert gate.known_families(policy) == frozenset({"layer", "type", "threat", "agent", "retro"})
+        assert gate.known_families(policy) == frozenset({"layer", "type", "threat", "agent"})
+
+    def test_runtime_only_families_is_empty(self) -> None:
+        # Pins the post-#2442 state: retro is now a live catalog family, so no
+        # runtime-only family remains. A future runtime-only family added here is
+        # a conscious change that updates this pin.
+        assert not gate.RUNTIME_ONLY_FAMILIES
 
     def test_live_policy_covers_retired_threat_and_agent(self) -> None:
         """Regression guard for the Codex review: retired families are scanned.
 
         The retired threat:* / agent:* families must be in the derived set so a
-        hardcoded reference to a retired label is caught (#1041 AC#3).
+        hardcoded reference to a retired label is caught (#1041 AC#3). ``retro``
+        is now a live [[families]] entry (#2442), so it is covered too.
         """
         fams = gate.known_families(_live_policy())
         assert {"threat", "agent", "retro"} <= fams
