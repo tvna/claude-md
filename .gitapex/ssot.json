@@ -828,6 +828,23 @@
       "tracking_issue": null
     },
     {
+      "id": "scan-label-sot-drift",
+      "kind": "script",
+      "script": "scripts/scan_label_sot_drift.py",
+      "rule": "deterministic gate: labels.json name/description/color stays in parity with label-policy.toml [[labels]]",
+      "planes": [
+        "pre-push",
+        "ci"
+      ],
+      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
+      "policy_refs": [
+        "labels-live",
+        "label-policy"
+      ],
+      "cluster": null,
+      "tracking_issue": 2442
+    },
+    {
       "id": "scan-compile-from-source",
       "kind": "script",
       "script": "scripts/scan_compile_from_source.py",
