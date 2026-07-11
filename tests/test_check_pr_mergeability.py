@@ -428,7 +428,16 @@ def test_session_start_silent_when_no_open_prs(
     assert out == ""
 
 
-def test_session_start_silent_when_no_token(capsys: pytest.CaptureFixture[str]) -> None:
+def test_session_start_silent_when_no_token(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Hermetic: run_session_start -> _list_open_prs resolves the token as
+    # `token or _get_token()`, and _get_token() reads $GH_TOKEN. An empty
+    # token is falsy, so an ambient GH_TOKEN would fall through to the live
+    # API instead of the no-token short circuit. Drop it so the intended
+    # code path runs regardless of the invoking shell. Refs #2435.
+    monkeypatch.delenv("GH_TOKEN", raising=False)
     subject.run_session_start(token="", sleeper=lambda _: None)
     assert capsys.readouterr().out == ""
 
@@ -646,7 +655,12 @@ def test_decide_skips_when_owner_repo_missing() -> None:
 
 
 class TestListOpenPrs:
-    def test_empty_without_token(self) -> None:
+    def test_empty_without_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Same ambient-GH_TOKEN hazard as
+        # test_session_start_silent_when_no_token: `token=""` falls through
+        # to _get_token() -> $GH_TOKEN, so drop it to exercise the no-token
+        # path hermetically. Refs #2435.
+        monkeypatch.delenv("GH_TOKEN", raising=False)
         assert subject._list_open_prs(token="") == []
 
     def test_empty_when_user_lookup_fails(self, monkeypatch: pytest.MonkeyPatch) -> None:
