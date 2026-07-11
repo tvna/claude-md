@@ -97,9 +97,25 @@ def test_verify_parity_flags_non_list_policy_labels() -> None:
 
 
 def test_index_policy_labels_skips_nameless_entries() -> None:
-    index, diagnostic = gate.index_policy_labels(_policy([{"family": "type"}, _label("type:fix", "d", "c")]))
-    assert diagnostic is None
+    index, diagnostics = gate.index_policy_labels(_policy([{"family": "type"}, _label("type:fix", "d", "c")]))
+    assert diagnostics == []
     assert set(index) == {"type:fix"}
+
+
+def test_verify_parity_flags_duplicate_policy_label() -> None:
+    # Two [[labels]] entries with the same name must fail loudly rather than
+    # let the last copy silently win (Codex review, PR #2447).
+    policy = _policy(
+        [
+            _label("type:fix", "Defect or broken workflow.", "d73a4a"),
+            _label("type:fix", "A conflicting second definition.", "000000"),
+        ]
+    )
+    catalog = [_label("type:fix", "Defect or broken workflow.", "d73a4a")]
+    errors = gate.verify_parity(catalog, policy)
+    assert len(errors) == 1
+    assert "declared more than once" in errors[0]
+    assert errors[0].startswith("::error file=.github/label-policy.toml::")
 
 
 def test_verify_against_real_repository_is_clean() -> None:

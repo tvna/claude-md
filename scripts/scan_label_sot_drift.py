@@ -84,27 +84,45 @@ def _err(message: str, file: Path = LABELS_JSON_PATH) -> str:
     return f"::error file={file.as_posix()}::{message}"
 
 
-def index_policy_labels(policy: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], str | None]:
-    """Return ``({name: entry}, diagnostic)`` for ``label-policy.toml`` ``[[labels]]``.
+def index_policy_labels(policy: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    """Return ``({name: entry}, diagnostics)`` for ``label-policy.toml`` ``[[labels]]``.
 
-    The diagnostic is non-None only when the ``[[labels]]`` array is
-    structurally malformed (not a list); the map is empty in that case. Entries
-    without a string ``name`` are skipped rather than indexed: their structural
-    validity is owned by other gates (``scan_commit_type_label_drift``,
-    ``scan_ssot_schema``), and a ``labels.json`` entry expecting one will still
-    surface here as a missing counterpart.
+    ``diagnostics`` is empty when the array is well-formed. It carries an error
+    when the ``[[labels]]`` array is structurally malformed (not a list), or when
+    a ``name`` is declared more than once: the parity gate treats
+    ``label-policy.toml`` as the single authored label identity SoT, so a
+    duplicate name (two conflicting definitions) must fail loudly rather than be
+    silently resolved to whichever copy happens to be last (which could let a
+    conflicting policy still print OK as long as the surviving copy matched
+    ``labels.json``). Entries without a string ``name`` are skipped rather than
+    indexed: their structural validity is owned by other gates
+    (``scan_commit_type_label_drift``, ``scan_ssot_schema``), and a
+    ``labels.json`` entry expecting one will still surface here as a missing
+    counterpart.
     """
     labels_raw = policy.get("labels", [])
     if not isinstance(labels_raw, list):
-        return {}, _err("label-policy.toml [[labels]] must be an array of tables", LABEL_POLICY_PATH)
+        return {}, [_err("label-policy.toml [[labels]] must be an array of tables", LABEL_POLICY_PATH)]
     index: dict[str, dict[str, Any]] = {}
+    errors: list[str] = []
     for entry in labels_raw:
         if not isinstance(entry, dict):
             continue
         name = entry.get("name")
-        if isinstance(name, str) and name:
-            index[name] = entry
-    return index, None
+        if not isinstance(name, str) or not name:
+            continue
+        if name in index:
+            errors.append(
+                _err(
+                    f"label {name!r} is declared more than once in label-policy.toml "
+                    "[[labels]]; it is the single authored label SoT, so each name must be "
+                    "unique. Remove the duplicate entry.",
+                    LABEL_POLICY_PATH,
+                )
+            )
+            continue
+        index[name] = entry
+    return index, errors
 
 
 def verify_parity(catalog: Any, policy: dict[str, Any]) -> list[str]:
@@ -112,9 +130,9 @@ def verify_parity(catalog: Any, policy: dict[str, Any]) -> list[str]:
     if not isinstance(catalog, list):
         return [_err("labels.json must be a JSON array of label objects")]
 
-    policy_index, diagnostic = index_policy_labels(policy)
-    if diagnostic is not None:
-        return [diagnostic]
+    policy_index, diagnostics = index_policy_labels(policy)
+    if diagnostics:
+        return diagnostics
 
     errors: list[str] = []
     for entry in catalog:
