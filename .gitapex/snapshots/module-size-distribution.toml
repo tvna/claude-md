@@ -8,18 +8,18 @@ max_module_lines = 800
 warn_module_lines = 640
 
 [summary]
-total_modules = 219
-in_warn_band = 12
+total_modules = 220
+in_warn_band = 13
 exactly_at_limit = 1
 over_budget = 3
 
 # Module counts by inclusive physical-line range.
 [histogram]
 "1-160" = 64
-"161-320" = 101
+"161-320" = 102
 "321-480" = 31
-"481-640" = 8
-"641-800" = 12
+"481-640" = 7
+"641-800" = 13
 "801+" = 3
 
 # warn_band: passing modules in [warn_module_lines, max_module_lines].
@@ -29,6 +29,7 @@ over_budget = 3
 warn_band = [
     "scripts/_auto_retro_parse.py",
     "scripts/_auto_retro_render.py",
+    "scripts/_auto_retro_triage.py",
     "scripts/analyze_ci_timings.py",
     "scripts/gate_agents_skills_edit.py",
     "scripts/measure_tool_overlap.py",

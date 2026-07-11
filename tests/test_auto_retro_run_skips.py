@@ -153,6 +153,46 @@ class TestSkipComment:
         assert ar.run(merged_event(number=42), "o/r") == 0
         assert any(self._is_skip_comment_post(*t) for t in seen)
 
+    def test_prior_skip_tags_cofire_marker_for_multi_commit_alone(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """#2463 review: when the label prior skips a multi_commit_pr-alone
+        PR, the recorded reason still carries the greppable interim co-fire
+        marker (#2436) so the Phase 2 measurement counts prior-suppressed
+        lone-signal cases too, not only the exempt-rows path. The prior gate
+        still decides the skip; only the recorded reason gains the marker.
+        """
+        summary = tmp_path / "summary.md"
+        monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+        monkeypatch.setattr(
+            ar,
+            "should_skip_by_prior",
+            lambda *_: (True, "prior FP rate 0.90 (n=50)"),
+        )
+        seen = orchestrator_recorder(
+            monkeypatch,
+            review_comments=[],
+            commits=[
+                {"commit": {"message": "feat(x): add a"}},
+                {"commit": {"message": "feat(x): add b"}},
+            ],
+        )
+        event = merged_event(
+            number=2463, title="feat(x): rework", body="", commits=2
+        )
+        assert ar.run(event, "o/r") == 0
+        assert not any(
+            m == "POST" and p == "/repos/o/r/issues" for m, p, _ in seen
+        )
+        printed = capsys.readouterr().out
+        # The prior reason AND the greppable co-fire marker are both recorded.
+        assert "prior FP rate 0.90" in printed
+        assert ar._INTERIM_COFIRE_MARKER in printed
+        assert ar._INTERIM_COFIRE_MARKER in summary.read_text(encoding="utf-8")
+
     def test_skip_comment_idempotent_patches_existing(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

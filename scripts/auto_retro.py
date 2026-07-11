@@ -139,7 +139,9 @@ from _auto_retro_triage import (
     _FP_TREND_WINDOW,
     _RECENT_RETRO_COUNT,
     _TRIAGE_LABELS,
+    _UNLABELLED_ANOMALY_RATIO,
     _UNLABELLED_KEY,
+    _UNLABELLED_MIN_SAMPLE,
     KNOWN_REPAIR_CATEGORIES,
     PastRetro,
     RecentRetro,
@@ -164,6 +166,7 @@ from _retro_labels import (
     PRIOR_MIN_SAMPLE_SIZE,
     PRIOR_SKIP_THRESHOLD,
     PRIOR_TENTATIVE_THRESHOLD,
+    RETRO_EXPIRED,
     RETRO_FP,
     RETRO_FP_CANDIDATE,
     RETRO_TENTATIVE,
@@ -193,6 +196,7 @@ __all__ = [
     "PRIOR_MIN_SAMPLE_SIZE",
     "PRIOR_SKIP_THRESHOLD",
     "PRIOR_TENTATIVE_THRESHOLD",
+    "RETRO_EXPIRED",
     "RETRO_FP",
     "RETRO_FP_CANDIDATE",
     "RETRO_TENTATIVE",
@@ -207,6 +211,7 @@ __all__ = [
     "_CHECK_RUN_DISPLAY_CAP",
     "_CHECK_RUN_FAIL_CONCLUSIONS",
     "_FP_TREND_WINDOW",
+    "_INTERIM_COFIRE_MARKER",
     "_MERGE_FROM_MAIN_PREFIXES",
     "_POLICY_ARTIFACT_MARKER",
     "_RECENT_RETRO_COUNT",
@@ -237,7 +242,9 @@ __all__ = [
     "_TRIAGE_LABELS",
     "_TRUSTED_BOT_LOGINS",
     "_TYPE_SCOPE_RE",
+    "_UNLABELLED_ANOMALY_RATIO",
     "_UNLABELLED_KEY",
+    "_UNLABELLED_MIN_SAMPLE",
     "_VERIFICATION_COMMAND_RE",
     "_VERIFICATION_RESULT_RE",
     "MergedPR",
@@ -958,6 +965,16 @@ _DEFAULT_SENTINEL_DAYS: int = 14
 # is a soft ceiling rather than a correctness constraint.
 _SENTINEL_SEARCH_PAGE_SIZE: int = 50
 
+# Greppable marker for the interim co-fire skip reason (issue #2436). Both skip
+# paths that suppress a multi_commit_pr-alone would-be retro (the label-prior
+# gate and the downstream exempt-rows gate) embed this exact substring in
+# their recorded reason, so the Phase 2 measurement can count the whole
+# lone-signal population with a single grep instead of missing the cases the
+# prior gate catches first. Interim, pending the Phase 2 signal redesign.
+_INTERIM_COFIRE_MARKER: str = (
+    "interim co-fire gate (refs #2436): multi_commit_pr"
+)
+
 
 def find_existing_back_link_id(
     repo: str, pr_number: int, marker: str = _BACK_LINK_MARKER
@@ -1073,6 +1090,27 @@ def apply_terminal_label(
             f"/repos/{repo}/issues/{pr_number}/labels",
             {"labels": [legacy]},
         )
+
+
+def apply_expired_label(repo: str, number: int) -> None:
+    """POST :data:`RETRO_EXPIRED` to the retro issue's own labels endpoint.
+
+    Called by :func:`sentinel_run` before the sentinel comment and the
+    ``not_planned`` close, so a sentinel-closed retro carries a visible
+    weak-signal label instead of the evidence being discarded unlabelled.
+    Ordered first (ahead of the comment) because the sentinel's
+    idempotency gate keys on the comment marker, not this label; POSTing
+    the label before the marker exists means a label failure is retried
+    cleanly on the next cron tick instead of leaving the retro stuck.
+    Counted separately from ``retro:tp``/``retro:fp`` by
+    :func:`_auto_retro_triage.compute_prior_from_labels`. Refs #2433,
+    #2439 review.
+    """
+    gh_api(
+        "POST",
+        f"/repos/{repo}/issues/{number}/labels",
+        {"labels": [RETRO_EXPIRED]},
+    )
 
 
 def post_skip_comment(repo: str, pr_number: int, reason: str) -> str:
@@ -1383,6 +1421,9 @@ def run(event: dict[str, Any], repo: str) -> int:
 
     signals = compute_repair_signals(pr, has_inline_comments, commit_subjects)
     signal_summary = render_repair_signals(signals)
+    # Set of signal names that fired, used by the interim co-fire gate (#2436)
+    # to name the multi_commit_pr-alone skip explicitly for Phase 2 measurement.
+    fired = frozenset(name for name, is_fired in signals.items() if is_fired)
     if not any(signals.values()):
         msg = f"no repair signal fired ({signal_summary})"
         print(f"skip: {msg}")
@@ -1402,6 +1443,15 @@ def run(event: dict[str, Any], repo: str) -> int:
     )
     prior_skip, prior_reason = should_skip_by_prior(signals, prior)
     if prior_skip:
+        # The prior gate sits ahead of the interim co-fire branch below, so a
+        # multi_commit_pr-alone PR whose lone signal has a high historical FP
+        # rate skips here first. Tag the same greppable co-fire marker (#2436)
+        # onto the prior reason for that single-signal case so the Phase 2
+        # measurement of multi_commit_pr-alone suppressions is complete rather
+        # than split between two skip paths. Behavior is unchanged; only the
+        # recorded reason gains the marker. Refs #2463 review.
+        if fired == frozenset({"multi_commit_pr"}):
+            prior_reason = f"{prior_reason} [{_INTERIM_COFIRE_MARKER}]"
         print(f"skip: {prior_reason}")
         _append_summary(_build_summary(pr, "skip", prior_reason))
         _post_skip_comment_soft(repo, pr.number, prior_reason)
@@ -1444,7 +1494,23 @@ def run(event: dict[str, Any], repo: str) -> int:
             )
         )
     ):
-        if repair_rows:
+        # Interim co-fire gate (issue #2436): when multi_commit_pr is the ONLY
+        # fired signal and the repair table has no actionable row, name the skip
+        # explicitly so Phase 2 can measure how often the near-universal
+        # multi_commit_pr (fires on ~92% of merges) is the sole trigger. This
+        # is the same open/skip outcome the existing exempt-rows gate already
+        # enforces (multi_commit_pr alone -> policy-artifact-only rows -> skip);
+        # the interim change is the named, greppable reason, not a new
+        # suppression. A multi_commit_pr-alone PR that carries a genuine
+        # actionable row (a CI-failure or iteration-commit row) still opens,
+        # preserving real repair evidence. Interim, pending the Phase 2
+        # signal redesign.
+        if fired == frozenset({"multi_commit_pr"}):
+            msg = (
+                f"{_INTERIM_COFIRE_MARKER} fired alone with no actionable "
+                f"repair row ({signal_summary})"
+            )
+        elif repair_rows:
             msg = f"only policy-artifact repair rows generated ({signal_summary})"
         else:
             msg = f"no standalone repair workload ({signal_summary})"
@@ -1580,8 +1646,21 @@ def sentinel_run(repo: str, now_iso: str, days: int) -> int:
     2. Skip when a prior sentinel comment marker is present (idempotent).
     3. Skip when the retro shows operator engagement
        (:func:`is_retro_untouched` returns False).
-    4. Otherwise POST the sentinel comment, then PATCH the issue to
-       ``closed`` / ``not_planned``.
+    4. Otherwise POST the :data:`_retro_labels.RETRO_EXPIRED` label,
+       POST the sentinel comment, then PATCH the issue to ``closed`` /
+       ``not_planned``.
+
+    The label is applied BEFORE the comment deliberately: step 2's
+    idempotency gate keys on the sentinel *comment* marker, not the
+    label, so a label-POST failure leaves no marker behind and the next
+    cron tick retries this retro from step 1 (the label POST is itself
+    idempotent, per :func:`apply_terminal_label`'s docstring). Ordering
+    the label after the comment would instead leave a labelled-but-open
+    retro stuck forever once the comment marker exists (Refs #2439
+    review). A comment-POST failure after a successful label add still
+    leaves the retro stuck until manual attention (unchanged from the
+    pre-existing close-after-comment-failure behavior); only the label
+    step gained this tick's retry safety.
 
     Returns 0 always; the step summary records the close / skip
     breakdown so an operator can audit the run.
@@ -1625,6 +1704,18 @@ def sentinel_run(repo: str, now_iso: str, days: int) -> int:
         body = item.get("body") or ""
         if not is_retro_untouched(body, comments):
             skipped.append((number, "operator engagement detected"))
+            continue
+        try:
+            apply_expired_label(repo, number)
+        except GitHubApiError as exc:
+            print(
+                f"::warning::apply_expired_label failed for retro "
+                f"#{number} (HTTP {exc.code}); NOT posting the sentinel "
+                "comment or closing this tick so the next tick retries "
+                "from scratch (no marker was written yet)",
+                file=sys.stderr,
+            )
+            skipped.append((number, "expired label add failed"))
             continue
         try:
             post_sentinel_comment(repo, number, days)
@@ -2082,7 +2173,12 @@ def _cmd_post_merge_rescan(args: argparse.Namespace) -> int:
         if args.hours is not None
         else os.environ.get("AUTO_RETRO_RESCAN_HOURS")
     )
-    if hours_raw is None:
+    # On a schedule trigger the workflow env AUTO_RETRO_RESCAN_HOURS is set
+    # from ${{ inputs.hours }}, which expands to '' (present but empty). Treat
+    # empty / whitespace-only the same as unset so the default applies instead
+    # of crashing on int(''). An explicitly invalid non-empty value still
+    # fails loud below. Refs #2448.
+    if hours_raw is None or (isinstance(hours_raw, str) and not hours_raw.strip()):
         hours = _DEFAULT_RESCAN_HOURS
     else:
         try:
@@ -2118,7 +2214,12 @@ def _cmd_sentinel(args: argparse.Namespace) -> int:
         if args.days is not None
         else os.environ.get("AUTO_RETRO_SENTINEL_DAYS")
     )
-    if days_raw is None:
+    # On a schedule trigger the workflow env AUTO_RETRO_SENTINEL_DAYS is set
+    # from ${{ inputs.days }}, which expands to '' (present but empty). Treat
+    # empty / whitespace-only the same as unset so the default applies instead
+    # of crashing on int(''). An explicitly invalid non-empty value still
+    # fails loud below. Refs #2448.
+    if days_raw is None or (isinstance(days_raw, str) and not days_raw.strip()):
         days = _DEFAULT_SENTINEL_DAYS
     else:
         try:

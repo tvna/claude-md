@@ -27,6 +27,7 @@ from _retro_labels import (
     PRIOR_MIN_SAMPLE_SIZE,
     PRIOR_SKIP_THRESHOLD,
     PRIOR_TENTATIVE_THRESHOLD,
+    RETRO_EXPIRED,
     RETRO_FP,
     RETRO_FP_CANDIDATE,
     RETRO_TENTATIVE,
@@ -120,12 +121,17 @@ def compute_prior_from_labels(
 
 # Triage labels in the fixed display order used by the triage report.
 # Mirrors the universe in :data:`ALL_RETRO_LABELS` but is ordered so the
-# rendered pie/table is byte-stable across runs. Refs #1042.
+# rendered pie/table is byte-stable across runs. Refs #1042. RETRO_EXPIRED
+# is last: it is a weak, unconfirmed signal (the sentinel closed the retro
+# without operator engagement), so an operator-set retro:tp/fp/fp-candidate/
+# tentative label always wins the display priority over it. Refs #2433,
+# #2439 review.
 _TRIAGE_LABELS: tuple[str, ...] = (
     RETRO_TP,
     RETRO_FP,
     RETRO_FP_CANDIDATE,
     RETRO_TENTATIVE,
+    RETRO_EXPIRED,
 )
 _UNLABELLED_KEY: str = "unlabelled"
 
@@ -135,6 +141,18 @@ _UNLABELLED_KEY: str = "unlabelled"
 # Refs #1386.
 _RECENT_RETRO_COUNT: int = 10
 _FP_TREND_WINDOW: int = 20
+
+# Loop-health panel (issue #2434). The unlabelled-ratio anomaly fires when a
+# majority of a large-enough observed population carries none of
+# :data:`ALL_RETRO_LABELS`, so a "no anomalies" headline can never mask
+# "nothing was ever labelled"; the all-unlabelled degenerate the per-signal
+# FP gate (:meth:`SignalStat.is_anomaly`) is structurally blind to, because an
+# unlabelled retro contributes to no signal's FP numerator. The 0.5 majority
+# bar mirrors :data:`PRIOR_SKIP_THRESHOLD` and the sample floor reuses
+# :data:`PRIOR_MIN_SAMPLE_SIZE`, so the loop-health gate shares the FP gate's
+# "insufficient signal to judge" discipline. Both are operator-tunable here.
+_UNLABELLED_ANOMALY_RATIO: float = 0.5
+_UNLABELLED_MIN_SAMPLE: int = PRIOR_MIN_SAMPLE_SIZE
 
 
 def _retro_status(labels: frozenset[str]) -> str:
@@ -260,6 +278,68 @@ class TriageReport:
         """
         return self.population_total > self.total
 
+    # ------------------------------------------------------------------
+    # Loop-health panel (issue #2434). All three metrics derive from
+    # ``total`` and ``label_counts`` already computed by
+    # :func:`compute_triage_report`, so no new stored field is needed.
+    # ------------------------------------------------------------------
+
+    @property
+    def unlabelled(self) -> int:
+        """Retros carrying none of :data:`ALL_RETRO_LABELS`."""
+        return self.label_counts.get(_UNLABELLED_KEY, 0)
+
+    @property
+    def triaged(self) -> int:
+        """Retros carrying at least one ``retro:*`` label."""
+        return self.total - self.unlabelled
+
+    @property
+    def triage_rate(self) -> float:
+        """Fraction of the observed population that carries a retro label.
+
+        The counterpoint to the retro production count (``total``): a low
+        triage rate means retros are being opened faster than they are
+        classified.
+        """
+        return self.triaged / self.total if self.total else 0.0
+
+    @property
+    def sentinel_disposed(self) -> int:
+        """Retros the sentinel auto-closed, i.e. carrying ``retro:expired``.
+
+        ``retro:expired`` is applied only by ``sentinel_run`` before the
+        ``not_planned`` close (Refs #2439), so this count is the sentinel
+        disposal volume over the observed population.
+        """
+        return self.label_counts.get(RETRO_EXPIRED, 0)
+
+    @property
+    def sentinel_disposal_rate(self) -> float:
+        """Fraction of the observed population auto-closed by the sentinel."""
+        return self.sentinel_disposed / self.total if self.total else 0.0
+
+    @property
+    def unlabelled_ratio(self) -> float:
+        """Fraction of the observed population carrying no retro label."""
+        return self.unlabelled / self.total if self.total else 0.0
+
+    @property
+    def unlabelled_anomaly(self) -> bool:
+        """True when a majority of a large-enough population is unlabelled.
+
+        The loop-health counterpart to :meth:`SignalStat.is_anomaly`: it
+        makes the all-unlabelled degenerate visible as an Anomaly in its
+        own right, so a "no anomalies" headline cannot mean "nothing was
+        ever labelled". Gated by :data:`_UNLABELLED_MIN_SAMPLE` so a tiny
+        early population is reported as insufficient signal rather than a
+        false alarm. Refs #2434.
+        """
+        return (
+            self.total >= _UNLABELLED_MIN_SAMPLE
+            and self.unlabelled_ratio >= _UNLABELLED_ANOMALY_RATIO
+        )
+
 
 def compute_triage_report(
     past_retros: list[PastRetro],
@@ -378,24 +458,51 @@ def render_triage_report_markdown(report: TriageReport) -> str:
         "## Anomalies",
         "",
     ]
-    if report.anomalies:
-        lines.append(
-            f"Signals whose prior FP rate is at or above "
-            f"{PRIOR_SKIP_THRESHOLD:.2f} (n >= {PRIOR_MIN_SAMPLE_SIZE}); "
-            f"these signals now suppress new retros via "
-            f"`should_skip_by_prior`:"
-        )
-        lines.append("")
-        for stat in report.anomalies:
+    if report.anomalies or report.unlabelled_anomaly:
+        if report.anomalies:
             lines.append(
-                f"- `{stat.name}`: FP rate {stat.fp_rate:.2f} "
-                f"(n={stat.sample_size})"
+                f"Signals whose prior FP rate is at or above "
+                f"{PRIOR_SKIP_THRESHOLD:.2f} (n >= {PRIOR_MIN_SAMPLE_SIZE}); "
+                f"these signals now suppress new retros via "
+                f"`should_skip_by_prior`:"
+            )
+            lines.append("")
+            for stat in report.anomalies:
+                lines.append(
+                    f"- `{stat.name}`: FP rate {stat.fp_rate:.2f} "
+                    f"(n={stat.sample_size})"
+                )
+        if report.unlabelled_anomaly:
+            if report.anomalies:
+                lines.append("")
+            lines.append(
+                f"- **unlabelled ratio {report.unlabelled_ratio:.2f}**: "
+                f"{report.unlabelled} of {report.total} observed retros carry "
+                f"no `retro:*` label (>= {_UNLABELLED_ANOMALY_RATIO:.2f}, "
+                f"n >= {_UNLABELLED_MIN_SAMPLE}); retros are being opened "
+                f"faster than they are triaged."
             )
     else:
+        # The unlabelled ratio can miss the anomaly bar two ways: the ratio
+        # is below the threshold, OR the sample is below the floor (a small
+        # all-unlabelled population). Report whichever actually held so the
+        # "None" reason is accurate rather than always claiming a low ratio
+        # (Refs #2455 review).
+        if report.total < _UNLABELLED_MIN_SAMPLE:
+            unlabelled_reason = (
+                f"the unlabelled ratio is not yet judged "
+                f"(sample n={report.total} below n >= {_UNLABELLED_MIN_SAMPLE})"
+            )
+        else:
+            unlabelled_reason = (
+                f"the unlabelled ratio is below "
+                f"{_UNLABELLED_ANOMALY_RATIO:.2f}"
+            )
         lines.append(
             "None: no fired signal clears both the FP-rate and "
-            "sample-size thresholds."
+            f"sample-size thresholds, and {unlabelled_reason}."
         )
+    lines.extend(_render_loop_health(report))
     lines.extend(["", "## Triage status", ""])
     if report.total == 0:
         lines.append("No retros observed yet.")
@@ -425,6 +532,35 @@ def render_triage_report_markdown(report: TriageReport) -> str:
     lines.extend(_render_fp_trend(report))
     lines.extend(_render_recent_retros(report))
     return "\n".join(lines) + "\n"
+
+
+def _render_loop_health(report: TriageReport) -> list[str]:
+    """Render the loop-health panel (issue #2434).
+
+    Surfaces three metrics over the observed population so an operator can
+    see by inspection (CLAUDE.md section 6) whether the retro loop is
+    converging: the triage rate (production vs classification), the
+    sentinel disposal rate (how much is auto-closed without engagement),
+    and the unlabelled ratio (flagged as an Anomaly above in the headline
+    when it crosses :data:`_UNLABELLED_ANOMALY_RATIO`). This section is
+    descriptive; the anomaly determination lives in the Anomalies block.
+    """
+    lines = ["", "## Loop health", ""]
+    if report.total == 0:
+        lines.append("No retros observed yet.")
+        return lines
+    lines.append(
+        f"- Triage rate: **{report.triaged} / {report.total}** "
+        f"({report.triage_rate:.0%}) of observed retros carry a `retro:*` "
+        f"label; **{report.unlabelled}** ({report.unlabelled_ratio:.0%}) "
+        f"remain unlabelled."
+    )
+    lines.append(
+        f"- Sentinel disposal: **{report.sentinel_disposed}** "
+        f"({report.sentinel_disposal_rate:.0%}) auto-closed via "
+        f"`retro:expired` without operator engagement."
+    )
+    return lines
 
 
 def _render_fp_trend(report: TriageReport) -> list[str]:

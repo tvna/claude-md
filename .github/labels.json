@@ -1,77 +1,77 @@
 [
   {
     "name": "layer:p1-goal-plan",
-    "description": "CLAUDE.md §1 -- Goal & plan structure (what the work is and how it will be verified).",
+    "description": "CLAUDE.md section 1: goal, plan, and verification structure.",
     "color": "1d76db"
   },
   {
     "name": "layer:p2-input-boundary",
-    "description": "CLAUDE.md §2 -- Trusted inputs, unknowns, facts, assumptions, and ambiguity.",
+    "description": "CLAUDE.md section 2: trusted inputs, unknowns, facts, assumptions, and ambiguity.",
     "color": "5319e7"
   },
   {
     "name": "layer:p3-harness",
-    "description": "CLAUDE.md §3 -- Delivery harness (issues, CI, hooks, deps, PR loop).",
+    "description": "CLAUDE.md section 3: issues, CI, hooks, dependencies, and PR loop.",
     "color": "0e8a16"
   },
   {
     "name": "layer:p4-safety-boundary",
-    "description": "CLAUDE.md §4 -- Simplicity bounded by safety, tool scope, and secret exposure.",
+    "description": "CLAUDE.md section 4: simplicity bounded by safety, tool scope, and secret exposure.",
     "color": "fbca04"
   },
   {
     "name": "layer:p5-scale-quality",
-    "description": "CLAUDE.md §5 -- Change scope, agent split, and quality proportional to scale.",
+    "description": "CLAUDE.md section 5: change scope, agent split, and quality proportional to scale.",
     "color": "d93f0b"
   },
   {
     "name": "layer:p6-handoff",
-    "description": "CLAUDE.md §6 -- Handoff & communication.",
+    "description": "CLAUDE.md section 6: handoff, communication, and operator-language output.",
     "color": "b60205"
   },
   {
     "name": "type:feat",
-    "description": "New behaviour or rule added to the meta-document or repo.",
+    "description": "New behavior or rule.",
     "color": "a2eeef"
   },
   {
     "name": "type:fix",
-    "description": "Defect: contradiction, broken workflow, wrong doc.",
+    "description": "Defect or broken workflow.",
     "color": "d73a4a"
   },
   {
     "name": "type:refactor",
-    "description": "Restructure without behaviour change.",
+    "description": "Restructure without behavior change.",
     "color": "f9d0c4"
   },
   {
     "name": "type:docs",
-    "description": "Operator runbooks / README (not the meta-document itself).",
+    "description": "Operator docs, standards, or README changes.",
     "color": "0075ca"
   },
   {
     "name": "type:tracking",
-    "description": "Umbrella issue coordinating phased sub-issues.",
+    "description": "Umbrella issue coordinating scoped child issues.",
     "color": "e4e669"
   },
   {
     "name": "state:rfc",
-    "description": "Open but unactioned per §2; agent must not pre-empt.",
+    "description": "Proposal is open but not yet actionable.",
     "color": "bfd4f2"
   },
   {
     "name": "state:parked",
-    "description": "Explicitly deferred; requires evidence to revive.",
+    "description": "Explicitly deferred until new evidence or owner decision.",
     "color": "cfd3d7"
   },
   {
     "name": "severity:security",
-    "description": "Security-sensitive; overrides agent routing toward investigate.",
+    "description": "Security-sensitive work requiring investigation bias.",
     "color": "ee0701"
   },
   {
     "name": "severity:non-ascii-content",
-    "description": "Non-ASCII in title/body/comment; advisory for trusted authors, blocks external contributors.",
+    "description": "Non-ASCII content boundary signal for issue, PR, or comment text.",
     "color": "ff7619"
   },
   {
@@ -133,6 +133,11 @@
     "name": "retro:tentative",
     "description": "Auto-opened with low prior confidence (label-derived prior below the skip threshold).",
     "color": "d4c5f9"
+  },
+  {
+    "name": "retro:expired",
+    "description": "Sentinel closed as not_planned after inactivity; weak fp signal, counted apart from tp/fp.",
+    "color": "cfd3d7"
   },
   {
     "name": "type:retrospective",
