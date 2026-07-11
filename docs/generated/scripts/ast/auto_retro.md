@@ -686,69 +686,74 @@ flowchart TD
     N052["commit_subjects = None"]
     N053["signals = compute_repair_signals(...)"]
     N054["signal_summary = render_repair_signals(...)"]
-    N055["if not any(signals.values())"]
-    N056["msg = f'<str>{signal_summary}<str>'"]
-    N057["print(...)"]
-    N058["_append_summary(...)"]
-    N059["_post_skip_comment_soft(...)"]
-    N060["return 0"]
-    N061["past_retros = fetch_past_retro_labels(...)"]
-    N062["prior = compute_prior_from_labels(...)"]
-    N063["(prior_skip, prior_reason) = should_skip_by_prior(...)"]
-    N064["if prior_skip"]
-    N065["print(...)"]
-    N066["_append_summary(...)"]
-    N067["_post_skip_comment_soft(...)"]
-    N068["return 0"]
-    N069["tentative = is_tentative_by_prior(...)"]
-    N070["if commit_subjects is None"]
-    N071["commit_subjects = fetch_pr_commits(...)"]
-    N072["check_runs_unknown = False"]
-    N073["try"]
-    N074["check_runs = fetch_check_runs(...)"]
-    N075["except GitHubApiError"]
-    N076["print(...)"]
-    N077["check_runs = []"]
-    N078["check_runs_unknown = True"]
-    N079["verification_pairs = extract_verification_pairs(...)"]
-    N080["pr_type = (extract_type_scope(pr.title) or '<str>').split('<str>', 1)[0]"]
-    N081["repair_rows = _repair_history_rows(...)"]
-    N082["if not check_runs_unknown and (not repair_rows or (not has_inline_comments and _has_only_exempt_policy_artifact_rows(repair_rows)))"]
-    N083["if repair_rows"]
-    N084["msg = f'<str>{signal_summary}<str>'"]
-    N085["msg = f'<str>{signal_summary}<str>'"]
-    N086["print(...)"]
-    N087["_append_summary(...)"]
-    N088["_post_skip_comment_soft(...)"]
-    N089["return 0"]
-    N090["title = build_retro_title(...)"]
-    N091["body = build_retro_body(...)"]
-    N092["inherited_layers = tuple(...)"]
-    N093["labels = issue_labels(...)"]
-    N094["_terminal_labels(...)"]
-    N095["created = create_issue(...)"]
-    N096["new_number = get(...)"]
-    N097["new_url = created.get('<str>') or '<str>'"]
-    N098["back_link_status = '<str>'"]
-    N099["terminal_label_status = '<str>'"]
-    N100["if isinstance(new_number, int)"]
-    N101["if not _pr_comments_enabled()"]
-    N102["back_link_status = '<str>'"]
-    N103["try"]
-    N104["back_link_status = post_back_link_comment(...)"]
-    N105["except GitHubApiError"]
-    N106["print(...)"]
+    N055["fired = frozenset(...)"]
+    N056["if not any(signals.values())"]
+    N057["msg = f'<str>{signal_summary}<str>'"]
+    N058["print(...)"]
+    N059["_append_summary(...)"]
+    N060["_post_skip_comment_soft(...)"]
+    N061["return 0"]
+    N062["past_retros = fetch_past_retro_labels(...)"]
+    N063["prior = compute_prior_from_labels(...)"]
+    N064["(prior_skip, prior_reason) = should_skip_by_prior(...)"]
+    N065["if prior_skip"]
+    N066["if fired == frozenset({'multi_commit_pr'})"]
+    N067["prior_reason = f'{prior_reason}<str>{_INTERIM_COFIRE_MARKER}<str>'"]
+    N068["print(...)"]
+    N069["_append_summary(...)"]
+    N070["_post_skip_comment_soft(...)"]
+    N071["return 0"]
+    N072["tentative = is_tentative_by_prior(...)"]
+    N073["if commit_subjects is None"]
+    N074["commit_subjects = fetch_pr_commits(...)"]
+    N075["check_runs_unknown = False"]
+    N076["try"]
+    N077["check_runs = fetch_check_runs(...)"]
+    N078["except GitHubApiError"]
+    N079["print(...)"]
+    N080["check_runs = []"]
+    N081["check_runs_unknown = True"]
+    N082["verification_pairs = extract_verification_pairs(...)"]
+    N083["pr_type = (extract_type_scope(pr.title) or '<str>').split('<str>', 1)[0]"]
+    N084["repair_rows = _repair_history_rows(...)"]
+    N085["if not check_runs_unknown and (not repair_rows or (not has_inline_comments and _has_only_exempt_policy_artifact_rows(repair_rows)))"]
+    N086["if fired == frozenset({'multi_commit_pr'})"]
+    N087["msg = f'{_INTERIM_COFIRE_MARKER}<str>{signal_summary}<str>'"]
+    N088["if repair_rows"]
+    N089["msg = f'<str>{signal_summary}<str>'"]
+    N090["msg = f'<str>{signal_summary}<str>'"]
+    N091["print(...)"]
+    N092["_append_summary(...)"]
+    N093["_post_skip_comment_soft(...)"]
+    N094["return 0"]
+    N095["title = build_retro_title(...)"]
+    N096["body = build_retro_body(...)"]
+    N097["inherited_layers = tuple(...)"]
+    N098["labels = issue_labels(...)"]
+    N099["_terminal_labels(...)"]
+    N100["created = create_issue(...)"]
+    N101["new_number = get(...)"]
+    N102["new_url = created.get('<str>') or '<str>'"]
+    N103["back_link_status = '<str>'"]
+    N104["terminal_label_status = '<str>'"]
+    N105["if isinstance(new_number, int)"]
+    N106["if not _pr_comments_enabled()"]
     N107["back_link_status = '<str>'"]
     N108["try"]
-    N109["apply_terminal_label(...)"]
-    N110["terminal_label_status = '<str>'"]
-    N111["except GitHubApiError"]
-    N112["print(...)"]
-    N113["terminal_label_status = '<str>'"]
-    N114["msg = f'<str>{new_number}<str>{new_url}<str>{back_link_status}<str>{terminal_label_status}'"]
-    N115["print(...)"]
-    N116["_append_summary(...)"]
-    N117["return 0"]
+    N109["back_link_status = post_back_link_comment(...)"]
+    N110["except GitHubApiError"]
+    N111["print(...)"]
+    N112["back_link_status = '<str>'"]
+    N113["try"]
+    N114["apply_terminal_label(...)"]
+    N115["terminal_label_status = '<str>'"]
+    N116["except GitHubApiError"]
+    N117["print(...)"]
+    N118["terminal_label_status = '<str>'"]
+    N119["msg = f'<str>{new_number}<str>{new_url}<str>{back_link_status}<str>{terminal_label_status}'"]
+    N120["print(...)"]
+    N121["_append_summary(...)"]
+    N122["return 0"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
@@ -809,75 +814,82 @@ flowchart TD
     N047 -->|"false"| N053
     N053 --> N054
     N054 --> N055
-    N055 -->|"true"| N056
-    N056 --> N057
+    N055 --> N056
+    N056 -->|"true"| N057
     N057 --> N058
     N058 --> N059
     N059 --> N060
-    N055 -->|"false"| N061
-    N061 --> N062
+    N060 --> N061
+    N056 -->|"false"| N062
     N062 --> N063
     N063 --> N064
-    N064 -->|"true"| N065
-    N065 --> N066
-    N066 --> N067
+    N064 --> N065
+    N065 -->|"true"| N066
+    N066 -->|"true"| N067
     N067 --> N068
-    N064 -->|"false"| N069
+    N066 -->|"false"| N068
+    N068 --> N069
     N069 --> N070
-    N070 -->|"true"| N071
-    N071 --> N072
-    N070 -->|"false"| N072
+    N070 --> N071
+    N065 -->|"false"| N072
     N072 --> N073
-    N073 -->|"try"| N074
-    N073 -->|"raises"| N075
+    N073 -->|"true"| N074
+    N074 --> N075
+    N073 -->|"false"| N075
     N075 --> N076
-    N076 --> N077
-    N077 --> N078
-    N074 --> N079
+    N076 -->|"try"| N077
+    N076 -->|"raises"| N078
     N078 --> N079
     N079 --> N080
     N080 --> N081
+    N077 --> N082
     N081 --> N082
-    N082 -->|"true"| N083
-    N083 -->|"true"| N084
-    N083 -->|"false"| N085
-    N084 --> N086
-    N085 --> N086
-    N086 --> N087
-    N087 --> N088
-    N088 --> N089
-    N082 -->|"false"| N090
+    N082 --> N083
+    N083 --> N084
+    N084 --> N085
+    N085 -->|"true"| N086
+    N086 -->|"true"| N087
+    N086 -->|"false"| N088
+    N088 -->|"true"| N089
+    N088 -->|"false"| N090
+    N087 --> N091
+    N089 --> N091
     N090 --> N091
     N091 --> N092
     N092 --> N093
     N093 --> N094
-    N094 --> N095
+    N085 -->|"false"| N095
     N095 --> N096
     N096 --> N097
     N097 --> N098
     N098 --> N099
     N099 --> N100
-    N100 -->|"true"| N101
-    N101 -->|"true"| N102
-    N101 -->|"false"| N103
-    N103 -->|"try"| N104
-    N103 -->|"raises"| N105
-    N105 --> N106
-    N106 --> N107
-    N102 --> N108
-    N104 --> N108
-    N107 --> N108
+    N100 --> N101
+    N101 --> N102
+    N102 --> N103
+    N103 --> N104
+    N104 --> N105
+    N105 -->|"true"| N106
+    N106 -->|"true"| N107
+    N106 -->|"false"| N108
     N108 -->|"try"| N109
-    N109 --> N110
-    N108 -->|"raises"| N111
+    N108 -->|"raises"| N110
+    N110 --> N111
     N111 --> N112
+    N107 --> N113
+    N109 --> N113
     N112 --> N113
-    N110 --> N114
-    N113 --> N114
-    N100 -->|"false"| N114
+    N113 -->|"try"| N114
     N114 --> N115
-    N115 --> N116
+    N113 -->|"raises"| N116
     N116 --> N117
+    N117 --> N118
+    N115 --> N119
+    N118 --> N119
+    N105 -->|"false"| N119
+    N119 --> N120
+    N120 --> N121
+    N121 --> N122
 ```
 
 ## _now_utc_iso(...)
