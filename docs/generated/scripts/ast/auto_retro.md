@@ -443,6 +443,17 @@ flowchart TD
     N010 --> N011
 ```
 
+## apply_expired_label(...)
+
+```mermaid
+flowchart TD
+    N001["apply_expired_label(...)"]
+    N002["gh_api(...)"]
+    N003["end"]
+    N001 -->|"start"| N002
+    N002 --> N003
+```
+
 ## post_skip_comment(...)
 
 ```mermaid
@@ -903,7 +914,7 @@ flowchart TD
     N006["return 0"]
     N007["closed = []"]
     N008["skipped = []"]
-    N009["for item in items:     raw_number = item.get('<str>')     if not isinstance(raw_number, int):         continue     number = raw_number     created_at = str(item.get('<str>') or '<str>')     if not is_retro_age_exceeded(created_at, now_iso, days):         skipped.append((number, '<str>'))         continue     try:         comments = fetch_issue_comments(repo, number)     except GitHubApiError as exc:         print(f'<str>{number}<str>{exc.code}<str>', file=sys.stderr)         skipped.append((number, '<str>'))         continue     if has_sentinel_marker(comments):         skipped.append((number, '<str>'))         continue     body = item.get('<str>') or '<str>'     if not is_retro_untouched(body, comments):         skipped.append((number, '<str>'))         continue     try:         post_sentinel_comment(repo, number, days)     except GitHubApiError as exc:         print(f'<str>{number}<str>{exc.code}<str>', file=sys.stderr)         skipped.append((number, '<str>'))         continue     try:         close_issue_as_not_planned(repo, number)     except GitHubApiError as exc:         print(f'<str>{number}<str>{exc.code}<str>', file=sys.stderr)         skipped.append((number, '<str>'))         continue     closed.append(number)     print(f'<str>{number}<str>')"]
+    N009["for item in items:     raw_number = item.get('<str>')     if not isinstance(raw_number, int):         continue     number = raw_number     created_at = str(item.get('<str>') or '<str>')     if not is_retro_age_exceeded(created_at, now_iso, days):         skipped.append((number, '<str>'))         continue     try:         comments = fetch_issue_comments(repo, number)     except GitHubApiError as exc:         print(f'<str>{number}<str>{exc.code}<str>', file=sys.stderr)         skipped.append((number, '<str>'))         continue     if has_sentinel_marker(comments):         skipped.append((number, '<str>'))         continue     body = item.get('<str>') or '<str>'     if not is_retro_untouched(body, comments):         skipped.append((number, '<str>'))         continue     try:         apply_expired_label(repo, number)     except GitHubApiError as exc:         print(f'<str>{number}<str>{exc.code}<str>', file=sys.stderr)         skipped.append((number, '<str>'))         continue     try:         post_sentinel_comment(repo, number, days)     except GitHubApiError as exc:         print(f'<str>{number}<str>{exc.code}<str>', file=sys.stderr)         skipped.append((number, '<str>'))         continue     try:         close_issue_as_not_planned(repo, number)     except GitHubApiError as exc:         print(f'<str>{number}<str>{exc.code}<str>', file=sys.stderr)         skipped.append((number, '<str>'))         continue     closed.append(number)     print(f'<str>{number}<str>')"]
     N010["_append_summary(...)"]
     N011["return 0"]
     N001 -->|"start"| N002
