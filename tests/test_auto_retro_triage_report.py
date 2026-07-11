@@ -464,3 +464,21 @@ class TestLoopHealthRender:
     def test_empty_population_loop_health_placeholder(self) -> None:
         out = ar.render_triage_report_markdown(ar.compute_triage_report([]))
         assert "## Loop health" in out
+
+    def test_sample_floor_miss_reports_the_sample_not_the_ratio(self) -> None:
+        # All-unlabelled but below the sample floor: the anomaly does not
+        # fire because of the sample gate, so the "None" reason must cite
+        # the sample, not falsely claim a sub-threshold ratio (#2455 review).
+        past = [
+            _retro(i, set(), set())
+            for i in range(ar._UNLABELLED_MIN_SAMPLE - 1)
+        ]
+        report = ar.compute_triage_report(past)
+        assert report.unlabelled_ratio == 1.0
+        assert report.unlabelled_anomaly is False
+        anomalies_block = ar.render_triage_report_markdown(report).split(
+            "## Loop health"
+        )[0]
+        assert "None:" in anomalies_block
+        assert f"n={report.total}" in anomalies_block
+        assert "ratio is below" not in anomalies_block

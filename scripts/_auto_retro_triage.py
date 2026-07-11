@@ -483,10 +483,24 @@ def render_triage_report_markdown(report: TriageReport) -> str:
                 f"faster than they are triaged."
             )
     else:
+        # The unlabelled ratio can miss the anomaly bar two ways: the ratio
+        # is below the threshold, OR the sample is below the floor (a small
+        # all-unlabelled population). Report whichever actually held so the
+        # "None" reason is accurate rather than always claiming a low ratio
+        # (Refs #2455 review).
+        if report.total < _UNLABELLED_MIN_SAMPLE:
+            unlabelled_reason = (
+                f"the unlabelled ratio is not yet judged "
+                f"(sample n={report.total} below n >= {_UNLABELLED_MIN_SAMPLE})"
+            )
+        else:
+            unlabelled_reason = (
+                f"the unlabelled ratio is below "
+                f"{_UNLABELLED_ANOMALY_RATIO:.2f}"
+            )
         lines.append(
             "None: no fired signal clears both the FP-rate and "
-            "sample-size thresholds, and the unlabelled ratio is below "
-            f"{_UNLABELLED_ANOMALY_RATIO:.2f}."
+            f"sample-size thresholds, and {unlabelled_reason}."
         )
     lines.extend(_render_loop_health(report))
     lines.extend(["", "## Triage status", ""])
