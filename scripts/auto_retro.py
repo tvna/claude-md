@@ -37,6 +37,7 @@ time; ``tests/test_auto_retro.py`` asserts the two stay aligned.
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import sys
@@ -48,6 +49,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+import _auto_retro_ledger as _ledger
 import _ssot
 
 # Pure layers extracted into sibling helper modules (Refs #1725, a
@@ -450,6 +452,30 @@ _TRIAGE_REPORT_PR_BODY = (
     "required_signatures rule.\n"
     "\n"
     "Refs #1042. Refs #1386. Refs #1466. Refs #1560.\n"
+)
+
+# Repair-free merge rate ledger (issue #2415): the primary convergence
+# signal for CLAUDE.md section 3 ("measurably better each cycle"). Same
+# non-deterministic-snapshot treatment as the triage report above: one
+# row per merge auto_retro.run() evaluates, refreshed via a bot PR rather
+# than the deterministic docs/generated/ regeneration. Registered in
+# scripts/verify_generated_docs_ownership.py OWNERSHIP so the decision-tree
+# job's retirement sweep never deletes it.
+_LEDGER_DOC_PATH = Path("docs/generated/scripts/repair-free-merge-ledger.md")
+_LEDGER_PR_BRANCH = "chore/refresh-repair-free-merge-ledger"
+_LEDGER_PR_TITLE = "chore(auto-retro): refresh repair-free merge ledger"
+_LEDGER_COMMIT_TRAILER = "Refs #2415"
+_LEDGER_PR_BODY = (
+    "Appends the just-evaluated merge's row to the repair-free merge rate\n"
+    "ledger and recomputes the weekly repair-free rate section.\n"
+    "\n"
+    "This ledger is a non-deterministic snapshot appended after every merge\n"
+    "auto_retro.py evaluates (same treatment as the sibling triage report),\n"
+    "so it is refreshed via this bot PR rather than the deterministic\n"
+    "generated-docs regeneration. The snapshot commit is created server-side\n"
+    "via the signed createCommitOnBranch path.\n"
+    "\n"
+    "Refs #2415.\n"
 )
 
 # Refs issue #380: GitHub may not finalize merge_commit_sha by the time
@@ -869,6 +895,168 @@ def patch_issue_body(
         {"body": body},
     )
     return json.loads(raw) if raw.strip() else {}
+
+
+def fetch_repo_file(repo: str, path: str, ref: str) -> bytes | None:
+    """Return the decoded bytes of *path* at *ref*, or ``None`` when absent there.
+
+    Uses the contents API (same shape as ``pr_upsert._get_file_bytes``, kept
+    separate here so this module's ``gh_api`` boundary, already mocked by
+    every existing test, stays the single seam, rather than importing a
+    private helper across module boundaries). A 404 means the file has never
+    been committed yet (the very first repair-free-merge-ledger write).
+
+    Raises ``RuntimeError`` when the response is not inline base64 content
+    (GitHub returns ``encoding: "none"`` and omits ``content`` for blobs over
+    ~1MB): a large *existing* file must never be silently treated as absent,
+    which would make the caller believe this is the first-ever write and
+    discard the whole prior history on the next upsert. Mirrors
+    ``pr_upsert._get_file_bytes``'s identical guard for the identical API
+    shape.
+    """
+    try:
+        raw = gh_api("GET", f"/repos/{repo}/contents/{path}?ref={quote(ref, safe='')}")
+    except GitHubApiError as exc:
+        if exc.code == 404:
+            return None
+        raise
+    data = json.loads(raw) if raw.strip() else {}
+    encoding = data.get("encoding")
+    content = data.get("content")
+    if encoding != "base64" or not isinstance(content, str):
+        raise RuntimeError(
+            f"fetch_repo_file: unexpected encoding {encoding!r} for "
+            f"{path}@{ref} (file likely exceeds the ~1MB inline-content "
+            "limit; refusing to treat an existing large file as absent)"
+        )
+    return base64.b64decode(content)
+
+
+# Bounded retry count for the read-merge-write cycle below. The cycle is
+# naturally idempotent (re-reading the current branch state and re-merging
+# this PR's row is always safe to repeat, and insert_row's own dedup is a
+# no-op on a retry that finds the row already present), so a generic retry
+# on any upsert failure (not just a detected conflict) safely covers a
+# genuinely concurrent write from a different PR's run() without needing to
+# parse createCommitOnBranch's GraphQL error text. Refs #2415 (Codex review
+# on PR #2443 identified the race this closes).
+_LEDGER_UPSERT_MAX_ATTEMPTS = 3
+
+
+def record_repair_free_merge(
+    repo: str,
+    pr: MergedPR,
+    repair_free: bool,
+    ledger_token: str,
+    ledger_base: str,
+) -> str:
+    """Idempotently append this merge's row to the repair-free merge ledger.
+
+    Reads the current ledger content from the fixed refresh branch
+    (:data:`_LEDGER_PR_BRANCH`) when it already exists, falling back to
+    *ledger_base* only on the very first-ever recorded merge (before the
+    branch exists) or once the refresh PR has merged and the branch was
+    deleted. Publishes via :func:`pr_upsert.upsert_single_file_pr` with
+    ``recreate=False``: unlike the sibling triage-report refresh (a full
+    regeneration from live GitHub state, where "last write wins" is
+    harmless), this ledger accumulates irreplaceable history, so it needs
+    real compare-and-swap. ``recreate=False`` appends onto the branch's
+    current tip via ``createCommitOnBranch``'s ``expectedHeadOid``, which
+    GitHub rejects server-side if the tip moved since we read it, turning
+    a concurrent write from a *different* PR's ``run()`` into a detectable
+    failure instead of a silent overwrite. This branch is exclusively
+    created and appended to via ``createCommitOnBranch`` from day one (never
+    touched by the older raw-``git push`` pattern), so it can never carry
+    the unsigned legacy ancestor that motivated ``recreate=True`` for the
+    triage-report branch (Refs #1466, #1560); that rationale does not apply
+    here.
+
+    Retries the whole read-merge-write cycle up to
+    :data:`_LEDGER_UPSERT_MAX_ATTEMPTS` times on any upsert failure: the
+    cycle re-reads the branch's now-current content each attempt, so a
+    losing writer in a genuine race simply folds its row into the winner's
+    content on retry instead of losing it.
+
+    Inserts a row for ``pr.number`` unless one is already recorded (issue
+    #2415 idempotency criterion: reruns of the same merge event, and the
+    "existing retro" / "fix() append" branches of :func:`run` that may also
+    call this for the same PR, are all safe).
+
+    Raises on final failure (after exhausting retries); the caller
+    (:func:`_record_ledger_row_soft`) is responsible for the fail-soft
+    policy, matching every other secondary signal in this module (back-link
+    comment, terminal label, skip comment).
+    """
+    new_row = _ledger.LedgerRow(
+        pr_number=pr.number, merged_at=pr.merged_at, repair_free=repair_free
+    )
+    last_exc: GitHubApiError | RuntimeError | None = None
+    for _attempt in range(1, _LEDGER_UPSERT_MAX_ATTEMPTS + 1):
+        existing = fetch_repo_file(repo, str(_LEDGER_DOC_PATH), _LEDGER_PR_BRANCH)
+        if existing is None:
+            existing = fetch_repo_file(repo, str(_LEDGER_DOC_PATH), ledger_base)
+        new_content, changed = _ledger.upsert_ledger_markdown(existing, new_row)
+        if not changed:
+            return f"unchanged (PR #{pr.number} already recorded)"
+        try:
+            return upsert_single_file_pr(
+                repo=repo,
+                path=str(_LEDGER_DOC_PATH),
+                content=new_content,
+                base=ledger_base,
+                branch=_LEDGER_PR_BRANCH,
+                title=_LEDGER_PR_TITLE,
+                body=_LEDGER_PR_BODY,
+                commit_subject=_LEDGER_PR_TITLE,
+                commit_body=_LEDGER_COMMIT_TRAILER,
+                token=ledger_token,
+                recreate=False,
+            )
+        except (GitHubApiError, RuntimeError) as exc:
+            last_exc = exc
+            continue
+    if last_exc is None:
+        raise RuntimeError(
+            "record_repair_free_merge: retry loop exited without a result "
+            "or a recorded failure (unreachable; _LEDGER_UPSERT_MAX_ATTEMPTS "
+            "must be >= 1)"
+        )
+    raise last_exc
+
+
+def _record_ledger_row_soft(
+    repo: str,
+    pr: MergedPR,
+    repair_free: bool,
+    ledger_token: str,
+    ledger_base: str,
+) -> None:
+    """Call :func:`record_repair_free_merge`, degrading a failure to a warning.
+
+    Fail-soft: the ledger is a secondary metric layered on top of the
+    retro-issue audit trail (or the "no repair signal" skip), which is
+    already decided and recorded by the time this fires. A missing
+    ``ledger_token`` (feature not yet wired into the workflow secrets), a
+    transient GitHub API error, or a malformed ``pr.merged_at`` (a bare
+    ``ValueError`` from ``_auto_retro_ledger._iso_week``'s timestamp parse,
+    or a ``json.JSONDecodeError``, itself a ``ValueError`` subclass, from
+    a malformed contents-API response) must NOT change ``run()``'s exit
+    code.
+    """
+    if not ledger_token:
+        return
+    try:
+        detail = record_repair_free_merge(
+            repo, pr, repair_free, ledger_token, ledger_base
+        )
+    except (GitHubApiError, RuntimeError, ValueError) as exc:
+        print(
+            f"::warning::repair-free-merge-ledger update failed for PR "
+            f"#{pr.number}: {exc}",
+            file=sys.stderr,
+        )
+        return
+    print(f"ledger: {detail}")
 
 
 def append_repair_history_row(
@@ -1320,9 +1508,26 @@ def _build_summary(pr: MergedPR, action: str, detail: str) -> str:
     )
 
 
-def run(event: dict[str, Any], repo: str) -> int:
-    """Top-level orchestrator. Returns process exit code."""
+def run(
+    event: dict[str, Any],
+    repo: str,
+    *,
+    ledger_token: str = "",
+    ledger_base: str = "main",
+) -> int:
+    """Top-level orchestrator. Returns process exit code.
+
+    *ledger_token* / *ledger_base* thread the repair-free-merge-ledger
+    feature (issue #2415) through the same run this orchestrates, so the
+    ledger row is recorded from the one place that already computes the
+    signal-fired decision, rather than re-deriving it in a second job.
+    ``ledger_token=""`` (the default, matching every pre-existing call site)
+    makes ledger recording an inert no-op, so this stays additive.
+    """
     pr = parse_event(event)
+
+    def _record_ledger(repair_free: bool) -> None:
+        _record_ledger_row_soft(repo, pr, repair_free, ledger_token, ledger_base)
 
     if not pr.merged:
         msg = f"PR #{pr.number} is not merged"
@@ -1342,6 +1547,12 @@ def run(event: dict[str, Any], repo: str) -> int:
         msg = f"existing retro issue #{existing} for PR #{pr.number}"
         print(f"skip: {msg}")
         _append_summary(_build_summary(pr, "skip", msg))
+        # A retro already exists for this PR: some earlier invocation (a
+        # retried webhook delivery, most likely) already decided the
+        # signal fired. Recording here too (guarded by the ledger's own
+        # per-PR idempotency, not by this branch) backfills the row if
+        # that earlier invocation's ledger write did not land.
+        _record_ledger(False)
         return 0
 
     # Follow-up fix() PR that references a retro: append a row to the
@@ -1380,10 +1591,19 @@ def run(event: dict[str, Any], repo: str) -> int:
                             f"PATCH retro #{target} failed; investigate manually",
                         )
                     )
+                    # This PR is still a repair (a fix() that references a
+                    # past retro) even though the append itself failed; the
+                    # existing-retro skip above never revisits this PR's own
+                    # number (it targets a DIFFERENT retro), so this is the
+                    # only chance to record its row.
+                    _record_ledger(False)
                     return 0
                 action = "appended" if changed else "skip"
                 print(f"{action}: {detail}")
                 _append_summary(_build_summary(pr, action, detail))
+                # This PR is itself a repair (a fix() that references a
+                # past retro), so it is not a repair-free merge.
+                _record_ledger(False)
                 return 0
 
     try:
@@ -1429,6 +1649,7 @@ def run(event: dict[str, Any], repo: str) -> int:
         print(f"skip: {msg}")
         _append_summary(_build_summary(pr, "skip", msg))
         _post_skip_comment_soft(repo, pr.number, msg)
+        _record_ledger(True)
         return 0
 
     # Label-derived prior (refs #582): short the gate when the active
@@ -1455,6 +1676,10 @@ def run(event: dict[str, Any], repo: str) -> int:
         print(f"skip: {prior_reason}")
         _append_summary(_build_summary(pr, "skip", prior_reason))
         _post_skip_comment_soft(repo, pr.number, prior_reason)
+        # A signal fired (that is the only way this branch is reached);
+        # the prior just short-circuits opening a retro for it. Not
+        # repair-free.
+        _record_ledger(False)
         return 0
     tentative = is_tentative_by_prior(signals, prior)
 
@@ -1517,6 +1742,9 @@ def run(event: dict[str, Any], repo: str) -> int:
         print(f"skip: {msg}")
         _append_summary(_build_summary(pr, "skip", msg))
         _post_skip_comment_soft(repo, pr.number, msg)
+        # A signal fired; only the exemption/no-rows check suppressed the
+        # retro. Not repair-free.
+        _record_ledger(False)
         return 0
     title = build_retro_title(pr)
     body = build_retro_body(
@@ -1599,6 +1827,7 @@ def run(event: dict[str, Any], repo: str) -> int:
     )
     print(msg)
     _append_summary(_build_summary(pr, "created", msg))
+    _record_ledger(False)
     return 0
 
 
@@ -2266,7 +2495,17 @@ def _cmd_run(args: argparse.Namespace) -> int:
         )
         return 1
 
-    return run(event, repo)
+    # Repair-free merge ledger (issue #2415): a separate credential from
+    # $GH_TOKEN because the ledger commit is authored by the App bot (so
+    # scripts/bot_pr_automerge.py auto-merges the refresh PR the same way
+    # it already does for the triage-report / generated-docs refresh
+    # PRs), while retro-issue creation keeps using the default token.
+    # Unset (local runs, tests via the CLI) makes ledger recording an
+    # inert no-op; see run()'s ledger_token docstring.
+    ledger_token = os.environ.get("AUTO_RETRO_LEDGER_TOKEN", "")
+    ledger_base = os.environ.get("GITHUB_BASE_REF") or "main"
+
+    return run(event, repo, ledger_token=ledger_token, ledger_base=ledger_base)
 
 
 def _cmd_decision_tree(_args: argparse.Namespace) -> int:
