@@ -1410,6 +1410,9 @@ def run(event: dict[str, Any], repo: str) -> int:
 
     signals = compute_repair_signals(pr, has_inline_comments, commit_subjects)
     signal_summary = render_repair_signals(signals)
+    # Set of signal names that fired, used by the interim co-fire gate (#2436)
+    # to name the multi_commit_pr-alone skip explicitly for Phase 2 measurement.
+    fired = frozenset(name for name, is_fired in signals.items() if is_fired)
     if not any(signals.values()):
         msg = f"no repair signal fired ({signal_summary})"
         print(f"skip: {msg}")
@@ -1471,7 +1474,23 @@ def run(event: dict[str, Any], repo: str) -> int:
             )
         )
     ):
-        if repair_rows:
+        # Interim co-fire gate (issue #2436): when multi_commit_pr is the ONLY
+        # fired signal and the repair table has no actionable row, name the skip
+        # explicitly so Phase 2 can measure how often the near-universal
+        # multi_commit_pr (fires on ~92% of merges) is the sole trigger. This
+        # is the same open/skip outcome the existing exempt-rows gate already
+        # enforces (multi_commit_pr alone -> policy-artifact-only rows -> skip);
+        # the interim change is the named, greppable reason, not a new
+        # suppression. A multi_commit_pr-alone PR that carries a genuine
+        # actionable row (a CI-failure or iteration-commit row) still opens,
+        # preserving real repair evidence. Interim, pending the Phase 2
+        # signal redesign.
+        if fired == frozenset({"multi_commit_pr"}):
+            msg = (
+                "interim co-fire gate (refs #2436): multi_commit_pr fired "
+                f"alone with no actionable repair row ({signal_summary})"
+            )
+        elif repair_rows:
             msg = f"only policy-artifact repair rows generated ({signal_summary})"
         else:
             msg = f"no standalone repair workload ({signal_summary})"
