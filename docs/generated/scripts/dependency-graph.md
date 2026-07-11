@@ -35,6 +35,7 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 | `scan_maintainability_metrics` | 2 | `codebase_maturity_summary`, `scan_module_size_distribution` |
 | `scan_non_ascii` | 2 | `preflight_non_ascii`, `preflight_pr_body` |
 | `title_policy` | 2 | `preflight_title_policy`, `verify_linked_issue_titles` |
+| `_auto_retro_ledger` | 1 | `auto_retro` |
 | `_auto_retro_render` | 1 | `auto_retro` |
 | `_auto_retro_triage` | 1 | `auto_retro` |
 | `_pr_base_currency` | 1 | `pr_upsert` |
@@ -89,6 +90,7 @@ flowchart TD
     _security_drift_families --> _ssot
     _security_drift_issues --> _security_drift_families
     _security_drift_issues --> issue_anchors
+    auto_retro --> _auto_retro_ledger
     auto_retro --> _auto_retro_parse
     auto_retro --> _auto_retro_render
     auto_retro --> _auto_retro_triage
