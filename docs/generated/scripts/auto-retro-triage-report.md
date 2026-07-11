@@ -2,17 +2,17 @@
 
 This file is generated from live GitHub retro-issue labels by `python3 scripts/auto_retro.py triage-report`. Do not edit it by hand. Unlike the per-script AST docs it is a non-deterministic snapshot of repository state, so it is refreshed on merge by the `post-merge.yml` workflow (which opens a pull request when the snapshot drifts) rather than as part of the deterministic generated docs.
 
-Retros observed: **95**
+Retros observed: **96**
 
-Open untriaged: **35**
+Open untriaged: **36**
 
 ## Anomalies
 
-- **unlabelled ratio 0.95**: 90 of 95 observed retros carry no `retro:*` label (>= 0.50, n >= 5); retros are being opened faster than they are triaged.
+- **unlabelled ratio 0.95**: 91 of 96 observed retros carry no `retro:*` label (>= 0.50, n >= 5); retros are being opened faster than they are triaged.
 
 ## Loop health
 
-- Triage rate: **5 / 95** (5%) of observed retros carry a `retro:*` label; **90** (95%) remain unlabelled.
+- Triage rate: **5 / 96** (5%) of observed retros carry a `retro:*` label; **91** (95%) remain unlabelled.
 - Sentinel disposal: **0** (0%) auto-closed via `retro:expired` without operator engagement.
 
 ## Triage status
@@ -25,16 +25,16 @@ pie showData
     "retro:fp-candidate" : 0
     "retro:tentative" : 0
     "retro:expired" : 0
-    "unlabelled" : 90
+    "unlabelled" : 91
 ```
 
 ## Signal occurrence and false-positive rates
 
 | Signal | Fired | Fire rate | FP | FP rate | n | Anomaly |
 | --- | --: | --: | --: | --: | --: | :-: |
-| `inline_review_comments` | 26 | 0.27 | 0 | 0.00 | 26 |  |
-| `fix_typed_title` | 5 | 0.05 | 0 | 0.00 | 5 |  |
-| `multi_commit_pr` | 30 | 0.32 | 0 | 0.00 | 30 |  |
+| `inline_review_comments` | 27 | 0.28 | 0 | 0.00 | 27 |  |
+| `fix_typed_title` | 6 | 0.06 | 0 | 0.00 | 6 |  |
+| `multi_commit_pr` | 31 | 0.32 | 0 | 0.00 | 31 |  |
 
 ## False-positive rate trend
 
@@ -45,6 +45,7 @@ pie showData
 
 | # | State | Status | Title |
 | --: | :-- | :-- | :-- |
+| 2464 | open | untriaged | chore(auto-retro): review PR #2463 repair loops |
 | 2456 | open | untriaged | chore(auto-retro): review PR #2455 repair loops |
 | 2449 | open | untriaged | chore(auto-retro): review PR #2447 repair loops |
 | 2430 | open | untriaged | chore(auto-retro): review PR #2402 repair loops |
@@ -54,4 +55,3 @@ pie showData
 | 2400 | open | untriaged | chore(auto-retro): review PR #2396 repair loops |
 | 2385 | open | untriaged | chore(auto-retro): review PR #2383 repair loops |
 | 2377 | open | untriaged | chore(auto-retro): review PR #2374 repair loops |
-| 2375 | open | untriaged | chore(auto-retro): review PR #2373 repair loops |
