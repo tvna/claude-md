@@ -16,6 +16,7 @@ from collections.abc import Mapping
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, ClassVar
+from urllib.parse import quote
 
 import _auto_retro_ledger as ledger
 import _retro_labels as rl
@@ -5889,6 +5890,49 @@ class TestRunRepairFreeMergeLedgerWiring:
         event = merged_event(number=603, merged_at="2026-07-08T10:00:00Z")
         assert ar.run(event, "o/r", ledger_token="tok") == 0
         assert calls == []
+
+    def test_ledger_reads_pending_branch_row_before_recreating(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Two merges landing before the first refresh PR merges to main:
+        the second run() must fold the first (still-pending, branch-only)
+        row into the recreated branch instead of dropping it by reading
+        only *ledger_base* (Codex review on PR #2443, issue #2415)."""
+        pending_row = ledger.LedgerRow(
+            pr_number=700, merged_at="2026-07-08T09:00:00Z", repair_free=True
+        )
+        pending_bytes = ledger.render_ledger_markdown([pending_row]).encode("utf-8")
+        orchestrator_recorder(monkeypatch, review_comments=[])
+        base_fake_api = ar.gh_api
+
+        def fake_api_with_contents(
+            method: str, path: str, body: Any = None, **kw: Any
+        ) -> str:
+            if method == "GET" and "/contents/" in path:
+                branch_ref = f"ref={quote(ar._LEDGER_PR_BRANCH, safe='')}"
+                if branch_ref in path:
+                    return json.dumps(
+                        {
+                            "encoding": "base64",
+                            "content": base64.b64encode(pending_bytes).decode(
+                                "ascii"
+                            ),
+                        }
+                    )
+                # ledger_base (main) does not have the pending branch's row
+                # yet: the refresh PR carrying it has not merged.
+                raise GitHubApiError(404, "GET", path, "not found")
+            return base_fake_api(method, path, body, **kw)
+
+        monkeypatch.setattr(ar, "gh_api", fake_api_with_contents)
+        calls: list[dict[str, Any]] = []
+        monkeypatch.setattr(ar, "upsert_single_file_pr", _recording_upsert(calls))
+        event = merged_event(number=701, merged_at="2026-07-08T10:00:00Z")
+        assert ar.run(event, "o/r", ledger_token="tok") == 0
+        assert len(calls) == 1
+        content = calls[0]["content"].decode("utf-8")
+        assert "#700" in content
+        assert "#701" in content
 
     def test_ledger_failure_is_soft_and_does_not_change_exit_code(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]

@@ -177,6 +177,11 @@ def test_is_exempt() -> None:
     # branch. Its omission failed PR #1552 on this gate after the title (#1551)
     # and body-shape (#1554) blockers were cleared.
     assert gate.is_exempt("chore/refresh-auto-retro-triage-report") is True
+    # Regression guard for #2415: the ledger refresh (open-retro job) writes
+    # docs/generated/scripts/repair-free-merge-ledger.md on this fixed branch
+    # via createCommitOnBranch, so it must be exempt like the sibling
+    # triage-report branch (a Codex review on PR #2443 caught this omission).
+    assert gate.is_exempt("chore/refresh-repair-free-merge-ledger") is True
     assert gate.is_exempt("feature/x") is False
     assert gate.is_exempt("") is False
 
@@ -188,6 +193,13 @@ def test_triage_report_branch_is_exempt_and_aligned() -> None:
     import auto_retro
 
     assert auto_retro._TRIAGE_REPORT_PR_BRANCH in gate.EXEMPT_BRANCHES
+
+
+def test_ledger_branch_is_exempt_and_aligned() -> None:
+    # Same alignment guard as the triage-report branch above, for #2415.
+    import auto_retro
+
+    assert auto_retro._LEDGER_PR_BRANCH in gate.EXEMPT_BRANCHES
 
 
 def test_evaluate_passes_when_no_changes() -> None:

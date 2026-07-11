@@ -922,20 +922,33 @@ def record_repair_free_merge(
 ) -> str:
     """Idempotently append this merge's row to the repair-free merge ledger.
 
-    Fetches the current ledger file at *ledger_base* (``None`` before it
-    exists), inserts a row for ``pr.number`` unless one is already recorded
-    (issue #2415 idempotency criterion: reruns of the same merge event,
-    and the "existing retro" / "fix() append" branches of :func:`run` that
-    may also call this for the same PR, are all safe), and upserts the
-    result as a bot PR via :func:`pr_upsert.upsert_single_file_pr` (signed
-    createCommitOnBranch, ``recreate=True``; same reasoning as the sibling
-    triage-report refresh: Refs #1466, #1560).
+    Reads the current ledger content from the fixed refresh branch
+    (:data:`_LEDGER_PR_BRANCH`) when it already exists, falling back to
+    *ledger_base* only on the very first-ever recorded merge (before the
+    branch exists). This matters because :func:`pr_upsert.upsert_single_file_pr`
+    is called with ``recreate=True``, which deletes and recreates the branch
+    from *ledger_base* on every call (Refs #1466, #1560): reading from
+    *ledger_base* alone would silently drop any row still sitting on a
+    not-yet-merged refresh PR when a second merge lands before the first
+    refresh PR is merged to main (a Codex review on PR #2443, comment on
+    this line, caught exactly this data-loss window). Reading from the
+    pending branch first means its rows are folded into the new content
+    before the branch is recreated, so the still-open PR (same head branch
+    name) simply gets updated in place with both rows, never losing either.
+
+    Inserts a row for ``pr.number`` unless one is already recorded (issue
+    #2415 idempotency criterion: reruns of the same merge event, and the
+    "existing retro" / "fix() append" branches of :func:`run` that may also
+    call this for the same PR, are all safe), and upserts the result as a
+    bot PR via :func:`pr_upsert.upsert_single_file_pr`.
 
     Raises on any GitHub API failure; the caller (:func:`_record_ledger_row_soft`)
     is responsible for the fail-soft policy, matching every other secondary
     signal in this module (back-link comment, terminal label, skip comment).
     """
-    existing = fetch_repo_file(repo, str(_LEDGER_DOC_PATH), ledger_base)
+    existing = fetch_repo_file(repo, str(_LEDGER_DOC_PATH), _LEDGER_PR_BRANCH)
+    if existing is None:
+        existing = fetch_repo_file(repo, str(_LEDGER_DOC_PATH), ledger_base)
     new_row = _ledger.LedgerRow(
         pr_number=pr.number, merged_at=pr.merged_at, repair_free=repair_free
     )
