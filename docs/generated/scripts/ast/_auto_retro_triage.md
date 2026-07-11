@@ -87,24 +87,33 @@ flowchart TD
     N003["if report.truncated"]
     N004["observed_line = f'<str>{report.total}<str>{report.population_total}<str>'"]
     N005["lines = ['<str>', '<str>', '<str>', '<str>', observed_line, '<str>', f'<str>{report.open_untriaged}<str>', '<str>', '<str>', '<str>']"]
-    N006["if report.anomalies"]
-    N007["append(...)"]
+    N006["if report.anomalies or report.unlabelled_anomaly"]
+    N007["if report.anomalies"]
     N008["append(...)"]
-    N009["for stat in report.anomalies:     lines.append(f'<str>{stat.name}<str>{stat.fp_rate:<str>}<str>{stat.sample_size}<str>')"]
-    N010["append(...)"]
-    N011["extend(...)"]
-    N012["if report.total == 0"]
+    N009["append(...)"]
+    N010["for stat in report.anomalies:     lines.append(f'<str>{stat.name}<str>{stat.fp_rate:<str>}<str>{stat.sample_size}<str>')"]
+    N011["if report.unlabelled_anomaly"]
+    N012["if report.anomalies"]
     N013["append(...)"]
     N014["append(...)"]
-    N015["append(...)"]
-    N016["append(...)"]
-    N017["for label in (*_TRIAGE_LABELS, _UNLABELLED_KEY):     lines.append(f'<str>{label}<str>{report.label_counts[label]}')"]
+    N015["if report.total < _UNLABELLED_MIN_SAMPLE"]
+    N016["unlabelled_reason = f'<str>{report.total}<str>{_UNLABELLED_MIN_SAMPLE}<str>'"]
+    N017["unlabelled_reason = f'<str>{_UNLABELLED_ANOMALY_RATIO:<str>}'"]
     N018["append(...)"]
     N019["extend(...)"]
-    N020["for stat in report.signal_stats:     marker = '<str>' if stat.is_anomaly else '<str>'     lines.append(f'<str>{stat.name}<str>{stat.fire_count}<str>{stat.fire_rate:<str>}<str>{stat.fp_count}<str>{stat.fp_rate:<str>}<str>{stat.sample_size}<str>{marker}<str>')"]
-    N021["extend(...)"]
-    N022["extend(...)"]
-    N023["return '<str>'.join(lines) + '<str>'"]
+    N020["extend(...)"]
+    N021["if report.total == 0"]
+    N022["append(...)"]
+    N023["append(...)"]
+    N024["append(...)"]
+    N025["append(...)"]
+    N026["for label in (*_TRIAGE_LABELS, _UNLABELLED_KEY):     lines.append(f'<str>{label}<str>{report.label_counts[label]}')"]
+    N027["append(...)"]
+    N028["extend(...)"]
+    N029["for stat in report.signal_stats:     marker = '<str>' if stat.is_anomaly else '<str>'     lines.append(f'<str>{stat.name}<str>{stat.fire_count}<str>{stat.fire_rate:<str>}<str>{stat.fp_count}<str>{stat.fp_rate:<str>}<str>{stat.sample_size}<str>{marker}<str>')"]
+    N030["extend(...)"]
+    N031["extend(...)"]
+    N032["return '<str>'.join(lines) + '<str>'"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 -->|"true"| N004
@@ -112,24 +121,58 @@ flowchart TD
     N003 -->|"false"| N005
     N005 --> N006
     N006 -->|"true"| N007
-    N007 --> N008
+    N007 -->|"true"| N008
     N008 --> N009
-    N006 -->|"false"| N010
-    N009 --> N011
+    N009 --> N010
     N010 --> N011
-    N011 --> N012
+    N007 -->|"false"| N011
+    N011 -->|"true"| N012
     N012 -->|"true"| N013
+    N013 --> N014
     N012 -->|"false"| N014
-    N014 --> N015
-    N015 --> N016
-    N016 --> N017
+    N006 -->|"false"| N015
+    N015 -->|"true"| N016
+    N015 -->|"false"| N017
+    N016 --> N018
     N017 --> N018
-    N013 --> N019
+    N014 --> N019
+    N011 -->|"false"| N019
     N018 --> N019
     N019 --> N020
     N020 --> N021
-    N021 --> N022
-    N022 --> N023
+    N021 -->|"true"| N022
+    N021 -->|"false"| N023
+    N023 --> N024
+    N024 --> N025
+    N025 --> N026
+    N026 --> N027
+    N022 --> N028
+    N027 --> N028
+    N028 --> N029
+    N029 --> N030
+    N030 --> N031
+    N031 --> N032
+```
+
+## _render_loop_health(...)
+
+```mermaid
+flowchart TD
+    N001["_render_loop_health(...)"]
+    N002["lines = ['<str>', '<str>', '<str>']"]
+    N003["if report.total == 0"]
+    N004["append(...)"]
+    N005["return lines"]
+    N006["append(...)"]
+    N007["append(...)"]
+    N008["return lines"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 -->|"true"| N004
+    N004 --> N005
+    N003 -->|"false"| N006
+    N006 --> N007
+    N007 --> N008
 ```
 
 ## _render_fp_trend(...)
