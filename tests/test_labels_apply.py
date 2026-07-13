@@ -391,6 +391,64 @@ class TestFetchLiveLabels:
         assert calls == 1
 
 
+def test_main_source_label_policy_uses_policy_derived_catalog(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    policy = tmp_path / "label-policy.toml"
+    policy.write_text(
+        "\n".join(
+            [
+                "[[labels]]",
+                'name = "type:fix"',
+                'status = "keep"',
+                'description = "Defect or broken workflow."',
+                'color = "d73a4a"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+    labels_json = tmp_path / "labels.json"
+    labels_json.write_text(
+        json.dumps([{"name": "type:retrospective", "color": "c5def5", "description": "Auto-opened retrospective."}]),
+        encoding="utf-8",
+    )
+    summary = tmp_path / "summary.md"
+    monkeypatch.setenv("GH_TOKEN", "token")
+
+    calls: list[dict[str, object]] = []
+
+    def fake_fetch_live_labels(repo: str, token: str, **kwargs: object) -> list[dict[str, object]]:
+        calls.append({"repo": repo, "token": token})
+        return []
+
+    monkeypatch.setattr(labels_apply, "fetch_live_labels", fake_fetch_live_labels)
+
+    result = labels_apply.main(
+        [
+            "plan",
+            "--repo",
+            "owner/repo",
+            "--sot",
+            str(labels_json),
+            "--policy",
+            str(policy),
+            "--source",
+            "label-policy",
+            "--dry-run",
+            "true",
+            "--prune",
+            "false",
+            "--summary-file",
+            str(summary),
+        ]
+    )
+
+    text = summary.read_text(encoding="utf-8")
+    assert result == 0
+    assert "| `type:fix` | plan-only (POST) | n/a | n/a | dry-run |" in text
+    assert "| `type:retrospective` | plan-only (POST) | n/a | n/a | dry-run |" in text
+
+
 class TestCli:
     def test_plan_mixed_actions(self, tmp_path: Path) -> None:
         sot = write_sot(
