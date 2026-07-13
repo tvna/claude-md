@@ -370,6 +370,18 @@ def run(
     return 0
 
 
+def _resolve_sot(args: argparse.Namespace) -> tuple[Path, Callable[[Path], list[dict[str, Any]]]]:
+    """Resolve the ``(sot_path, sot_loader)`` pair for ``--source``.
+
+    Single place deciding the label-policy vs labels-json pairing, so
+    ``validate`` and ``plan``/``apply`` in ``main()`` cannot pick the path
+    from one source and the loader from the other.
+    """
+    if args.source == "label-policy":
+        return args.policy, functools.partial(load_sot_from_policy, labels_json_path=args.sot)
+    return args.sot, load_sot
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -379,22 +391,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
+        sot_path, sot_loader = _resolve_sot(args)
         if args.command == "validate":
-            if args.source == "label-policy":
-                load_sot_from_policy(args.policy, args.sot)
-            else:
-                load_sot(args.sot)
+            sot_loader(sot_path)
             return 0
         token = os.environ.get("GH_TOKEN", "")
         if not token:
             print("::error::GH_TOKEN is not set.")
             return 1
-        sot_path = args.policy if args.source == "label-policy" else args.sot
-        sot_loader = (
-            functools.partial(load_sot_from_policy, labels_json_path=args.sot)
-            if args.source == "label-policy"
-            else load_sot
-        )
         return run(
             mode=args.command,
             repo=args.repo,
@@ -415,7 +419,18 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--repo", default=os.environ.get("REPO", ""))
     parser.add_argument("--sot", type=Path, default=Path(".github/labels.json"))
     parser.add_argument("--policy", type=Path, default=Path(".github/label-policy.toml"))
-    parser.add_argument("--source", choices=["labels-json", "label-policy"], default="labels-json")
+    parser.add_argument(
+        "--source",
+        choices=["labels-json", "label-policy"],
+        default="labels-json",
+        help=(
+            "Which file supplies the live label catalog. Default labels-json "
+            "preserves current apply-labels.yml behavior; label-policy derives "
+            "the catalog from label-policy.toml [[labels]] instead (Refs #2442 "
+            "Phase B batch 1; not yet wired into apply-labels.yml, which stays "
+            "on labels-json until a later batch)."
+        ),
+    )
     parser.add_argument("--prune", default="false")
     parser.add_argument("--dry-run", default="true")
     parser.add_argument("--summary-file", type=Path, default=Path(os.environ.get("GITHUB_STEP_SUMMARY", "/dev/null")))
