@@ -329,6 +329,24 @@ class TestDecidePruneAction:
         )
 
 
+def test_policy_derived_catalog_matches_labels_json_exactly() -> None:
+    """Integration proof for #2442 Phase B batch 1: the TOML-derived live
+    catalog and labels.json must describe the exact same label set. This is
+    the direct evidence the issue's Verification section asks for (apply
+    plan is the same whether sourced from labels.json or the TOML)."""
+    repo_root = Path(__file__).resolve().parents[1]
+    policy_path = repo_root / ".github" / "label-policy.toml"
+    labels_json_path = repo_root / ".github" / "labels.json"
+
+    derived = labels_apply.load_sot_from_policy(policy_path, labels_json_path)
+    direct = labels_apply.load_sot(labels_json_path)
+
+    def _key(entry: dict[str, object]) -> tuple[object, object, object]:
+        return (entry["name"], entry["color"], entry["description"])
+
+    assert sorted(derived, key=_key) == sorted(direct, key=_key)
+
+
 def test_render_action_row_escapes_pipes() -> None:
     assert labels_apply.render_action_row("a|b", "plan-only (POST)", "n/a", "n/a", "dry-run") == (
         "| `a\\|b` | plan-only (POST) | n/a | n/a | dry-run |"
