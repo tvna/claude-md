@@ -12,6 +12,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
+import _retro_labels
 from _github_api import API_VERSION
 from _github_api import apply_call as github_apply_call
 
@@ -180,6 +181,56 @@ def load_rename_map(policy_path: Path) -> dict[str, str]:
         if isinstance(old, str) and old and isinstance(new, str) and new:
             rename_map[new] = old
     return rename_map
+
+
+def load_sot_from_policy(policy_path: Path, labels_json_path: Path) -> list[dict[str, Any]]:
+    """Derive the live label catalog from label-policy.toml ``[[labels]]``.
+
+    Only ``status in {"keep", "rename"}`` entries are live (``status ==
+    "add"`` entries are design-only, not yet on GitHub); ``name`` already
+    holds the resolved final name for a rename. ``type:retrospective`` has
+    no ``[[labels]]`` entry (its identity stays in labels.json pending its
+    own #972 retirement decision, see the policy file's comment above the
+    ``retro`` family), so it is injected here from ``labels_json_path``.
+    """
+    with policy_path.open("rb") as handle:
+        policy = tomllib.load(handle)
+
+    catalog: list[dict[str, Any]] = []
+    for entry in policy.get("labels", []):
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("status") not in ("keep", "rename"):
+            continue
+        catalog.append(
+            {
+                "name": entry.get("name"),
+                "color": entry.get("color"),
+                "description": entry.get("description"),
+            }
+        )
+
+    with labels_json_path.open(encoding="utf-8") as handle:
+        labels_json = json.load(handle)
+    retro_entry = next(
+        (
+            entry
+            for entry in labels_json
+            if isinstance(entry, dict) and entry.get("name") == _retro_labels.TYPE_RETROSPECTIVE
+        ),
+        None,
+    )
+    if retro_entry is None:
+        raise ValueError(
+            f"{_retro_labels.TYPE_RETROSPECTIVE!r} not found in {labels_json_path}; "
+            "its identity is sourced from labels.json pending its #972 retirement decision."
+        )
+    catalog.append(
+        {"name": retro_entry["name"], "color": retro_entry["color"], "description": retro_entry["description"]}
+    )
+
+    validate_sot(catalog)
+    return catalog
 
 
 def run(
