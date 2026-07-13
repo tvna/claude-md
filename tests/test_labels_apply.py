@@ -309,6 +309,92 @@ class TestLoadSotFromPolicy:
         with pytest.raises(ValueError, match="type:retrospective"):
             labels_apply.load_sot_from_policy(policy, labels_json)
 
+    def test_type_retrospective_missing_color_raises_value_error(self, tmp_path: Path) -> None:
+        policy = self._write_policy(
+            tmp_path,
+            "\n".join(
+                [
+                    "[[labels]]",
+                    'name = "type:fix"',
+                    'status = "keep"',
+                    'description = "Defect or broken workflow."',
+                    'color = "d73a4a"',
+                ]
+            ),
+        )
+        labels_json = self._write_labels_json(
+            tmp_path, [{"name": "type:retrospective", "description": "Auto-opened retrospective."}]
+        )
+
+        with pytest.raises(ValueError, match="color"):
+            labels_apply.load_sot_from_policy(policy, labels_json)
+
+    def test_type_retrospective_missing_description_raises_value_error(self, tmp_path: Path) -> None:
+        policy = self._write_policy(
+            tmp_path,
+            "\n".join(
+                [
+                    "[[labels]]",
+                    'name = "type:fix"',
+                    'status = "keep"',
+                    'description = "Defect or broken workflow."',
+                    'color = "d73a4a"',
+                ]
+            ),
+        )
+        labels_json = self._write_labels_json(tmp_path, [{"name": "type:retrospective", "color": "c5def5"}])
+
+        with pytest.raises(ValueError, match="description"):
+            labels_apply.load_sot_from_policy(policy, labels_json)
+
+    def test_duplicate_live_name_raises_value_error(self, tmp_path: Path) -> None:
+        policy = self._write_policy(
+            tmp_path,
+            "\n".join(
+                [
+                    "[[labels]]",
+                    'name = "type:fix"',
+                    'status = "keep"',
+                    'description = "First copy."',
+                    'color = "d73a4a"',
+                    "",
+                    "[[labels]]",
+                    'name = "type:fix"',
+                    'status = "keep"',
+                    'description = "Second copy."',
+                    'color = "d73a4a"',
+                ]
+            ),
+        )
+        labels_json = self._write_labels_json(
+            tmp_path,
+            [{"name": "type:retrospective", "color": "c5def5", "description": "Auto-opened retrospective."}],
+        )
+
+        with pytest.raises(ValueError, match="type:fix"):
+            labels_apply.load_sot_from_policy(policy, labels_json)
+
+    def test_unrecognized_status_raises_value_error(self, tmp_path: Path) -> None:
+        policy = self._write_policy(
+            tmp_path,
+            "\n".join(
+                [
+                    "[[labels]]",
+                    'name = "type:fix"',
+                    'status = "Keep"',
+                    'description = "Typo-cased status."',
+                    'color = "d73a4a"',
+                ]
+            ),
+        )
+        labels_json = self._write_labels_json(
+            tmp_path,
+            [{"name": "type:retrospective", "color": "c5def5", "description": "Auto-opened retrospective."}],
+        )
+
+        with pytest.raises(ValueError, match="status"):
+            labels_apply.load_sot_from_policy(policy, labels_json)
+
 
 class TestDecidePruneAction:
     @pytest.mark.parametrize(
