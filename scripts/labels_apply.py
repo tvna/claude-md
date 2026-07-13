@@ -245,8 +245,9 @@ def run(
     live_labels: list[dict[str, Any]] | None = None,
     rename_map: dict[str, str] | None = None,
     apply_call: Callable[..., tuple[int, str]] = github_apply_call,
+    sot_loader: Callable[[Path], list[dict[str, Any]]] = load_sot,
 ) -> int:
-    sot = load_sot(sot_path)
+    sot = sot_loader(sot_path)
     live = live_labels if live_labels is not None else fetch_live_labels(repo, token)
     live_by_name = {str(entry.get("name")): entry for entry in live}
     sot_names = {str(entry["name"]) for entry in sot}

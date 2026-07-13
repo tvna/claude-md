@@ -573,6 +573,36 @@ class TestCli:
             }
         ]
 
+    def test_plan_uses_custom_sot_loader(self, tmp_path: Path) -> None:
+        # sot_path is passed through to the loader unchanged; the loader's
+        # return value becomes the SoT, without labels_apply.py touching
+        # any file itself.
+        sot = tmp_path / "unused-marker.txt"
+        sot.write_text("not read directly", encoding="utf-8")
+        summary = tmp_path / "summary.md"
+        received_paths: list[Path] = []
+
+        def fake_loader(path: Path) -> list[dict[str, object]]:
+            received_paths.append(path)
+            return [{"name": "from-loader", "color": "ffffff", "description": "From loader"}]
+
+        result = labels_apply.run(
+            mode="plan",
+            repo="owner/repo",
+            sot_path=sot,
+            prune=False,
+            dry_run=True,
+            summary_file=summary,
+            token="token",
+            live_labels=[],
+            sot_loader=fake_loader,
+        )
+
+        text = summary.read_text(encoding="utf-8")
+        assert result == 0
+        assert received_paths == [sot]
+        assert "| `from-loader` | plan-only (POST) | n/a | n/a | dry-run |" in text
+
     def test_apply_conflict_aborts_when_both_names_live(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
