@@ -30,6 +30,7 @@ on:
     paths:
       - ".github/rulesets/**"
       - ".github/labels.json"
+      - ".github/label-policy.toml"
       - ".apm/instructions/**"
       - "pyproject.toml"
       - "CLAUDE.md"
