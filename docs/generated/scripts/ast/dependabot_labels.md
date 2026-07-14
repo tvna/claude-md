@@ -43,6 +43,17 @@ flowchart TD
     N001 -->|"start"| N002
 ```
 
+## load_sot_label_names_from_policy(...)
+
+```mermaid
+flowchart TD
+    N001["load_sot_label_names_from_policy(...)"]
+    N002["catalog = load_sot_from_policy(...)"]
+    N003["return {str(entry['<str>']) for entry in catalog}"]
+    N001 -->|"start"| N002
+    N002 --> N003
+```
+
 ## find_drift(...)
 
 ```mermaid
@@ -89,46 +100,59 @@ flowchart TD
     N001["_cmd_verify(...)"]
     N002["dependabot_path = Path(...)"]
     N003["labels_path = Path(...)"]
-    N004["if not dependabot_path.is_file()"]
-    N005["print(...)"]
-    N006["return 1"]
-    N007["if not labels_path.is_file()"]
-    N008["print(...)"]
-    N009["return 1"]
-    N010["try"]
-    N011["referenced = parse_dependabot_labels(...)"]
-    N012["defined = load_sot_label_names(...)"]
-    N013["except (OSError, ValueError, json.JSONDecodeError)"]
-    N014["print(...)"]
-    N015["return 1"]
-    N016["drift = find_drift(...)"]
-    N017["if drift"]
-    N018["for name in drift:     print(f'<str>{dependabot_path}<str>{name}<str>{dependabot_path}<str>{labels_path}<str>')"]
-    N019["print(...)"]
-    N020["return 1"]
-    N021["print(...)"]
-    N022["return 0"]
+    N004["label_policy_path = Path(...)"]
+    N005["if not dependabot_path.is_file()"]
+    N006["print(...)"]
+    N007["return 1"]
+    N008["if not labels_path.is_file()"]
+    N009["print(...)"]
+    N010["return 1"]
+    N011["if args.source == 'label-policy' and (not label_policy_path.is_file())"]
+    N012["print(...)"]
+    N013["return 1"]
+    N014["try"]
+    N015["referenced = parse_dependabot_labels(...)"]
+    N016["if args.source == 'label-policy'"]
+    N017["defined = load_sot_label_names_from_policy(...)"]
+    N018["defined = load_sot_label_names(...)"]
+    N019["except (OSError, ValueError, json.JSONDecodeError)"]
+    N020["print(...)"]
+    N021["return 1"]
+    N022["drift = find_drift(...)"]
+    N023["if drift"]
+    N024["for name in drift:     print(f'<str>{dependabot_path}<str>{name}<str>{dependabot_path}<str>{labels_path}<str>')"]
+    N025["print(...)"]
+    N026["return 1"]
+    N027["print(...)"]
+    N028["return 0"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
-    N004 -->|"true"| N005
-    N005 --> N006
-    N004 -->|"false"| N007
-    N007 -->|"true"| N008
-    N008 --> N009
-    N007 -->|"false"| N010
-    N010 -->|"try"| N011
-    N011 --> N012
-    N010 -->|"raises"| N013
-    N013 --> N014
-    N014 --> N015
-    N012 --> N016
-    N016 --> N017
-    N017 -->|"true"| N018
-    N018 --> N019
+    N004 --> N005
+    N005 -->|"true"| N006
+    N006 --> N007
+    N005 -->|"false"| N008
+    N008 -->|"true"| N009
+    N009 --> N010
+    N008 -->|"false"| N011
+    N011 -->|"true"| N012
+    N012 --> N013
+    N011 -->|"false"| N014
+    N014 -->|"try"| N015
+    N015 --> N016
+    N016 -->|"true"| N017
+    N016 -->|"false"| N018
+    N014 -->|"raises"| N019
     N019 --> N020
-    N017 -->|"false"| N021
-    N021 --> N022
+    N020 --> N021
+    N017 --> N022
+    N018 --> N022
+    N022 --> N023
+    N023 -->|"true"| N024
+    N024 --> N025
+    N025 --> N026
+    N023 -->|"false"| N027
+    N027 --> N028
 ```
 
 ## main(...)
@@ -141,9 +165,11 @@ flowchart TD
     N004["p_verify = add_parser(...)"]
     N005["add_argument(...)"]
     N006["add_argument(...)"]
-    N007["set_defaults(...)"]
-    N008["args = parse_args(...)"]
-    N009["return args.func(args)"]
+    N007["add_argument(...)"]
+    N008["add_argument(...)"]
+    N009["set_defaults(...)"]
+    N010["args = parse_args(...)"]
+    N011["return args.func(args)"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -152,4 +178,6 @@ flowchart TD
     N006 --> N007
     N007 --> N008
     N008 --> N009
+    N009 --> N010
+    N010 --> N011
 ```

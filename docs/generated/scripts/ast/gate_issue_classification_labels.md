@@ -32,6 +32,23 @@ flowchart TD
     N007 --> N008
 ```
 
+## load_axis_labels_from_policy(...)
+
+```mermaid
+flowchart TD
+    N001["load_axis_labels_from_policy(...)"]
+    N002["catalog = load_sot_from_policy(...)"]
+    N003["names = [str(entry['<str>']) for entry in catalog]"]
+    N004["axes = {}"]
+    N005["for axis, prefix in axis_prefixes():     axes[axis] = frozenset((name for name in names if name.startswith(prefix)))"]
+    N006["return axes"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+    N005 --> N006
+```
+
 ## missing_axes(...)
 
 ```mermaid

@@ -15,6 +15,17 @@ flowchart TD
     N002 -->|"false"| N004
 ```
 
+## live_label_names_from_policy(...)
+
+```mermaid
+flowchart TD
+    N001["live_label_names_from_policy(...)"]
+    N002["catalog = load_sot_from_policy(...)"]
+    N003["return frozenset((str(entry['<str>']) for entry in catalog))"]
+    N001 -->|"start"| N002
+    N002 --> N003
+```
+
 ## consumer_label_universe(...)
 
 ```mermaid
@@ -257,33 +268,36 @@ flowchart TD
     N011["add_argument(...)"]
     N012["add_argument(...)"]
     N013["add_argument(...)"]
-    N014["args = parse_args(...)"]
-    N015["registry_path = _REPO_ROOT / args.registry"]
-    N016["schema_path = _REPO_ROOT / args.schema"]
-    N017["labels_path = _REPO_ROOT / args.labels"]
-    N018["label_policy_path = _REPO_ROOT / args.label_policy"]
-    N019["for label, path in (('<str>', registry_path), ('<str>', schema_path), ('<str>', labels_path), ('<str>', label_policy_path)):     if not path.exists():         print(f'<str>{_SCRIPT}<str>{label}<str>{path}<str>', file=sys.stderr)         return 1"]
-    N020["try"]
-    N021["registry = _load_json(...)"]
-    N022["schema = _load_json(...)"]
-    N023["labels_data = _load_json(...)"]
-    N024["label_policy = loads(...)"]
-    N025["except (OSError, ValueError, tomllib.TOMLDecodeError)"]
-    N026["print(...)"]
-    N027["return 1"]
+    N014["add_argument(...)"]
+    N015["args = parse_args(...)"]
+    N016["registry_path = _REPO_ROOT / args.registry"]
+    N017["schema_path = _REPO_ROOT / args.schema"]
+    N018["labels_path = _REPO_ROOT / args.labels"]
+    N019["label_policy_path = _REPO_ROOT / args.label_policy"]
+    N020["for label, path in (('<str>', registry_path), ('<str>', schema_path), ('<str>', labels_path), ('<str>', label_policy_path)):     if not path.exists():         print(f'<str>{_SCRIPT}<str>{label}<str>{path}<str>', file=sys.stderr)         return 1"]
+    N021["try"]
+    N022["registry = _load_json(...)"]
+    N023["schema = _load_json(...)"]
+    N024["labels_data = _load_json(...)"]
+    N025["label_policy = loads(...)"]
+    N026["if args.source == 'label-policy'"]
+    N027["live_labels = live_label_names_from_policy(...)"]
     N028["live_labels = live_label_names(...)"]
-    N029["consumer_labels = consumer_label_universe(...)"]
-    N030["is_tracked = build_tracked_checker(...)"]
-    N031["try"]
-    N032["errors = verify_registry(...)"]
-    N033["except SchemaError"]
-    N034["print(...)"]
-    N035["return 1"]
-    N036["if errors"]
-    N037["for message in errors:     print(f'<str>{_SCRIPT}<str>{message}', file=sys.stderr)"]
+    N029["except (OSError, ValueError, tomllib.TOMLDecodeError)"]
+    N030["print(...)"]
+    N031["return 1"]
+    N032["consumer_labels = consumer_label_universe(...)"]
+    N033["is_tracked = build_tracked_checker(...)"]
+    N034["try"]
+    N035["errors = verify_registry(...)"]
+    N036["except SchemaError"]
+    N037["print(...)"]
     N038["return 1"]
-    N039["print(...)"]
-    N040["return 0"]
+    N039["if errors"]
+    N040["for message in errors:     print(f'<str>{_SCRIPT}<str>{message}', file=sys.stderr)"]
+    N041["return 1"]
+    N042["print(...)"]
+    N043["return 0"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N003 --> N004
@@ -304,24 +318,28 @@ flowchart TD
     N017 --> N018
     N018 --> N019
     N019 --> N020
-    N020 -->|"try"| N021
-    N021 --> N022
+    N020 --> N021
+    N021 -->|"try"| N022
     N022 --> N023
     N023 --> N024
-    N020 -->|"raises"| N025
+    N024 --> N025
     N025 --> N026
-    N026 --> N027
-    N024 --> N028
-    N028 --> N029
+    N026 -->|"true"| N027
+    N026 -->|"false"| N028
+    N021 -->|"raises"| N029
     N029 --> N030
     N030 --> N031
-    N031 -->|"try"| N032
-    N031 -->|"raises"| N033
+    N027 --> N032
+    N028 --> N032
+    N032 --> N033
     N033 --> N034
-    N034 --> N035
-    N032 --> N036
-    N036 -->|"true"| N037
+    N034 -->|"try"| N035
+    N034 -->|"raises"| N036
+    N036 --> N037
     N037 --> N038
-    N036 -->|"false"| N039
-    N039 --> N040
+    N035 --> N039
+    N039 -->|"true"| N040
+    N040 --> N041
+    N039 -->|"false"| N042
+    N042 --> N043
 ```
