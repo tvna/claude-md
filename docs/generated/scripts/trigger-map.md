@@ -204,7 +204,6 @@ Detection is string-match based:
 | `scan_input_contract_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_install_curl_retry_drift.py` | pre-commit | `scan-install-curl-retry-drift` |
 | `scan_issue_anchor_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
-| `scan_label_sot_drift.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_maintainability_metrics.py` | pre-commit | `module-size` |
 | `scan_maintainability_metrics.py` | workflow | `verify-agents.yml (lint-scripts-static)` |
 | `scan_markdown_links.py` | workflow | `verify-agents.yml (lint-scripts-static)` |

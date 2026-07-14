@@ -2,19 +2,6 @@
 
 This file is generated from `scripts/scan_ssot_schema.py` by `python3 scripts/script_ast_graph.py all-doc`. Do not edit it by hand: content under `docs/generated/scripts/` is owned by the post-merge automation (refs #1540); update the source script instead.
 
-## live_label_names(...)
-
-```mermaid
-flowchart TD
-    N001["live_label_names(...)"]
-    N002["if not isinstance(labels_data, list)"]
-    N003["return frozenset()"]
-    N004["return frozenset((entry['<str>'] for entry in labels_data if isinstance(entry, dict) and isinstance(entry.get('<str>'), str)))"]
-    N001 -->|"start"| N002
-    N002 -->|"true"| N003
-    N002 -->|"false"| N004
-```
-
 ## live_label_names_from_policy(...)
 
 ```mermaid
@@ -149,7 +136,7 @@ flowchart TD
     N003["if not isinstance(routing, dict)"]
     N004["return []"]
     N005["errors = []"]
-    N006["for label in _routing_labels(routing):     if label not in live_labels:         errors.append(f'<str>{label!r}<str>{_LABELS_PATH}')"]
+    N006["for label in _routing_labels(routing):     if label not in live_labels:         errors.append(f'<str>{label!r}<str>{_LABEL_POLICY_PATH}')"]
     N007["rules = _as_list(...)"]
     N008["default_indexes = [i for i, rule in enumerate(rules) if isinstance(rule, dict) and rule.get('<str>') is True]"]
     N009["if len(default_indexes) != 1"]
@@ -179,7 +166,7 @@ flowchart TD
 flowchart TD
     N001["_check_consumers(...)"]
     N002["errors = []"]
-    N003["for i, con in enumerate(_as_list(registry.get('<str>'))):     if not isinstance(con, dict):         continue     for field in ('<str>', '<str>'):         for label in _as_list(con.get(field)):             if label not in consumer_labels:                 errors.append(f'<str>{i}<str>{con.get('<str>')!r}<str>{field}<str>{label!r}<str>{_LABELS_PATH}<str>')"]
+    N003["for i, con in enumerate(_as_list(registry.get('<str>'))):     if not isinstance(con, dict):         continue     for field in ('<str>', '<str>'):         for label in _as_list(con.get(field)):             if label not in consumer_labels:                 errors.append(f'<str>{i}<str>{con.get('<str>')!r}<str>{field}<str>{label!r}<str>{_LABEL_POLICY_PATH}<str>')"]
     N004["return errors"]
     N001 -->|"start"| N002
     N002 --> N003
@@ -267,37 +254,31 @@ flowchart TD
     N010["add_argument(...)"]
     N011["add_argument(...)"]
     N012["add_argument(...)"]
-    N013["add_argument(...)"]
-    N014["add_argument(...)"]
-    N015["args = parse_args(...)"]
-    N016["registry_path = _REPO_ROOT / args.registry"]
-    N017["schema_path = _REPO_ROOT / args.schema"]
-    N018["labels_path = _REPO_ROOT / args.labels"]
-    N019["label_policy_path = _REPO_ROOT / args.label_policy"]
-    N020["for label, path in (('<str>', registry_path), ('<str>', schema_path), ('<str>', labels_path), ('<str>', label_policy_path)):     if not path.exists():         print(f'<str>{_SCRIPT}<str>{label}<str>{path}<str>', file=sys.stderr)         return 1"]
-    N021["try"]
-    N022["registry = _load_json(...)"]
-    N023["schema = _load_json(...)"]
-    N024["labels_data = _load_json(...)"]
-    N025["label_policy = loads(...)"]
-    N026["if args.source == 'label-policy'"]
-    N027["live_labels = live_label_names_from_policy(...)"]
-    N028["live_labels = live_label_names(...)"]
-    N029["except (OSError, ValueError, tomllib.TOMLDecodeError)"]
-    N030["print(...)"]
-    N031["return 1"]
-    N032["consumer_labels = consumer_label_universe(...)"]
-    N033["is_tracked = build_tracked_checker(...)"]
-    N034["try"]
-    N035["errors = verify_registry(...)"]
-    N036["except SchemaError"]
-    N037["print(...)"]
-    N038["return 1"]
-    N039["if errors"]
-    N040["for message in errors:     print(f'<str>{_SCRIPT}<str>{message}', file=sys.stderr)"]
-    N041["return 1"]
-    N042["print(...)"]
-    N043["return 0"]
+    N013["args = parse_args(...)"]
+    N014["registry_path = _REPO_ROOT / args.registry"]
+    N015["schema_path = _REPO_ROOT / args.schema"]
+    N016["label_policy_path = _REPO_ROOT / args.label_policy"]
+    N017["for label, path in (('<str>', registry_path), ('<str>', schema_path), ('<str>', label_policy_path)):     if not path.exists():         print(f'<str>{_SCRIPT}<str>{label}<str>{path}<str>', file=sys.stderr)         return 1"]
+    N018["try"]
+    N019["registry = _load_json(...)"]
+    N020["schema = _load_json(...)"]
+    N021["label_policy = loads(...)"]
+    N022["live_labels = live_label_names_from_policy(...)"]
+    N023["except (OSError, ValueError, tomllib.TOMLDecodeError)"]
+    N024["print(...)"]
+    N025["return 1"]
+    N026["consumer_labels = consumer_label_universe(...)"]
+    N027["is_tracked = build_tracked_checker(...)"]
+    N028["try"]
+    N029["errors = verify_registry(...)"]
+    N030["except SchemaError"]
+    N031["print(...)"]
+    N032["return 1"]
+    N033["if errors"]
+    N034["for message in errors:     print(f'<str>{_SCRIPT}<str>{message}', file=sys.stderr)"]
+    N035["return 1"]
+    N036["print(...)"]
+    N037["return 0"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
     N003 --> N004
@@ -316,30 +297,23 @@ flowchart TD
     N015 --> N016
     N016 --> N017
     N017 --> N018
-    N018 --> N019
+    N018 -->|"try"| N019
     N019 --> N020
     N020 --> N021
-    N021 -->|"try"| N022
-    N022 --> N023
+    N021 --> N022
+    N018 -->|"raises"| N023
     N023 --> N024
     N024 --> N025
-    N025 --> N026
-    N026 -->|"true"| N027
-    N026 -->|"false"| N028
-    N021 -->|"raises"| N029
-    N029 --> N030
+    N022 --> N026
+    N026 --> N027
+    N027 --> N028
+    N028 -->|"try"| N029
+    N028 -->|"raises"| N030
     N030 --> N031
-    N027 --> N032
-    N028 --> N032
-    N032 --> N033
-    N033 --> N034
-    N034 -->|"try"| N035
-    N034 -->|"raises"| N036
+    N031 --> N032
+    N029 --> N033
+    N033 -->|"true"| N034
+    N034 --> N035
+    N033 -->|"false"| N036
     N036 --> N037
-    N037 --> N038
-    N035 --> N039
-    N039 -->|"true"| N040
-    N040 --> N041
-    N039 -->|"false"| N042
-    N042 --> N043
 ```
