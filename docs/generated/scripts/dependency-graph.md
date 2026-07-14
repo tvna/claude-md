@@ -15,8 +15,8 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 | `_ssot` | 8 | `_security_drift_families`, `auto_retro`, `branch_cleanup`, `ci_budget_issue`, `gate_issue_classification_labels`, `ruleset_drift`, `scan_retro_followup_drift`, `scan_routing_table_drift` |
 | `issue_link` | 7 | `_auto_retro_parse`, `_auto_retro_render`, `auto_retro`, `body_policy`, `gate_pr_body_retro_issue_link`, `preflight_angle_token_drop`, `scan_retro_followup_drift` |
 | `_ref_classifier` | 6 | `gate_retro_close_keyword_commit`, `issue_link`, `np_strategy_tracking`, `pr_body_close_keyword_gate`, `preflight_pr_body`, `verify_linked_issue_titles` |
+| `_retro_labels` | 6 | `_auto_retro_render`, `_auto_retro_triage`, `auto_retro`, `labels_apply`, `scan_label_sot_drift`, `scan_retro_followup_drift` |
 | `issue_anchors` | 6 | `_security_drift_issues`, `ci_budget_issue`, `coverage_failure_issue`, `devcontainer_pin_pr`, `scan_issue_anchor_drift`, `security_drift_report` |
-| `_retro_labels` | 5 | `_auto_retro_render`, `_auto_retro_triage`, `auto_retro`, `scan_label_sot_drift`, `scan_retro_followup_drift` |
 | `_shell_lines` | 5 | `scan_ruff_format`, `scan_workflow_gh_calls`, `scan_workflow_llm_budget`, `scan_workflow_pip`, `scan_workflow_unsigned_commit` |
 | `_session_branches` | 4 | `check_session_branch`, `preflight_commit_session_branch`, `preflight_push_session_branch`, `preflight_session_branch_authz` |
 | `_apm_managed_paths` | 3 | `gate_agents_skills_edit`, `scan_repo_double_hyphen`, `scan_repo_em_dash` |
@@ -169,6 +169,7 @@ flowchart TD
     issue_link --> _ref_classifier
     issue_link --> _trusted_bots
     labels_apply --> _github_api
+    labels_apply --> _retro_labels
     measure_tool_overlap --> scan_markdown_links
     measure_tool_overlap --> scan_secrets
     measure_tool_overlap --> scan_workflow_action_pins

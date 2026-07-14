@@ -125,7 +125,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     N001["load_rename_map(...)"]
-    N002["with policy_path.open('<str>') as handle:     policy = tomllib.load(handle)"]
+    N002["policy = _load_toml(...)"]
     N003["rename_map = {}"]
     N004["for entry in policy.get('<str>', []):     if not isinstance(entry, dict):         continue     old = entry.get('<str>')     new = entry.get('<str>')     if isinstance(old, str) and old and isinstance(new, str) and new:         rename_map[new] = old"]
     N005["return rename_map"]
@@ -135,12 +135,54 @@ flowchart TD
     N004 --> N005
 ```
 
+## _load_toml(...)
+
+```mermaid
+flowchart TD
+    N001["_load_toml(...)"]
+    N002["with path.open('<str>') as handle:     return tomllib.load(handle)"]
+    N003["end"]
+    N001 -->|"start"| N002
+    N002 --> N003
+```
+
+## load_sot_from_policy(...)
+
+```mermaid
+flowchart TD
+    N001["load_sot_from_policy(...)"]
+    N002["policy = _load_toml(...)"]
+    N003["catalog = []"]
+    N004["seen_names = set(...)"]
+    N005["for entry in policy.get('<str>', []):     if not isinstance(entry, dict):         continue     status = entry.get('<str>')     if status not in _KNOWN_LABEL_STATUSES:         raise ValueError(f'<str>{entry.get('<str>')!r}<str>{status!r}<str>{sorted(_KNOWN_LABEL_STATUSES)}<str>')     if status == '<str>':         continue     name = entry.get('<str>')     if isinstance(name, str) and name in seen_names:         raise ValueError(f'<str>{name!r}<str>')     if isinstance(name, str):         seen_names.add(name)     catalog.append({'<str>': name, '<str>': entry.get('<str>'), '<str>': entry.get('<str>')})"]
+    N006["with labels_json_path.open(encoding='<str>') as handle:     labels_json = json.load(handle)"]
+    N007["retro_entry = next(...)"]
+    N008["if retro_entry is None"]
+    N009["raise ValueError(f'{_retro_labels.TYPE_RETROSPECTIVE!r}<str>{labels_json_path}<str>')"]
+    N010["for key in ('<str>', '<str>'):     if key not in retro_entry:         raise ValueError(f'{_retro_labels.TYPE_RETROSPECTIVE!r}<str>{labels_json_path}<str>{key!r}<str>')"]
+    N011["append(...)"]
+    N012["validate_sot(...)"]
+    N013["return catalog"]
+    N001 -->|"start"| N002
+    N002 --> N003
+    N003 --> N004
+    N004 --> N005
+    N005 --> N006
+    N006 --> N007
+    N007 --> N008
+    N008 -->|"true"| N009
+    N008 -->|"false"| N010
+    N010 --> N011
+    N011 --> N012
+    N012 --> N013
+```
+
 ## run(...)
 
 ```mermaid
 flowchart TD
     N001["run(...)"]
-    N002["sot = load_sot(...)"]
+    N002["sot = sot_loader(...)"]
     N003["live = live_labels if live_labels is not None else fetch_live_labels(repo, token)"]
     N004["live_by_name = {str(entry.get('<str>')): entry for entry in live}"]
     N005["sot_names = {str(entry['<str>']) for entry in sot}"]
@@ -166,6 +208,19 @@ flowchart TD
     N012 --> N013
 ```
 
+## _resolve_sot(...)
+
+```mermaid
+flowchart TD
+    N001["_resolve_sot(...)"]
+    N002["if args.source == 'label-policy'"]
+    N003["return (args.policy, functools.partial(load_sot_from_policy, labels_json_path=args.sot))"]
+    N004["return (args.sot, load_sot)"]
+    N001 -->|"start"| N002
+    N002 -->|"true"| N003
+    N002 -->|"false"| N004
+```
+
 ## main(...)
 
 ```mermaid
@@ -178,17 +233,18 @@ flowchart TD
     N006["_add_common_args(...)"]
     N007["args = parse_args(...)"]
     N008["try"]
-    N009["if args.command == 'validate'"]
-    N010["load_sot(...)"]
-    N011["return 0"]
-    N012["token = get(...)"]
-    N013["if not token"]
-    N014["print(...)"]
-    N015["return 1"]
-    N016["return run(mode=args.command, repo=args.repo, sot_path=args.sot, prune=_parse_bool(args.prune), dry_run=_parse_bool(args.dry_run), summary_file=args.summary_file, token=token, rename_map=load_rename_map(args.policy))"]
-    N017["except (OSError, json.JSONDecodeError, RuntimeError, ValueError)"]
-    N018["print(...)"]
-    N019["return 1"]
+    N009["(sot_path, sot_loader) = _resolve_sot(...)"]
+    N010["if args.command == 'validate'"]
+    N011["sot_loader(...)"]
+    N012["return 0"]
+    N013["token = get(...)"]
+    N014["if not token"]
+    N015["print(...)"]
+    N016["return 1"]
+    N017["return run(mode=args.command, repo=args.repo, sot_path=sot_path, prune=_parse_bool(args.prune), dry_run=_parse_bool(args.dry_run), summary_file=args.summary_file, token=token, rename_map=load_rename_map(args.policy), sot_loader=sot_loader)"]
+    N018["except (OSError, json.JSONDecodeError, RuntimeError, ValueError)"]
+    N019["print(...)"]
+    N020["return 1"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -197,16 +253,17 @@ flowchart TD
     N006 --> N007
     N007 --> N008
     N008 -->|"try"| N009
-    N009 -->|"true"| N010
-    N010 --> N011
-    N009 -->|"false"| N012
-    N012 --> N013
-    N013 -->|"true"| N014
-    N014 --> N015
-    N013 -->|"false"| N016
-    N008 -->|"raises"| N017
-    N017 --> N018
+    N009 --> N010
+    N010 -->|"true"| N011
+    N011 --> N012
+    N010 -->|"false"| N013
+    N013 --> N014
+    N014 -->|"true"| N015
+    N015 --> N016
+    N014 -->|"false"| N017
+    N008 -->|"raises"| N018
     N018 --> N019
+    N019 --> N020
 ```
 
 ## _add_common_args(...)
@@ -220,7 +277,8 @@ flowchart TD
     N005["add_argument(...)"]
     N006["add_argument(...)"]
     N007["add_argument(...)"]
-    N008["end"]
+    N008["add_argument(...)"]
+    N009["end"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -228,6 +286,7 @@ flowchart TD
     N005 --> N006
     N006 --> N007
     N007 --> N008
+    N008 --> N009
 ```
 
 ## _write_summary_header(...)
