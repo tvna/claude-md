@@ -487,3 +487,52 @@ class TestSourceFlag:
         )
 
         assert rc == 0, capsys.readouterr().err
+
+    def test_source_label_policy_reports_malformed_policy_as_error_not_traceback(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A semantically invalid policy-derived catalog (here: an
+        unrecognized status) must exit 1 with an ::error:: line, the same
+        malformed-input contract every other input file already gets --
+        not an uncaught ValueError traceback."""
+        registry_path = tmp_path / "ssot.json"
+        registry_path.write_text(json.dumps(_valid_registry()), encoding="utf-8")
+        schema_path = tmp_path / "ssot.schema.json"
+        schema_path.write_text((_REPO_ROOT / ".gitapex" / "ssot.schema.json").read_text(), encoding="utf-8")
+        policy_path = tmp_path / "label-policy.toml"
+        policy_path.write_text(
+            "\n".join(
+                [
+                    "[[labels]]",
+                    'name = "type:fix"',
+                    'status = "Keep"',
+                    'description = "Typo-cased status."',
+                    'color = "d73a4a"',
+                ]
+            ),
+            encoding="utf-8",
+        )
+        labels_path = tmp_path / "labels.json"
+        labels_path.write_text(
+            json.dumps([{"name": "type:retrospective", "color": "c5def5", "description": "Auto-opened."}]),
+            encoding="utf-8",
+        )
+
+        rc = gate.main(
+            [
+                "verify",
+                "--registry",
+                str(registry_path),
+                "--schema",
+                str(schema_path),
+                "--labels",
+                str(labels_path),
+                "--label-policy",
+                str(policy_path),
+                "--source",
+                "label-policy",
+            ]
+        )
+
+        assert rc == 1
+        assert "::error::" in capsys.readouterr().err

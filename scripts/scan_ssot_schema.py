@@ -390,14 +390,14 @@ def main(argv: list[str] | None = None) -> int:
         schema = _load_json(schema_path)
         labels_data = _load_json(labels_path)
         label_policy = tomllib.loads(label_policy_path.read_text(encoding="utf-8"))
+        if args.source == "label-policy":
+            live_labels = live_label_names_from_policy(label_policy_path, labels_path)
+        else:
+            live_labels = live_label_names(labels_data)
     except (OSError, ValueError, tomllib.TOMLDecodeError) as exc:
         print(f"::error::{_SCRIPT}: cannot parse an input file: {exc}", file=sys.stderr)
         return 1
 
-    if args.source == "label-policy":
-        live_labels = live_label_names_from_policy(label_policy_path, labels_path)
-    else:
-        live_labels = live_label_names(labels_data)
     consumer_labels = consumer_label_universe(live_labels, label_policy)
     is_tracked = build_tracked_checker(_REPO_ROOT)
 
