@@ -11,7 +11,7 @@ If the 4-week moving average declines for two consecutive observed weeks, stop s
 | ISO week | Merges | Repair-free | Rate | 4-week moving avg |
 |---|---|---|---|---|
 | 2026-W28 | 2 | 1 | 50.0% | n/a |
-| 2026-W29 | 4 | 0 | 0.0% | n/a |
+| 2026-W29 | 5 | 0 | 0.0% | n/a |
 
 ## Per-merge history
 
@@ -24,4 +24,5 @@ If the 4-week moving average declines for two consecutive observed weeks, stop s
 | #2484 | 2026-07-14T07:59:09Z | no |
 | #2488 | 2026-07-14T08:36:52Z | no |
 | #2492 | 2026-07-14T13:47:42Z | no |
+| #2497 | 2026-07-14T20:44:12Z | no |
 <!-- /auto-retro-ledger:rows -->
