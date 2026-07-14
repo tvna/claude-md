@@ -23,6 +23,7 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 | `_auto_retro_parse` | 3 | `_auto_retro_render`, `_auto_retro_triage`, `auto_retro` |
 | `auto_retro` | 3 | `gate_pr_body_retro_issue_link`, `gate_reserved_retro_scope`, `gate_retro_close_keyword_commit` |
 | `doc_graph` | 3 | `doc_graph_viz`, `gate_doc_graph_pr`, `scan_doc_graph_registration` |
+| `labels_apply` | 3 | `dependabot_labels`, `gate_issue_classification_labels`, `scan_ssot_schema` |
 | `pr_upsert` | 3 | `_pr_merge`, `auto_retro`, `devcontainer_pin_pr` |
 | `preflight_steps` | 3 | `preflight_all`, `scan_ruff_format`, `scan_ssot_drift` |
 | `_allowlist` | 2 | `scan_allowlist_parser_parity`, `scan_allowlist_rationale` |
@@ -65,9 +66,9 @@ This file is generated from `scripts/*.py` import statements by `python3 scripts
 
 ## Isolated scripts
 
-63 script(s) import no sibling module and are imported by none:
+62 script(s) import no sibling module and are imported by none:
 
-`analyze_ci_timings`, `attack_review_reminder`, `audit_loop_engineering`, `backup_archive`, `ccusage_pin`, `compare_cache_regimes`, `dependabot_labels`, `flake_pin`, `flake_pin_latest`, `gate_generated_scripts_manual_edit`, `gen_agent_hooks`, `gen_mcp_json`, `github_paginate`, `measure_devcontainer_startup`, `measure_prefix_tokens`, `mint_github_app_token`, `nixpkgs_cooldown`, `owasp_asi_mapping`, `preflight_hook_event_keys`, `python_pin`, `rulesets_apply`, `scan_apm_ascii`, `scan_apm_lock_drift`, `scan_apm_portability`, `scan_bypass_lever_doc_drift`, `scan_commit_type_label_drift`, `scan_compile_from_source`, `scan_design_philosophy_drift`, `scan_doc_workflow_refs`, `scan_flake_pin_drift`, `scan_hardcoded_label_literals`, `scan_harness_doc_coverage`, `scan_hook_coverage_drift`, `scan_hook_predicate_surface_drift`, `scan_install_curl_retry_drift`, `scan_mermaid_syntax`, `scan_nonexhaustive_invariant_drift`, `scan_pr_body_quality_drift`, `scan_provisioning_hook_serial`, `scan_quality_standard_drift`, `scan_runbook_template_drift`, `scan_scripts_gh_calls`, `scan_secret_runbooks`, `scan_session_path_drift`, `scan_test_presence_drift`, `script_dependency_graph`, `script_trigger_map`, `session_resource_report`, `skill_quality_gate`, `threat_intel_triage`, `uv_download_checksum`, `validate_falco_rules`, `validate_json_syntax`, `verify_apm_checksums`, `verify_control_inventory_currency`, `verify_generated_docs_ownership`, `verify_readme_translation`, `verify_required_check_contexts`, `verify_security_control_floor`, `verify_shard_coverage`, `verify_test_shard_markers`, `waza_pin`, `workflow_diagram`
+`analyze_ci_timings`, `attack_review_reminder`, `audit_loop_engineering`, `backup_archive`, `ccusage_pin`, `compare_cache_regimes`, `flake_pin`, `flake_pin_latest`, `gate_generated_scripts_manual_edit`, `gen_agent_hooks`, `gen_mcp_json`, `github_paginate`, `measure_devcontainer_startup`, `measure_prefix_tokens`, `mint_github_app_token`, `nixpkgs_cooldown`, `owasp_asi_mapping`, `preflight_hook_event_keys`, `python_pin`, `rulesets_apply`, `scan_apm_ascii`, `scan_apm_lock_drift`, `scan_apm_portability`, `scan_bypass_lever_doc_drift`, `scan_commit_type_label_drift`, `scan_compile_from_source`, `scan_design_philosophy_drift`, `scan_doc_workflow_refs`, `scan_flake_pin_drift`, `scan_hardcoded_label_literals`, `scan_harness_doc_coverage`, `scan_hook_coverage_drift`, `scan_hook_predicate_surface_drift`, `scan_install_curl_retry_drift`, `scan_mermaid_syntax`, `scan_nonexhaustive_invariant_drift`, `scan_pr_body_quality_drift`, `scan_provisioning_hook_serial`, `scan_quality_standard_drift`, `scan_runbook_template_drift`, `scan_scripts_gh_calls`, `scan_secret_runbooks`, `scan_session_path_drift`, `scan_test_presence_drift`, `script_dependency_graph`, `script_trigger_map`, `session_resource_report`, `skill_quality_gate`, `threat_intel_triage`, `uv_download_checksum`, `validate_falco_rules`, `validate_json_syntax`, `verify_apm_checksums`, `verify_control_inventory_currency`, `verify_generated_docs_ownership`, `verify_readme_translation`, `verify_required_check_contexts`, `verify_security_control_floor`, `verify_shard_coverage`, `verify_test_shard_markers`, `waza_pin`, `workflow_diagram`
 
 ## Dependency graph
 
@@ -126,6 +127,7 @@ flowchart TD
     coverage_failure_issue --> issue_anchors
     dependabot_automerge --> _github_api
     dependabot_automerge --> _trusted_bots
+    dependabot_labels --> labels_apply
     devcontainer_pin_pr --> _git
     devcontainer_pin_pr --> _pr_commit_batch
     devcontainer_pin_pr --> _pr_merge
@@ -144,6 +146,7 @@ flowchart TD
     gate_irreversible_bash --> _hook_runtime
     gate_issue_classification_labels --> _hook_runtime
     gate_issue_classification_labels --> _ssot
+    gate_issue_classification_labels --> labels_apply
     gate_issue_close_comment --> _hook_runtime
     gate_mcp_github_uncovered --> _hook_runtime
     gate_merge_safety --> _hook_runtime
@@ -293,6 +296,7 @@ flowchart TD
     scan_secrets --> _secret_patterns
     scan_ssot_drift --> preflight_steps
     scan_ssot_schema --> _json_schema_subset
+    scan_ssot_schema --> labels_apply
     scan_workflow_gh_calls --> _shell_lines
     scan_workflow_llm_budget --> _shell_lines
     scan_workflow_pip --> _shell_lines
