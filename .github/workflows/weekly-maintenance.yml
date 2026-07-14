@@ -30,6 +30,7 @@ on:
     paths:
       - ".github/rulesets/**"
       - ".github/labels.json"
+      - ".github/label-policy.toml"
       - ".apm/instructions/**"
       - "pyproject.toml"
       - "CLAUDE.md"
@@ -532,6 +533,8 @@ jobs:
           python3 scripts/labels_apply.py plan \
             --repo "${REPO}" \
             --sot .github/labels.json \
+            --policy .github/label-policy.toml \
+            --source label-policy \
             --prune false \
             --dry-run true \
             --summary-file /tmp/labels-summary.md

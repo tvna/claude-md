@@ -49,10 +49,17 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Validate labels.json
+      - name: Validate label-policy.toml
+        # Refs #2442 Phase B cutover: validates via the label-policy source
+        # (the same derivation labels_apply.load_sot_from_policy proves
+        # identical to labels.json on the real repo files); labels.json
+        # itself stays validated separately by scan_label_sot_drift.py.
         run: |
           set -euo pipefail
-          python3 scripts/labels_apply.py validate --sot .github/labels.json
+          python3 scripts/labels_apply.py validate \
+            --sot .github/labels.json \
+            --policy .github/label-policy.toml \
+            --source label-policy
 
       - name: Plan and apply labels
         env:
@@ -68,6 +75,7 @@ jobs:
             --repo "$REPO" \
             --sot .github/labels.json \
             --policy .github/label-policy.toml \
+            --source label-policy \
             --prune "$INPUT_PRUNE" \
             --dry-run "$INPUT_DRY_RUN" \
             --summary-file "$GITHUB_STEP_SUMMARY"
