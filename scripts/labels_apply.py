@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import os
 import re
@@ -12,6 +13,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
+import _retro_labels
 from _github_api import API_VERSION
 from _github_api import apply_call as github_apply_call
 
@@ -169,8 +171,7 @@ def load_rename_map(policy_path: Path) -> dict[str, str]:
     adopted design contract). ``run`` consults this map to rename a label in
     place instead of dropping and recreating it.
     """
-    with policy_path.open("rb") as handle:
-        policy = tomllib.load(handle)
+    policy = _load_toml(policy_path)
     rename_map: dict[str, str] = {}
     for entry in policy.get("labels", []):
         if not isinstance(entry, dict):
@@ -180,6 +181,84 @@ def load_rename_map(policy_path: Path) -> dict[str, str]:
         if isinstance(old, str) and old and isinstance(new, str) and new:
             rename_map[new] = old
     return rename_map
+
+
+_KNOWN_LABEL_STATUSES = frozenset({"keep", "rename", "add"})
+
+
+def _load_toml(path: Path) -> dict[str, Any]:
+    with path.open("rb") as handle:
+        return tomllib.load(handle)
+
+
+def load_sot_from_policy(policy_path: Path, labels_json_path: Path) -> list[dict[str, Any]]:
+    """Derive the live label catalog from label-policy.toml ``[[labels]]``.
+
+    Only ``status in {"keep", "rename"}`` entries are live (``status ==
+    "add"`` entries are design-only, not yet on GitHub); ``name`` already
+    holds the resolved final name for a rename. An entry whose ``status`` is
+    anything other than ``"keep"``, ``"rename"``, or ``"add"`` (a typo or a
+    missing field) fails loudly rather than being silently dropped from the
+    live catalog, since a silently dropped live label would look like a
+    prune candidate to a caller that runs with ``prune=true``.
+
+    ``type:retrospective`` has no ``[[labels]]`` entry (its identity stays
+    in labels.json pending its own #972 retirement decision, see the policy
+    file's comment above the ``retro`` family), so it is injected here from
+    ``labels_json_path``.
+    """
+    policy = _load_toml(policy_path)
+
+    catalog: list[dict[str, Any]] = []
+    seen_names: set[str] = set()
+    for entry in policy.get("labels", []):
+        if not isinstance(entry, dict):
+            continue
+        status = entry.get("status")
+        if status not in _KNOWN_LABEL_STATUSES:
+            raise ValueError(
+                f"label-policy.toml [[labels]] entry {entry.get('name')!r} has an unrecognized "
+                f"status {status!r}; expected one of {sorted(_KNOWN_LABEL_STATUSES)}."
+            )
+        if status == "add":
+            continue
+        name = entry.get("name")
+        if isinstance(name, str) and name in seen_names:
+            raise ValueError(
+                f"label {name!r} is declared more than once in label-policy.toml [[labels]] "
+                "with status keep/rename; each live label name must be unique."
+            )
+        if isinstance(name, str):
+            seen_names.add(name)
+        catalog.append({"name": name, "color": entry.get("color"), "description": entry.get("description")})
+
+    with labels_json_path.open(encoding="utf-8") as handle:
+        labels_json = json.load(handle)
+    retro_entry = next(
+        (
+            entry
+            for entry in labels_json
+            if isinstance(entry, dict) and entry.get("name") == _retro_labels.TYPE_RETROSPECTIVE
+        ),
+        None,
+    )
+    if retro_entry is None:
+        raise ValueError(
+            f"{_retro_labels.TYPE_RETROSPECTIVE!r} not found in {labels_json_path}; "
+            "its identity is sourced from labels.json pending its #972 retirement decision."
+        )
+    for key in ("color", "description"):
+        if key not in retro_entry:
+            raise ValueError(
+                f"{_retro_labels.TYPE_RETROSPECTIVE!r} entry in {labels_json_path} is missing "
+                f"required key {key!r}."
+            )
+    catalog.append(
+        {"name": retro_entry["name"], "color": retro_entry["color"], "description": retro_entry["description"]}
+    )
+
+    validate_sot(catalog)
+    return catalog
 
 
 def run(
@@ -194,8 +273,9 @@ def run(
     live_labels: list[dict[str, Any]] | None = None,
     rename_map: dict[str, str] | None = None,
     apply_call: Callable[..., tuple[int, str]] = github_apply_call,
+    sot_loader: Callable[[Path], list[dict[str, Any]]] = load_sot,
 ) -> int:
-    sot = load_sot(sot_path)
+    sot = sot_loader(sot_path)
     live = live_labels if live_labels is not None else fetch_live_labels(repo, token)
     live_by_name = {str(entry.get("name")): entry for entry in live}
     sot_names = {str(entry["name"]) for entry in sot}
@@ -290,6 +370,18 @@ def run(
     return 0
 
 
+def _resolve_sot(args: argparse.Namespace) -> tuple[Path, Callable[[Path], list[dict[str, Any]]]]:
+    """Resolve the ``(sot_path, sot_loader)`` pair for ``--source``.
+
+    Single place deciding the label-policy vs labels-json pairing, so
+    ``validate`` and ``plan``/``apply`` in ``main()`` cannot pick the path
+    from one source and the loader from the other.
+    """
+    if args.source == "label-policy":
+        return args.policy, functools.partial(load_sot_from_policy, labels_json_path=args.sot)
+    return args.sot, load_sot
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -299,8 +391,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
+        sot_path, sot_loader = _resolve_sot(args)
         if args.command == "validate":
-            load_sot(args.sot)
+            sot_loader(sot_path)
             return 0
         token = os.environ.get("GH_TOKEN", "")
         if not token:
@@ -309,12 +402,13 @@ def main(argv: list[str] | None = None) -> int:
         return run(
             mode=args.command,
             repo=args.repo,
-            sot_path=args.sot,
+            sot_path=sot_path,
             prune=_parse_bool(args.prune),
             dry_run=_parse_bool(args.dry_run),
             summary_file=args.summary_file,
             token=token,
             rename_map=load_rename_map(args.policy),
+            sot_loader=sot_loader,
         )
     except (OSError, json.JSONDecodeError, RuntimeError, ValueError) as error:
         print(f"::error::{error}")
@@ -325,6 +419,18 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--repo", default=os.environ.get("REPO", ""))
     parser.add_argument("--sot", type=Path, default=Path(".github/labels.json"))
     parser.add_argument("--policy", type=Path, default=Path(".github/label-policy.toml"))
+    parser.add_argument(
+        "--source",
+        choices=["labels-json", "label-policy"],
+        default="labels-json",
+        help=(
+            "Which file supplies the live label catalog. Default labels-json "
+            "preserves current apply-labels.yml behavior; label-policy derives "
+            "the catalog from label-policy.toml [[labels]] instead (Refs #2442 "
+            "Phase B batch 1; not yet wired into apply-labels.yml, which stays "
+            "on labels-json until a later batch)."
+        ),
+    )
     parser.add_argument("--prune", default="false")
     parser.add_argument("--dry-run", default="true")
     parser.add_argument("--summary-file", type=Path, default=Path(os.environ.get("GITHUB_STEP_SUMMARY", "/dev/null")))
