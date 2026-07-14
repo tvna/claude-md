@@ -71,7 +71,7 @@ FAMILY_ISSUE_SPEC: dict[str, dict[str, str]] = {
     "labels": {
         "scope": "labels-drift",
         "detector": "scripts/labels_apply.py plan",
-        "evidence": ".github/labels.json",
+        "evidence": ".github/label-policy.toml",
         "remediation": (
             "Review the labels plan in the run log, then dispatch apply-labels.yml "
             "with dry_run=false after review (docs/runbooks/issue-triage.md)."

@@ -1124,8 +1124,8 @@ _SKIP_COMMENT_MARKER = "<!-- auto-retro:skip -->"
 # policy and out of scope here. The label literals live solely in the
 # ``.gitapex/ssot.json`` registry now (see :func:`_terminal_labels`), which
 # points its ``ops:`` primary and ``harness:`` legacy fallback at the same
-# names ``.github/labels.json`` reconciles onto the repo; the two SoTs are
-# guarded by tests/test_auto_retro.py. apply_terminal_label writes the primary
+# names the ``.github/label-policy.toml`` catalog reconciles onto the repo; the
+# two SoTs are guarded by tests/test_auto_retro.py. apply_terminal_label writes the primary
 # and falls back to the legacy name on an HTTP 422 during the live-rename
 # window, so the terminal signal survives regardless of code-merge vs.
 # live-rename ordering (#972 renames batch, #2139).

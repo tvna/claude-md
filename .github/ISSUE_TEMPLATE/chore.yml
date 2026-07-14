@@ -7,7 +7,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        `type:chore` is not a registered label in `.github/labels.json`. The title
+        `type:chore` is not a registered label in `.github/label-policy.toml`. The title
         prefix `chore(scope):` communicates intent; a maintainer applies the type
         label during triage if appropriate. Titles must be ASCII-only and match
         `type(scope): summary` (scope optional). See CLAUDE.md sections 1 and 2.

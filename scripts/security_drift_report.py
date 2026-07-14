@@ -165,7 +165,7 @@ def classify_rulesets(*, rc: int, detect_output: str) -> FamilyRow:
 
 
 def classify_labels(*, rc: int, summary_text: str) -> FamilyRow:
-    evidence = ".github/labels.json"
+    evidence = ".github/label-policy.toml"
     if rc != 0:
         return FamilyRow(
             family="labels",

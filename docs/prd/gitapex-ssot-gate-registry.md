@@ -42,8 +42,8 @@ enforced on two or three planes (non-ASCII, coverage floor, commit signing,
 gh CLI ban, generated-tree edit protection). `scripts/scan_preflight_drift.py`
 exists solely to reconcile `STEPS` with the workflow YAML; no manifest spans
 all planes. Separately, the adopted label taxonomy
-(`.github/label-policy.toml` design, `.github/labels.json` live catalog)
-drives agent routing through a prose decision table in
+(`.github/label-policy.toml`, the single label SoT from which the live catalog
+is derived) drives agent routing through a prose decision table in
 `docs/runbooks/issue-triage.md`, while label-consuming scripts hardcode label
 literals; #1041 records the latent breakage this causes across renames.
 
@@ -158,7 +158,7 @@ that conclusion as a constraint.
 ## Non-Goals
 
 - No physical consolidation of policy values. `.github/label-policy.toml`,
-  `.github/title-policy.toml`, `.github/labels.json`,
+  `.github/title-policy.toml`,
   `.github/rulesets/main.json`, `.github/tracking-issues.toml`, and the
   security TOMLs keep their content, owners, and paired gates (#1984).
 - No replacement of the `gen_agent_hooks.py` generation chain.
@@ -219,14 +219,8 @@ normative schema; the normative schema is `ssot.schema.json`):
           "id": "label-policy",
           "path": ".github/label-policy.toml",
           "format": "toml",
-          "authority": "label taxonomy design; families, renames, area paths",
+          "authority": "single label SoT; families, renames, area paths; live catalog derived from it",
           "paired_gates": ["labels-apply-validate", "scan-area-path-coverage"]
-        },
-        {
-          "id": "labels-live",
-          "path": ".github/labels.json",
-          "format": "json",
-          "authority": "live label catalog applied to GitHub"
         },
         {
           "id": "agent-hooks-source",
@@ -260,7 +254,7 @@ normative schema; the normative schema is `ssot.schema.json`):
           "rule": "agent-created issues carry layer:* and type:* labels",
           "planes": ["pretooluse"],
           "trigger": "mcp__github__issue_write create",
-          "policy_refs": ["labels-live", "label-policy"],
+          "policy_refs": ["label-policy"],
           "cluster": null,
           "tracking_issue": null
         },
@@ -322,15 +316,16 @@ deterministic):
   field resolves to a tracked file.
 - Every `gates[].policy_refs[]` entry names an existing
   `policy_sources[].id`.
-- Every label string in `label_routing` resolves against the live
-  catalog `.github/labels.json` ONLY. Routing is executable against the
-  labels GitHub applies today; a renamed-away or retired name would
-  validate but never match, silently falling through to the default
-  route, so legacy names are rejected in this block. When the catalog
-  flips a rename, the validator fails the stale routing rule in the same
-  PR, forcing the lockstep edit.
-- Every label string in `label_consumers` resolves against
-  `.github/labels.json` unioned with the `rename_from` and `retired`
+- Every label string in `label_routing` resolves against the catalog
+  derived from `.github/label-policy.toml` (entries with `status` in
+  keep/rename) ONLY. Routing is executable against the labels GitHub
+  applies today; a renamed-away or retired name would validate but never
+  match, silently falling through to the default route, so legacy names
+  are rejected in this block. When the policy flips a rename, the
+  validator fails the stale routing rule in the same PR, forcing the
+  lockstep edit.
+- Every label string in `label_consumers` resolves against the derived
+  catalog unioned with the `rename_from` and `retired`
   tables of `.github/label-policy.toml`. The inventory may legitimately
   record a legacy name mid-migration, and the union is what makes stale
   consumer references detectable (the deterministic guard #1041 asks
@@ -491,7 +486,7 @@ no compensating benefit (C, D). Details below.
   policy in this repository is mostly TOML with inline comments; JSON has
   no comments. Fact: the operator named `ssot.json` in the session goal,
   and machine-first catalogs in this repository are already JSON
-  (`labels.json`, `rulesets/main.json`, `agent_hooks_source.json`).
+  (`rulesets/main.json`, `agent_hooks_source.json`).
   Chosen: JSON, with commentary carried by `ssot.schema.json`
   `description` fields and this document. The choice is reversible until
   phase 2 (only the validator would change); revisit at phase 0 review if
@@ -594,7 +589,7 @@ phase's acceptance criteria.
   https://github.com/tvna/claude-md/issues/972
 - Companions: `docs/proposals/config-ssot-duplicate-fact-inventory.md`;
   `docs/runbooks/issue-triage.md`; `docs/standards/label-taxonomy.md`;
-  `.github/label-policy.toml`; `.github/labels.json`;
+  `.github/label-policy.toml`;
   `scripts/agent_hooks_source.json`; `scripts/preflight_steps.py`;
   `scripts/scan_preflight_drift.py`; `.github/rulesets/main.json`;
   `docs/next-session/gitapex-ssot-phase0.md`

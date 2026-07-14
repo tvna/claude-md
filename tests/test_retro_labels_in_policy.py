@@ -6,19 +6,20 @@ Couples the two homes of the retro:* labels so they cannot drift apart:
   (``ALL_RETRO_LABELS``), a side-effect-free Python constant imported widely at
   runtime.
 * ``.github/label-policy.toml`` ``[[labels]]`` under ``family == "retro"``; the
-  labels' IDENTITY (name/description/color), the single authored source that
-  ``.github/labels.json`` reconciles to and ``scripts/scan_label_sot_drift.py``
-  validates.
+  labels' IDENTITY (name/description/color) in the single label SoT, from which
+  ``apply-labels.yml`` derives the live catalog it reconciles to GitHub.
 
 Before #2442 batch 1 the retro:* identity lived only in ``labels.json`` and was
-exempt from the parity gate. Folding it into ``label-policy.toml`` closed that
-gap, but the name set now exists in two files; this test is the enforceable
-coupling that keeps them identical. Its sibling
-``tests/test_retro_labels_in_sot.py`` guards the separate prune-safety invariant
-(the names must also stay in ``labels.json`` so an ``apply-labels.yml``
-``prune=true`` run cannot delete them).
+exempt from the old parity gate. Folding it into ``label-policy.toml`` closed
+that gap, and #2499 retired ``labels.json`` entirely so the policy is now the
+one authored home; this test is the enforceable coupling that keeps the policy
+``retro`` family and the ``ALL_RETRO_LABELS`` constant identical. Because the
+retro:* entries are ``status = "keep"`` in the policy, they are in the derived
+live catalog, so an ``apply-labels.yml`` ``prune=true`` run cannot delete them
+(the prune-safety invariant #1119 first exposed).
 
-Refs #2442 (this coupling), #558 (the retro:* constants).
+Refs #2442 (this coupling), #558 (the retro:* constants), #1119 (prune safety),
+#2499 (labels.json retirement).
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 import _retro_labels
+import labels_apply
 
 pytestmark = pytest.mark.shard_ci_ops
 
@@ -92,3 +94,27 @@ def test_retro_family_entries_carry_identity(field: str) -> None:
             f"retro label {entry.get('name')!r} is missing a non-empty {field!r} "
             "in label-policy.toml"
         )
+
+
+def test_retro_labels_are_in_derived_live_catalog() -> None:
+    """Prune-safety (#1119): every retro:* constant must appear in the live
+    catalog derived from the policy by ``labels_apply.load_sot_from_policy``,
+    which keeps only ``status in {keep, rename}`` entries.
+
+    ``test_policy_retro_family_matches_name_sot`` above only couples the retro
+    NAMES; it stays green if a future edit keeps ``family = "retro"`` and the
+    name but flips a retro entry to ``status = "add"``. That regression would
+    silently drop the label from the derived catalog, letting an
+    ``apply-labels.yml`` ``prune=true`` run delete the live retro label again
+    (the #1119 accident). This test asserts the live-status condition directly,
+    so such drift fails here first. Refs #2499, #1119.
+    """
+    catalog_names = {
+        str(entry["name"]) for entry in labels_apply.load_sot_from_policy(LABEL_POLICY)
+    }
+    missing = sorted(set(_retro_labels.ALL_RETRO_LABELS) - catalog_names)
+    assert not missing, (
+        f"retro labels {missing} are not in the policy-derived live catalog; they "
+        "must be status keep/rename so an apply-labels.yml prune run cannot delete "
+        "them (#1119)."
+    )

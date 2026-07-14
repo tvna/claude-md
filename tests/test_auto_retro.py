@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import base64
 import json
+import tomllib
 from collections.abc import Mapping
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -2205,11 +2206,11 @@ class TestApplyTerminalLabel:
             ar.apply_terminal_label("o/r", 42)
 
 
-def test_terminal_primary_label_aligned_with_labels_json() -> None:
-    """The registry's ``ops:`` terminal label must exist as a ``name`` entry in
-    the declarative ``.github/labels.json`` SoT so ``apply-labels.yml``
-    reconciles it onto the repository before any merge fires
-    ``apply_terminal_label``.
+def test_terminal_primary_label_aligned_with_policy_catalog() -> None:
+    """The registry's ``ops:`` terminal label must exist in the live catalog
+    derived from ``.github/label-policy.toml`` (the single label SoT, Refs
+    #2499) so ``apply-labels.yml`` reconciles it onto the repository before any
+    merge fires ``apply_terminal_label``.
 
     Reads both SoT files directly (not through the autouse-mocked
     ``ar._ssot``) so it is a genuine cross-registry drift guard: it derives the
@@ -2230,11 +2231,16 @@ def test_terminal_primary_label_aligned_with_labels_json() -> None:
         for label in entry["labels"]
         if label.endswith("retro-opened") and label.startswith("ops:")
     )
-    labels_sot = json.loads(
-        (repo_root / ".github" / "labels.json").read_text(encoding="utf-8")
+    policy = tomllib.loads(
+        (repo_root / ".github" / "label-policy.toml").read_text(encoding="utf-8")
     )
-    assert any(lbl.get("name") == primary for lbl in labels_sot), (
-        f"terminal label {primary!r} missing from .github/labels.json"
+    catalog_names = {
+        lbl.get("name")
+        for lbl in policy.get("labels", [])
+        if isinstance(lbl, dict) and lbl.get("status") in {"keep", "rename"}
+    }
+    assert primary in catalog_names, (
+        f"terminal label {primary!r} missing from the .github/label-policy.toml catalog"
     )
 
 

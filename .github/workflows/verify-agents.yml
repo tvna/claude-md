@@ -233,14 +233,6 @@ jobs:
         # type:tracking is exempt via a declared commit_type = false marker.
         run: uv run python scripts/scan_commit_type_label_drift.py verify
 
-      - name: Verify labels.json matches label-policy.toml
-        # Refs #2442: fails when .github/labels.json drifts from
-        # .github/label-policy.toml [[labels]] on name/description/color, so the
-        # two label sources cannot diverge while the TOML is the single authored
-        # SoT. No exemptions remain since #972 retired type:retrospective, the
-        # last labels.json-only entry.
-        run: uv run python scripts/scan_label_sot_drift.py verify
-
       - name: Verify test shard markers
         # Refs #545: each tests/test_*.py must declare exactly one
         # module-scope shard marker so the lint-scripts-pytest matrix

@@ -230,14 +230,15 @@ STEPS: tuple[Step, ...] = (
         argv=("python3", "scripts/scan_docs_inventory.py", "verify"),
     ),
     Step(
-        # Refs #2252. Validates .gitapex/ssot.json (the gate registry) against
-        # its JSON Schema and referential-integrity rules: paths tracked, ids
-        # resolve, routing labels resolve against labels.json, consumer labels
-        # resolve against labels.json plus the label-policy rename/retired
-        # tables. Static working-tree read; mirrors the verify-pr.yml step so
-        # the gate fires pre-push, not only in CI.
+        # Refs #2252, #2499. Validates .gitapex/ssot.json (the gate registry)
+        # against its JSON Schema and referential-integrity rules: paths
+        # tracked, ids resolve, routing labels resolve against the label
+        # catalog derived from label-policy.toml, consumer labels resolve
+        # against that catalog plus the label-policy rename/retired tables.
+        # Static working-tree read; mirrors the verify-pr.yml step so the gate
+        # fires pre-push, not only in CI.
         name="scan_ssot_schema",
-        argv=("python3", "scripts/scan_ssot_schema.py", "verify", "--source", "label-policy"),
+        argv=("python3", "scripts/scan_ssot_schema.py", "verify"),
     ),
     Step(
         # Refs #2342. Validates every .gitapex/*.toml against its sibling
@@ -330,12 +331,8 @@ STEPS: tuple[Step, ...] = (
             "verify",
             "--dependabot",
             ".github/dependabot.yml",
-            "--labels",
-            ".github/labels.json",
             "--label-policy",
             ".github/label-policy.toml",
-            "--source",
-            "label-policy",
         ),
     ),
     Step(
@@ -527,15 +524,6 @@ STEPS: tuple[Step, ...] = (
         # drift. type:tracking is exempt via a declared commit_type = false.
         name="scan_commit_type_label_drift",
         argv=("python3", "scripts/scan_commit_type_label_drift.py", "verify"),
-    ),
-    Step(
-        # Refs #2442. Fails when .github/labels.json drifts from
-        # .github/label-policy.toml [[labels]] on name/description/color, so
-        # the two label sources cannot silently diverge while the TOML is the
-        # single authored SoT. No exemptions remain since #972 retired the
-        # retrospective identity label, the last labels.json-only entry.
-        name="scan_label_sot_drift",
-        argv=("python3", "scripts/scan_label_sot_drift.py", "verify"),
     ),
     Step(
         # Refs #1099. Runs waza spec-compliance over every skill under

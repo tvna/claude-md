@@ -39,10 +39,10 @@ def _valid_registry() -> dict[str, Any]:
         },
         "policy_sources": [
             {
-                "id": "labels-live",
-                "path": ".github/labels.json",
-                "format": "json",
-                "authority": "live label catalog",
+                "id": "label-policy",
+                "path": ".github/label-policy.toml",
+                "format": "toml",
+                "authority": "label taxonomy design and live catalog",
             }
         ],
         "gates": [
@@ -53,7 +53,7 @@ def _valid_registry() -> dict[str, Any]:
                 "rule": "r",
                 "planes": ["pretooluse"],
                 "trigger": "t",
-                "policy_refs": ["labels-live"],
+                "policy_refs": ["label-policy"],
                 "cluster": "c1",
                 "tracking_issue": None,
             },
@@ -100,18 +100,6 @@ def _verify(registry: dict[str, Any]) -> list[str]:
 
 
 class TestLiveLabelNamesFromPolicy:
-    def test_matches_labels_json_derivation_on_real_repo_files(self) -> None:
-        """Integration proof for #2442 Phase B batch 2: the TOML-derived name
-        set must equal the labels.json-derived name set for the real repo
-        files (mirrors test_labels_apply.py's
-        test_policy_derived_catalog_matches_labels_json_exactly)."""
-        labels_data = json.loads((_REPO_ROOT / ".github" / "labels.json").read_text())
-        from_json = gate.live_label_names(labels_data)
-
-        from_policy = gate.live_label_names_from_policy(_REPO_ROOT / ".github" / "label-policy.toml")
-
-        assert from_policy == from_json
-
     def test_matches_synthetic_fixture(self, tmp_path: Path) -> None:
         policy_path = tmp_path / "label-policy.toml"
         policy_path.write_text(
@@ -146,9 +134,8 @@ class TestHappyPath:
 
     def test_real_registry_verify_registry_clean(self) -> None:
         registry = json.loads((_REPO_ROOT / ".gitapex/ssot.json").read_text())
-        labels = json.loads((_REPO_ROOT / ".github/labels.json").read_text())
         policy = tomllib.loads((_REPO_ROOT / ".github/label-policy.toml").read_text())
-        live = gate.live_label_names(labels)
+        live = gate.live_label_names_from_policy(_REPO_ROOT / ".github/label-policy.toml")
         consumer = gate.consumer_label_universe(live, policy)
         assert gate.verify_registry(registry, _SCHEMA, lambda _p: True, live, consumer) == []
 
@@ -275,11 +262,11 @@ class TestReferentialIntegrity:
         errors = gate.verify_registry(
             reg,
             _SCHEMA,
-            is_tracked=lambda p: p != ".github/labels.json",
+            is_tracked=lambda p: p != ".github/label-policy.toml",
             live_labels=_LIVE,
             consumer_labels=_CONSUMER,
         )
-        assert any(".github/labels.json" in e and "not a tracked file" in e for e in errors)
+        assert any(".github/label-policy.toml" in e and "not a tracked file" in e for e in errors)
 
     def test_routing_label_not_in_live_catalog(self) -> None:
         reg = _valid_registry()
@@ -343,13 +330,6 @@ class TestOrderedRules:
 
 
 class TestLoadingHelpers:
-    def test_live_label_names_non_list(self) -> None:
-        assert gate.live_label_names({"not": "a list"}) == frozenset()
-
-    def test_live_label_names_skips_malformed_entries(self) -> None:
-        data = [{"name": "type:fix"}, {"no_name": 1}, "stray"]
-        assert gate.live_label_names(data) == frozenset({"type:fix"})
-
     def test_consumer_universe_unions_rename_and_retired(self) -> None:
         live = frozenset({"ops:retro-opened"})
         policy = {
@@ -428,8 +408,8 @@ class TestMainCli:
         assert gate.main(["verify", "--registry", str(path)]) == 1
 
 
-class TestSourceFlag:
-    def test_source_label_policy_uses_policy_derived_live_labels(
+class TestLabelPolicySource:
+    def test_policy_derived_live_labels_pass(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         registry = _valid_registry()
@@ -451,16 +431,6 @@ class TestSourceFlag:
             ),
             encoding="utf-8",
         )
-        labels_path = tmp_path / "labels.json"
-        labels_path.write_text(
-            json.dumps(
-                [
-                    {"name": "type:fix", "color": "d73a4a", "description": "Defect or broken workflow."},
-                    {"name": "type:retrospective", "color": "c5def5", "description": "Auto-opened."},
-                ]
-            ),
-            encoding="utf-8",
-        )
 
         rc = gate.main(
             [
@@ -469,18 +439,14 @@ class TestSourceFlag:
                 str(registry_path),
                 "--schema",
                 str(schema_path),
-                "--labels",
-                str(labels_path),
                 "--label-policy",
                 str(policy_path),
-                "--source",
-                "label-policy",
             ]
         )
 
         assert rc == 0, capsys.readouterr().err
 
-    def test_source_label_policy_reports_malformed_policy_as_error_not_traceback(
+    def test_malformed_policy_reports_error_not_traceback(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         """A semantically invalid policy-derived catalog (here: an
@@ -504,11 +470,6 @@ class TestSourceFlag:
             ),
             encoding="utf-8",
         )
-        labels_path = tmp_path / "labels.json"
-        labels_path.write_text(
-            json.dumps([{"name": "type:retrospective", "color": "c5def5", "description": "Auto-opened."}]),
-            encoding="utf-8",
-        )
 
         rc = gate.main(
             [
@@ -517,12 +478,8 @@ class TestSourceFlag:
                 str(registry_path),
                 "--schema",
                 str(schema_path),
-                "--labels",
-                str(labels_path),
                 "--label-policy",
                 str(policy_path),
-                "--source",
-                "label-policy",
             ]
         )
 

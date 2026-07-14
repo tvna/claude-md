@@ -2,7 +2,6 @@ schema_version = 2
 status = "adopted-design"
 tracking_issue = 970
 migration_issue = 972
-live_catalog = ".github/labels.json"
 apply_workflow = ".github/workflows/apply-labels.yml"
 
 [rollout]
@@ -525,12 +524,12 @@ paths = [
 [[area_paths]]
 area = "area:area-policy"
 paths = [
-  ".github/label-policy.toml", ".github/labels.json",
+  ".github/label-policy.toml",
   "docs/standards/label-taxonomy.md", "docs/runbooks/issue-triage.md",
   "scripts/labels_apply.py", "tests/test_labels_apply.py",
   "scripts/issue_anchors.py",
   "scripts/scan_area_path_coverage.py", "scripts/scan_harness_doc_coverage.py",
-  "scripts/scan_commit_type_label_drift.py", "scripts/scan_label_sot_drift.py",
+  "scripts/scan_commit_type_label_drift.py",
   ".github/workflows/apply-labels.yml",
 ]
 

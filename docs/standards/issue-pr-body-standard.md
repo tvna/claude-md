@@ -21,7 +21,7 @@ code is read.
 |---|---|---|
 | `docs/standards/issue-pr-body-standard.md` *(this file)* | - | Body-shape runbook |
 | `.github/PULL_REQUEST_TEMPLATE.md` | new PRs | PR template the standard describes |
-| `.github/labels.json` | `/repos/tvna/claude-md/labels` | `type:*` axis the standard partitions on |
+| `.github/label-policy.toml` | `/repos/tvna/claude-md/labels` (derived catalog) | `type:*` axis the standard partitions on |
 | `scripts/issue_link.py` | `verify-pr.yml` (job: `Validate PR-issue link`) | Refs check (one piece of body policy that is already enforced) |
 | `scripts/title_policy.py` | `verify-pr.yml` (job: `Validate title policy`) | ASCII-only and conventional-title check (titles, not bodies) |
 | `scripts/_trusted_bots.py` | shared by gates | Single source of truth for the trusted-bot allowlist |
@@ -77,7 +77,7 @@ Every issue body should contain the following H2 sections, in this order:
 
 ## Type-specific guidance
 
-The five `type:*` labels in `.github/labels.json` partition issues by
+The five `type:*` labels in `.github/label-policy.toml` partition issues by
 intent. The required H2 sections above apply to all five. The points
 below describe extra emphasis a body of each type should carry.
 
@@ -608,7 +608,7 @@ python scripts/body_policy.py verify \
   table; bodies are read only after labels route the issue.
 - [`.github/PULL_REQUEST_TEMPLATE.md`](../../.github/PULL_REQUEST_TEMPLATE.md) -
   the PR template this runbook describes.
-- [`.github/labels.json`](../../.github/labels.json) - the `type:*` axis the
+- [`.github/label-policy.toml`](../../.github/label-policy.toml) - the `type:*` axis the
   type-specific guidance partitions on.
 - [`scripts/issue_link.py`](../../scripts/issue_link.py) - Refs-check gate.
 - [`scripts/_trusted_bots.py`](../../scripts/_trusted_bots.py) - allowlist

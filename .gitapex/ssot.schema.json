@@ -166,7 +166,7 @@
       }
     },
     "label_routing": {
-      "description": "Machine form of the docs/runbooks/issue-triage.md Agent routing table. First-match-wins, ordered; exactly one default rule and it is last. Every label string resolves against the live catalog .github/labels.json only.",
+      "description": "Machine form of the docs/runbooks/issue-triage.md Agent routing table. First-match-wins, ordered; exactly one default rule and it is last. Every label string resolves against the live catalog derived from .github/label-policy.toml only.",
       "type": "object",
       "additionalProperties": false,
       "required": ["source_note", "rules"],
@@ -221,7 +221,7 @@
       }
     },
     "label_consumers": {
-      "description": "Files that hardcode label literals (the #1041 inventory). Every label resolves against .github/labels.json unioned with the rename_from and retired tables of .github/label-policy.toml, so a legacy name recorded mid-migration stays detectable.",
+      "description": "Files that hardcode label literals (the #1041 inventory). Every label resolves against the catalog derived from .github/label-policy.toml unioned with its rename_from and retired tables, so a legacy name recorded mid-migration stays detectable.",
       "type": "array",
       "items": {
         "type": "object",

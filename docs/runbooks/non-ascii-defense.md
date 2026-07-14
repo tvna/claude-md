@@ -14,7 +14,7 @@ This document is the operator-facing companion to [#102](https://github.com/tvna
 | `.github/workflows/verify-github-content.yml` (issue titles); `.github/workflows/verify-pr.yml` `portable-pr-policy` job (PR titles) | GitHub Actions | Title-boundary gate for ASCII-only, convention-compliant issue and PR titles ([#155](https://github.com/tvna/claude-md/issues/155)) |
 | `scripts/title_policy.py` | repo working tree | Pure title policy validator used by the workflows above |
 | `tests/test_title_policy.py` | repo working tree | pytest coverage for Japanese, emoji, zero-width, RTL, and fullwidth title rejection |
-| `.github/labels.json` entry `severity:non-ascii-content` | repo labels | Applied by the workflow above; surfaces hits in triage filters |
+| `.github/label-policy.toml` entry `severity:non-ascii-content` | repo labels | Applied by the workflow above; surfaces hits in triage filters |
 | `scripts/backup_non_ascii.py` | repo working tree | P1 reproducible capture + SHA-256 emitter; operator runs `capture` before the release asset upload |
 | `tests/test_backup_non_ascii.py` | repo working tree | pytest coverage for the above; runs in `verify-agents.yml` on every PR |
 | `scripts/translations.json` *(P3, future PR)* | repo working tree | JA->EN mapping for past sanitization; the operator-reviewable audit trail |
@@ -133,7 +133,7 @@ on:
 
 **Self-clearing prohibition (rule, #1736).** The block is one-directional: `scripts/scan_non_ascii.py` MUST NOT programmatically dismiss, APPROVE, or otherwise self-clear the `REQUEST_CHANGES` review it posts. Lifting a defensive block is a deliberate human action; a maintainer dismisses a stale or false-positive review in the GitHub UI. A gate that can clear its own merge block can be coerced into self-unblocking and collapses the review layer (defense-in-depth, CLAUDE.md section 4). This is a parked decision: an "auto-dismiss / auto-approve on a later clean or now-trusted re-scan" mechanism was evaluated on PR #1730 and **rejected**. The correct controls are (a) prevent the false positive at the source; the trusted-bot exemption shipped in [#1732](https://github.com/tvna/claude-md/issues/1732), so a trusted bot's content is never scanned/blocked in the first place; and (b) leave stale-review cleanup to a maintainer. The rule is enforced deterministically by `tests/test_scan_non_ascii.py::TestNoSelfClearingReview` (the module must contain no REST review-dismissal endpoint, no GraphQL `dismissPullRequestReview` mutation, and no `APPROVE` review event; covering both API surfaces), so a future PR that adds a self-clearing path fails CI. **Unpark condition:** only revisit if an independent, non-self-issuing actor (e.g. a separate App identity that did not author the block) performs the dismissal under an audited path; never the scanner clearing its own review.
 
-**Label provisioning:** `severity:non-ascii-content` lives in `.github/labels.json`; apply it via `Actions → Apply labels → Run workflow` (`dry_run=false`) before merging this layer.
+**Label provisioning:** `severity:non-ascii-content` lives in `.github/label-policy.toml`; apply it via `Actions -> Apply labels -> Run workflow` (`dry_run=false`) before merging this layer.
 
 ## Client-side preflight (`scripts/preflight_non_ascii.py`)
 

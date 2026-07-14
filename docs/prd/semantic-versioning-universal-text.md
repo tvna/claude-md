@@ -253,7 +253,7 @@ surface):
 - `scripts/auto_tag_version.py` (post-merge auto-tag) + `tests/test_auto_tag_version.py`.
 - `.github/workflows/post-merge.yml` (auto-tag job).
 - `.github/workflows/publish-instructions-release.yml` (`instructions-v*` -> `v*`).
-- `.github/labels.json` / `docs/standards/label-taxonomy.md` (`semver:*` labels).
+- `.github/label-policy.toml` / `docs/standards/label-taxonomy.md` (`semver:*` labels).
 - `docs/runbooks/consumer-instruction-sync.md` and `docs/proposals/instruction-distribution-mechanism.md` (tag-example updates).
 
 ## Milestones

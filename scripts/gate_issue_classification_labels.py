@@ -4,8 +4,9 @@
 Bound in ``.claude/settings.json`` (and mirrored in ``.codex/hooks.json``)
 to ``mcp__github__issue_write``. When the call is a ``create`` it must carry
 at least one label for each required classification axis (today ``layer:*``
-and ``type:*``, derived as described below), validated by name against
-``.github/labels.json``. A create that is missing an axis is denied with a
+and ``type:*``, derived as described below), validated by name against the
+label catalog derived from ``.github/label-policy.toml``. A create that is
+missing an axis is denied with a
 ``permissionDecision: "deny"`` message naming the missing axis, so the
 label-classification step is a deterministic harness gate (CLAUDE.md section 3)
 instead of an agent-remembered step. This closes the omission that required a
@@ -31,17 +32,16 @@ any silent drift fails deterministically.
 
 Failure modes (fail-open per CLAUDE.md section 4): off-target tool name, a
 non-``create`` method, malformed stdin JSON, an unreadable or malformed
-``.github/labels.json``, a missing or malformed ``label-policy`` registry pointer
-or families, or an axis with no valid labels defined; all exit 0 with no decision
-so a hook bug or a missing SoT never wedges the session. The pin-test, the
-server-side triage workflow, and review remain as backstops.
+``.github/label-policy.toml``, a missing or malformed ``label-policy`` registry
+pointer or families, or an axis with no valid labels defined; all exit 0 with no
+decision so a hook bug or a missing SoT never wedges the session. The pin-test,
+the server-side triage workflow, and review remain as backstops.
 
-Refs #1246, #2292.
+Refs #1246, #2292, #2499.
 """
 
 from __future__ import annotations
 
-import json
 import sys
 from collections.abc import Iterable, Mapping
 from pathlib import Path
@@ -54,7 +54,7 @@ from _hook_runtime import build_deny, run_tool_hook
 _TARGET_TOOL = "mcp__github__issue_write"
 _CREATE_METHOD = "create"
 
-_DEFAULT_LABELS_PATH = Path(__file__).resolve().parent.parent / ".github" / "labels.json"
+_DEFAULT_POLICY_PATH = Path(__file__).resolve().parent.parent / ".github" / "label-policy.toml"
 
 
 def axis_prefixes() -> tuple[tuple[str, str], ...]:
@@ -64,7 +64,7 @@ def axis_prefixes() -> tuple[tuple[str, str], ...]:
     ``[[families]]`` via :func:`_ssot.required_issue_axes` rather than hardcoded,
     so a future family/cardinality change flows through the registry instead of
     an edit here. Each axis is satisfied by a label whose name carries the derived
-    ``"<axis>:"`` prefix AND is a registered name in ``.github/labels.json``.
+    ``"<axis>:"`` prefix AND is a registered name in the ``.github/label-policy.toml`` catalog.
     Order follows the policy's family declaration order, so the deny message names
     axes deterministically (today: ``layer`` before ``type``).
 
@@ -74,35 +74,20 @@ def axis_prefixes() -> tuple[tuple[str, str], ...]:
     return tuple((axis, f"{axis}:") for axis in _ssot.required_issue_axes())
 
 
-def load_axis_labels(path: Path) -> dict[str, frozenset[str]]:
-    """Return the valid label names for each axis, keyed by axis name.
-
-    Reads the labels source of truth (a JSON array of ``{"name": ...}`` objects)
-    and groups the names by the axis prefixes from :func:`axis_prefixes`. Names
-    that match no axis prefix are ignored. Raises ``OSError`` /
-    ``json.JSONDecodeError`` / ``ValueError`` on a missing or malformed labels
-    file, or the reader's drift errors from :func:`axis_prefixes`; the caller
-    turns those into fail-open.
-    """
-    raw = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(raw, list):
-        raise ValueError("labels SoT must be a JSON array")
-    names = [entry["name"] for entry in raw if isinstance(entry, dict) and isinstance(entry.get("name"), str)]
-    axes: dict[str, frozenset[str]] = {}
-    for axis, prefix in axis_prefixes():
-        axes[axis] = frozenset(name for name in names if name.startswith(prefix))
-    return axes
-
-
 def load_axis_labels_from_policy(policy_path: Path) -> dict[str, frozenset[str]]:
     """Return the valid label names for each axis, derived from label-policy.toml.
 
-    Delegates to :func:`labels_apply.load_sot_from_policy` (#2442 Phase B
-    batch 1) instead of re-deriving the keep/rename logic a second time.
-    Test-only proof of parity for now: :func:`decide` still calls
-    :func:`load_axis_labels` (the labels.json reader) by default, since this
-    is a PreToolUse hook with no CLI argv surface to add a --source flag to,
-    and changing its live default is out of scope for this batch.
+    Delegates to :func:`labels_apply.load_sot_from_policy` (the ``status in
+    {keep, rename}`` catalog) instead of re-deriving the keep/rename logic a
+    second time, then groups the names by the axis prefixes from
+    :func:`axis_prefixes`. Names that match no axis prefix are ignored. Raises
+    ``OSError`` / ``ValueError`` / ``tomllib.TOMLDecodeError`` on a missing or
+    malformed policy file, or the reader's drift errors from
+    :func:`axis_prefixes`; the caller turns those into fail-open.
+
+    ``label-policy.toml`` is the single label SoT (Refs #2499, #2442): the old
+    ``.github/labels.json`` reader was retired once every consumer derived its
+    valid names from the policy.
     """
     catalog = labels_apply.load_sot_from_policy(policy_path)
     names = [str(entry["name"]) for entry in catalog]
@@ -144,9 +129,9 @@ def build_reason(missing: list[str], axes: Mapping[str, frozenset[str]]) -> str:
         "Per CLAUDE.md section 3, agent-created issues must carry at least one "
         "label for each required classification axis (the axes listed above, "
         "derived from the label-policy families and validated against "
-        ".github/labels.json) so classification is a deterministic harness gate, "
-        "not a remembered step. Pass the labels in the `labels` argument and "
-        "retry. Refs #1246, #2292."
+        ".github/label-policy.toml) so classification is a deterministic harness "
+        "gate, not a remembered step. Pass the labels in the `labels` argument "
+        "and retry. Refs #1246, #2292."
     )
 
 
@@ -154,7 +139,7 @@ def decide(
     tool_name: str,
     tool_input: dict[str, Any],
     *,
-    labels_path: Path = _DEFAULT_LABELS_PATH,
+    policy_path: Path = _DEFAULT_POLICY_PATH,
 ) -> dict[str, Any] | None:
     """Return a deny decision for an under-labeled create, else ``None``."""
     if tool_name != _TARGET_TOOL:
@@ -163,7 +148,7 @@ def decide(
         return None
 
     try:
-        axes = load_axis_labels(labels_path)
+        axes = load_axis_labels_from_policy(policy_path)
     except (OSError, ValueError, LookupError, TypeError, RuntimeError) as exc:
         # Deliberately broad fail-open (CLAUDE.md section 4): this is a PreToolUse
         # gate, so any failure to derive the axes; a missing/malformed labels SoT,

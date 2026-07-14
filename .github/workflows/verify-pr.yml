@@ -234,12 +234,11 @@ jobs:
         # Refs #2252, #2442: validate the gate registry against its JSON
         # Schema and referential-integrity rules (paths tracked, ids resolve,
         # routing/consumer labels resolve against the live catalog). Reads
-        # the live catalog from label-policy.toml (Phase B cutover) rather
-        # than labels.json; proven identical on the real repo files by
-        # tests/test_scan_ssot_schema.py. Runs through uv so tomllib resolves
-        # on the pinned Python. Mirrored pre-push by the scan_ssot_schema
-        # STEP and at commit time by the scan-ssot-schema pre-commit hook.
-        run: uv run python scripts/scan_ssot_schema.py verify --source label-policy
+        # the live catalog derived from label-policy.toml (Refs #2499: the
+        # single label SoT). Runs through uv so tomllib resolves on the
+        # pinned Python. Mirrored pre-push by the scan_ssot_schema STEP and
+        # at commit time by the scan-ssot-schema pre-commit hook.
+        run: uv run python scripts/scan_ssot_schema.py verify
 
       - name: Validate .gitapex/*.toml against their sibling schemas
         # Refs #2342: every .gitapex/*.toml is required to have a sibling
@@ -372,15 +371,12 @@ jobs:
           persist-credentials: false
 
       - name: Verify dependabot.yml labels resolve in label-policy.toml
-        # Refs #2442 Phase B cutover: reads the live label name set from
-        # label-policy.toml instead of labels.json; proven identical on the
-        # real repo files by tests/test_dependabot_labels.py.
+        # Refs #2499: reads the live label name set from label-policy.toml
+        # (the single label SoT).
         run: |
           python3 scripts/dependabot_labels.py verify \
             --dependabot .github/dependabot.yml \
-            --labels .github/labels.json \
-            --label-policy .github/label-policy.toml \
-            --source label-policy
+            --label-policy .github/label-policy.toml
 
   verify-ruleset-sync:
     name: "Verify ruleset sync / gate"

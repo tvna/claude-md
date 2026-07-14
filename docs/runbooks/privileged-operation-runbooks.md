@@ -36,7 +36,7 @@ Residual: `RULESETS_PAT` carries `Administration: Read and write`; dispatch is `
 
 Workflow: [`.github/workflows/apply-labels.yml`](../../.github/workflows/apply-labels.yml). Script: [`scripts/labels_apply.py`](../../scripts/labels_apply.py). Runbook: [`docs/runbooks/issue-triage.md`](issue-triage.md).
 
-- **Authorizing issue.** Per [#87](https://github.com/tvna/claude-md/issues/87) and [#84](https://github.com/tvna/claude-md/issues/84), the dispatching change is the merged PR that edited `.github/labels.json`; the PR body or its referenced issue records the intent. Apply with `prune=false` is non-destructive on existing issue assignments and follows the same authorization model as a normal commit.
+- **Authorizing issue.** Per [#87](https://github.com/tvna/claude-md/issues/87) and [#84](https://github.com/tvna/claude-md/issues/84), the dispatching change is the merged PR that edited `.github/label-policy.toml`; the PR body or its referenced issue records the intent. Apply with `prune=false` is non-destructive on existing issue assignments and follows the same authorization model as a normal commit.
 - **Dry-run command.** `gh workflow run apply-labels.yml --ref main -f dry_run=true -f prune=false`. Emits the plan-only matrix (POST/PATCH rows, no DELETE rows). See [`docs/runbooks/issue-triage.md` Apply](issue-triage.md#apply).
 - **Live apply command.** Same invocation with `dry_run=false, prune=false`. Reconciles by POST (new labels) and PATCH (color/description drift).
 - **Rollback path.** Per-label `gh api --method DELETE /repos/tvna/claude-md/labels/<name>` for an accidentally-created label, or revert the SoT edit and re-dispatch. See [`docs/runbooks/issue-triage.md` Rollback](issue-triage.md#rollback).

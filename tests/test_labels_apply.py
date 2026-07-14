@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import argparse
 import json
 import sys
 import urllib.request
@@ -41,8 +40,26 @@ _RENAME_OLD: dict[str, object] = {"name": _RENAME_FROM, "color": "5319e7", "desc
 
 
 def write_sot(tmp_path: Path, entries: list[dict[str, object]]) -> Path:
-    path = tmp_path / "labels.json"
-    path.write_text(json.dumps(entries), encoding="utf-8")
+    """Serialize *entries* as a label-policy.toml the default policy loader reads.
+
+    Each ``{name,color,description}`` entry becomes a ``status = "keep"``
+    ``[[labels]]`` block (Refs #2499: label-policy.toml is the single SoT).
+    """
+    path = tmp_path / "label-policy.toml"
+    blocks = []
+    for entry in entries:
+        blocks.append(
+            "\n".join(
+                [
+                    "[[labels]]",
+                    f'name = "{entry["name"]}"',
+                    'status = "keep"',
+                    f'description = "{entry["description"]}"',
+                    f'color = "{entry["color"]}"',
+                ]
+            )
+        )
+    path.write_text("\n\n".join(blocks), encoding="utf-8")
     return path
 
 
@@ -305,24 +322,6 @@ class TestDecidePruneAction:
         )
 
 
-def test_policy_derived_catalog_matches_labels_json_exactly() -> None:
-    """Integration proof for #2442 Phase B batch 1: the TOML-derived live
-    catalog and labels.json must describe the exact same label set. This is
-    the direct evidence the issue's Verification section asks for (apply
-    plan is the same whether sourced from labels.json or the TOML)."""
-    repo_root = Path(__file__).resolve().parents[1]
-    policy_path = repo_root / ".github" / "label-policy.toml"
-    labels_json_path = repo_root / ".github" / "labels.json"
-
-    derived = labels_apply.load_sot_from_policy(policy_path)
-    direct = labels_apply.load_sot(labels_json_path)
-
-    def _key(entry: dict[str, object]) -> tuple[object, object, object]:
-        return (entry["name"], entry["color"], entry["description"])
-
-    assert sorted(derived, key=_key) == sorted(direct, key=_key)
-
-
 def test_render_action_row_escapes_pipes() -> None:
     assert labels_apply.render_action_row("a|b", "plan-only (POST)", "n/a", "n/a", "dry-run") == (
         "| `a\\|b` | plan-only (POST) | n/a | n/a | dry-run |"
@@ -367,50 +366,7 @@ class TestFetchLiveLabels:
         assert calls == 1
 
 
-class TestResolveSot:
-    def test_labels_json_default(self) -> None:
-        args = argparse.Namespace(source="labels-json", sot=Path("a/labels.json"), policy=Path("a/policy.toml"))
-
-        sot_path, sot_loader = labels_apply._resolve_sot(args)
-
-        assert sot_path == Path("a/labels.json")
-        assert sot_loader is labels_apply.load_sot
-
-    def test_label_policy_uses_policy_derived_loader(self, tmp_path: Path) -> None:
-        policy = tmp_path / "label-policy.toml"
-        policy.write_text(
-            "\n".join(
-                [
-                    "[[labels]]",
-                    'name = "type:fix"',
-                    'status = "keep"',
-                    'description = "Defect or broken workflow."',
-                    'color = "d73a4a"',
-                ]
-            ),
-            encoding="utf-8",
-        )
-        labels_json = tmp_path / "labels.json"
-        args = argparse.Namespace(source="label-policy", sot=labels_json, policy=policy)
-
-        sot_path, sot_loader = labels_apply._resolve_sot(args)
-
-        assert sot_path == policy
-        assert sot_loader is labels_apply.load_sot_from_policy
-        names = {entry["name"] for entry in sot_loader(sot_path)}
-        assert names == {"type:fix"}
-
-
-def test_source_flag_help_documents_staged_migration() -> None:
-    parser = argparse.ArgumentParser()
-    labels_apply._add_common_args(parser)
-
-    help_text = parser.format_help()
-
-    assert "2442" in help_text
-
-
-def test_main_source_label_policy_uses_policy_derived_catalog(
+def test_main_derives_catalog_from_policy(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     policy = tmp_path / "label-policy.toml"
@@ -426,15 +382,10 @@ def test_main_source_label_policy_uses_policy_derived_catalog(
         ),
         encoding="utf-8",
     )
-    labels_json = tmp_path / "labels.json"
-    labels_json.write_text(json.dumps([]), encoding="utf-8")
     summary = tmp_path / "summary.md"
     monkeypatch.setenv("GH_TOKEN", "token")
 
-    calls: list[dict[str, object]] = []
-
     def fake_fetch_live_labels(repo: str, token: str, **kwargs: object) -> list[dict[str, object]]:
-        calls.append({"repo": repo, "token": token})
         return []
 
     monkeypatch.setattr(labels_apply, "fetch_live_labels", fake_fetch_live_labels)
@@ -444,12 +395,8 @@ def test_main_source_label_policy_uses_policy_derived_catalog(
             "plan",
             "--repo",
             "owner/repo",
-            "--sot",
-            str(labels_json),
             "--policy",
             str(policy),
-            "--source",
-            "label-policy",
             "--dry-run",
             "true",
             "--prune",

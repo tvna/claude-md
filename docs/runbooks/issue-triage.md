@@ -5,19 +5,20 @@ This document is the operator-facing runbook for the labels that triage every is
 The adopted post-#970 label design lives in
 [`docs/standards/label-taxonomy.md`](../standards/label-taxonomy.md) and the
 machine-readable policy file
-[`../../.github/label-policy.toml`](../../.github/label-policy.toml). The live
-GitHub catalog remains [`../../.github/labels.json`](../../.github/labels.json)
-until the migration issue #972 updates writers, backfills assignments, and runs
-the apply/prune workflow.
+[`../../.github/label-policy.toml`](../../.github/label-policy.toml), which is
+the single authored source of truth for the label catalog (Refs #2499). The
+live GitHub catalog is derived from its `[[labels]]` entries (those with
+`status` in `keep`/`rename`) by `labels_apply.load_sot_from_policy`; the
+migration issue #972 still owns updating writers, backfilling assignments, and
+running the apply/prune workflow.
 
-The taxonomy is introduced incrementally per the phased rollout in [#84](https://github.com/tvna/claude-md/issues/84), which supersedes the `agent:*` design from [#34](https://github.com/tvna/claude-md/issues/34). The JSON SoT lives at `.github/labels.json`; the `Apply labels` workflow described below reconciles GitHub against it. Per [CLAUDE.md §3](../../CLAUDE.md), agents must be concentrated at one workflow point *after* deterministic gates pass; the labels are the gate. Per §5 it exists to avoid wasting tokens on bodies the agent should not read in full.
+The taxonomy is introduced incrementally per the phased rollout in [#84](https://github.com/tvna/claude-md/issues/84), which supersedes the `agent:*` design from [#34](https://github.com/tvna/claude-md/issues/34). The authored SoT lives at `.github/label-policy.toml`; the `Apply labels` workflow described below derives the catalog from it and reconciles GitHub against that. Per [CLAUDE.md §3](../../CLAUDE.md), agents must be concentrated at one workflow point *after* deterministic gates pass; the labels are the gate. Per §5 it exists to avoid wasting tokens on bodies the agent should not read in full.
 
 ## SoT layout
 
 | File | Target | Purpose |
 |---|---|---|
-| `.github/label-policy.toml` | Final target policy after #970 | Adopted design contract; not applied until #972 |
-| `.github/labels.json` | `/repos/tvna/claude-md/labels` | JSON source of truth for repository labels |
+| `.github/label-policy.toml` | `/repos/tvna/claude-md/labels` (derived catalog) | Single authored source of truth for repository labels; the live catalog is derived from its `[[labels]]` entries (`status` in keep/rename) |
 | `docs/runbooks/issue-triage.md` *(this file)* | (none) | Runbook |
 | `docs/standards/label-taxonomy.md` | (none) | Adopted taxonomy, area mapping, and operational-label rules |
 | `docs/standards/issue-pr-body-standard.md` | (none) | Sibling runbook for issue/PR body shape (read after labels route an issue) |
@@ -84,7 +85,7 @@ mark the umbrella with the label.
 
 ### `threat:*` (retired)
 
-**The `threat:*` labels were retired.** Auto-application was removed in [#1645](https://github.com/tvna/claude-md/issues/1645), and the label definitions were removed from `.github/labels.json` and `.github/label-policy.toml` in [#1647](https://github.com/tvna/claude-md/issues/1647). Threat-intelligence findings are repository-global; they come from the locked-dependency corpus, not from any one issue/PR; so stamping them onto whatever item happened to trigger a run produced pure noise (a single known-exploited, no-fix advisory flipped `threat:response-needed` on every new item). Findings are now **aggregated** into one idempotent comment on the #178 security umbrella; see [Aggregated findings on the security umbrella](#aggregated-findings-on-the-security-umbrella) below. The `intel-needed` / `response-needed` *classifications* survive only as finding descriptors in that aggregated comment, not as live labels:
+**The `threat:*` labels were retired.** Auto-application was removed in [#1645](https://github.com/tvna/claude-md/issues/1645), and the label definitions were removed from the label SoT `.github/label-policy.toml` in [#1647](https://github.com/tvna/claude-md/issues/1647). Threat-intelligence findings are repository-global; they come from the locked-dependency corpus, not from any one issue/PR; so stamping them onto whatever item happened to trigger a run produced pure noise (a single known-exploited, no-fix advisory flipped `threat:response-needed` on every new item). Findings are now **aggregated** into one idempotent comment on the #178 security umbrella; see [Aggregated findings on the security umbrella](#aggregated-findings-on-the-security-umbrella) below. The `intel-needed` / `response-needed` *classifications* survive only as finding descriptors in that aggregated comment, not as live labels:
 
 | Finding class | Meaning (on the #178 umbrella) |
 |---|---|
@@ -230,7 +231,7 @@ so the owner runs it and records the result on #1076.
 **Stale-label handling (owner-driven cleanup, owner @tvna).** The `threat:*`
 labels were **retired**: [#1645](https://github.com/tvna/claude-md/issues/1645)
 stopped auto-applying them, and [#1647](https://github.com/tvna/claude-md/issues/1647)
-removed the definitions from `.github/labels.json` and `.github/label-policy.toml`.
+removed the definitions from the label SoT `.github/label-policy.toml`.
 Every live `threat:*` assignment is therefore a leftover from the retired
 per-item regime, and the bulk cleanup is a single owner-driven, dry-run-first
 operation rather than a recurring per-item manual sweep:
@@ -241,7 +242,7 @@ operation rather than a recurring per-item manual sweep:
    `gh issue list --label threat:response-needed`, plus the `gh pr list`
    equivalents, or the GraphQL / MCP search equivalents).
 2. **Remove the assignments via the prune dispatch.** Because the definitions
-   are gone from `.github/labels.json`, dispatching `apply-labels.yml` with
+   are gone from `.github/label-policy.toml`, dispatching `apply-labels.yml` with
    `dry_run=true, prune=true` first (confirm only `threat:intel-needed` and
    `threat:response-needed` appear under `plan-only (DELETE)`), then
    `dry_run=false, prune=true`, deletes both labels from every issue and PR in
@@ -303,7 +304,7 @@ Rows are evaluated top-to-bottom; the first match wins. This table is the routin
 
 ## Apply
 
-The `Apply labels` workflow (`.github/workflows/apply-labels.yml`) is the only supported apply path. It reconciles `.github/labels.json` against the live label set on GitHub via `workflow_dispatch`: POSTs missing labels, PATCHes labels whose color/description differs, and (when `prune=true`) DELETEs labels absent from SoT. Color/description changes propagate through the same dispatch; there is no separate update path.
+The `Apply labels` workflow (`.github/workflows/apply-labels.yml`) is the only supported apply path. It derives the catalog from `.github/label-policy.toml` (`labels_apply.load_sot_from_policy`) and reconciles it against the live label set on GitHub via `workflow_dispatch`: POSTs missing labels, PATCHes labels whose color/description differs, and (when `prune=true`) DELETEs labels absent from SoT. Color/description changes propagate through the same dispatch; there is no separate update path.
 
 ### Required secret
 
@@ -371,16 +372,20 @@ If the workflow itself is broken, the recovery path is `git revert` of the workf
 After every apply or update:
 
 ```sh
+# The catalog is derived from the policy SoT; materialize it once for the checks
+# below (entries with status keep/rename are the applied catalog).
+python3 -c "import json,tomllib; d=tomllib.load(open('.github/label-policy.toml','rb')); print(json.dumps([l for l in d['labels'] if l.get('status') in ('keep','rename')]))" > /tmp/catalog.json
+
 # 1. Live label set equals SoT byte-for-byte (intersection check; ignores any
 #    still-live agent:* labels until Phase 4 of #84 retires them).
 diff \
-  <(jq -r '.[].name' .github/labels.json | sort) \
+  <(jq -r '.[].name' /tmp/catalog.json | sort) \
   <(gh api /repos/tvna/claude-md/labels --jq '.[].name | select(startswith("agent:") | not)' | sort)
 
 # 2. Per-label color & description match.
-for name in $(jq -r '.[].name' .github/labels.json); do
+for name in $(jq -r '.[].name' /tmp/catalog.json); do
   diff \
-    <(jq --arg n "$name" '.[] | select(.name == $n) | {color, description}' .github/labels.json) \
+    <(jq --arg n "$name" '.[] | select(.name == $n) | {color, description}' /tmp/catalog.json) \
     <(gh api "/repos/tvna/claude-md/labels/$name" --jq '{color, description}')
 done
 
@@ -411,11 +416,11 @@ Deleting a label is **destructive on existing issues**; GitHub removes the label
 
 ## Drift detection
 
-A scheduled workflow that diffs the live labels returned by `gh api` against `.github/labels.json` **and** verifies issue coverage (every open issue has ≥1 `layer:*`, exactly 1 `type:*`, ≤1 `state:*`, ≤1 `severity:*`) is planned as Phase 5 of [#84](https://github.com/tvna/claude-md/issues/84) (parked). Until it lands, drift is detected only by manual review during retrospectives.
+A scheduled workflow that diffs the live labels returned by `gh api` against the catalog derived from `.github/label-policy.toml` **and** verifies issue coverage (every open issue has ≥1 `layer:*`, exactly 1 `type:*`, ≤1 `state:*`, ≤1 `severity:*`) is planned as Phase 5 of [#84](https://github.com/tvna/claude-md/issues/84) (parked). Until it lands, drift is detected only by manual review during retrospectives.
 
 ## Migration from the `agent:*` design (#34)
 
-The four `agent:*` labels (`auto-fix` / `investigate` / `no-action` / `triage-needed`) are scheduled for deletion in [#84](https://github.com/tvna/claude-md/issues/84) Phase 4 after every issue has been retroactively labeled with the new axes. The SoT (`.github/labels.json`) no longer lists `agent:*` entries.
+The four `agent:*` labels (`auto-fix` / `investigate` / `no-action` / `triage-needed`) are scheduled for deletion in [#84](https://github.com/tvna/claude-md/issues/84) Phase 4 after every issue has been retroactively labeled with the new axes. The SoT (`.github/label-policy.toml`) no longer lists `agent:*` entries.
 
 ### Cleanup pass on 2026-05-26
 
@@ -445,8 +450,8 @@ gh workflow run apply-labels.yml --ref main -f dry_run=true -f prune=true
 # Apply
 gh workflow run apply-labels.yml --ref main -f dry_run=false -f prune=true
 
-# Verify: live label set matches SoT exactly
-diff <(gh api /repos/tvna/claude-md/labels --jq '.[].name' | sort) <(jq -r '.[].name' .github/labels.json | sort)
+# Verify: live label set matches SoT exactly (catalog derived from the policy SoT)
+diff <(gh api /repos/tvna/claude-md/labels --jq '.[].name' | sort) <(python3 -c "import tomllib; d=tomllib.load(open('.github/label-policy.toml','rb')); print('\n'.join(l['name'] for l in d['labels'] if l.get('status') in ('keep','rename')))" | sort)
 # Expect: no output (the only known divergence after prune is `type:chore` on #338, which is intentionally out of scope per the #84 sub-decision tree)
 ```
 
