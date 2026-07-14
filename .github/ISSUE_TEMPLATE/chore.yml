@@ -2,7 +2,7 @@ name: Chore
 description: Repository hygiene, maintenance, or housekeeping not covered by feat/fix/refactor/docs. No dedicated `type:chore` label exists -- triage applies the type label later.
 title: "chore(<scope>): <summary>"
 labels:
-  - "layer:meta"
+  - "layer:p3-harness"
 body:
   - type: markdown
     attributes:
@@ -64,7 +64,7 @@ body:
     id: layer
     attributes:
       label: Layer
-      description: Which CLAUDE.md layer this issue lives in. Multi-select. Default `layer:meta` is pre-applied; adjust if wrong.
+      description: Which CLAUDE.md layer this issue lives in. Multi-select. Default `layer:p3-harness` is pre-applied; adjust if wrong.
       multiple: true
       options:
         - "layer:p1-goal-plan"
@@ -73,7 +73,6 @@ body:
         - "layer:p4-safety-boundary"
         - "layer:p5-scale-quality"
         - "layer:p6-handoff"
-        - "layer:meta"
     validations:
       required: true
   - type: input
