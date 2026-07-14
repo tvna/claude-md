@@ -237,7 +237,7 @@ STEPS: tuple[Step, ...] = (
         # tables. Static working-tree read; mirrors the verify-pr.yml step so
         # the gate fires pre-push, not only in CI.
         name="scan_ssot_schema",
-        argv=("python3", "scripts/scan_ssot_schema.py", "verify"),
+        argv=("python3", "scripts/scan_ssot_schema.py", "verify", "--source", "label-policy"),
     ),
     Step(
         # Refs #2342. Validates every .gitapex/*.toml against its sibling
@@ -332,6 +332,10 @@ STEPS: tuple[Step, ...] = (
             ".github/dependabot.yml",
             "--labels",
             ".github/labels.json",
+            "--label-policy",
+            ".github/label-policy.toml",
+            "--source",
+            "label-policy",
         ),
     ),
     Step(
