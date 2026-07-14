@@ -61,14 +61,6 @@ def test_verify_parity_flags_label_absent_from_policy() -> None:
     assert "type:orphan" in errors[0]
 
 
-def test_verify_parity_skips_retro_sourced_labels() -> None:
-    # retro:* and type:retrospective are sourced from scripts/_retro_labels.py,
-    # not label-policy.toml, so a labels.json-only entry is not a drift.
-    retro_label = sorted(gate.RETRO_SOURCED_LABELS)[0]
-    catalog = [_label(retro_label, "Anything, unchecked here.", "0e8a16")]
-    assert gate.verify_parity(catalog, _policy([])) == []
-
-
 def test_verify_parity_flags_non_list_catalog() -> None:
     errors = gate.verify_parity({"name": "x"}, _policy([]))
     assert errors == [
@@ -131,18 +123,6 @@ def test_verify_parity_flags_duplicate_catalog_label() -> None:
     assert len(errors) == 1
     assert "more than once in labels.json" in errors[0]
     assert errors[0].startswith("::error file=.github/labels.json::")
-
-
-def test_verify_parity_flags_retro_label_dual_sourced_in_policy() -> None:
-    # A retro-sourced label must not ALSO be authored in label-policy.toml;
-    # two homes for one label is single-SoT drift in the reverse direction.
-    retro = sorted(gate.RETRO_SOURCED_LABELS)[0]
-    catalog = [_label(retro, "d", "0e8a16")]
-    policy = _policy([_label(retro, "d", "0e8a16")])
-    errors = gate.verify_parity(catalog, policy)
-    assert len(errors) == 1
-    assert "one authoritative home" in errors[0]
-    assert errors[0].startswith("::error file=.github/label-policy.toml::")
 
 
 def test_verify_against_real_repository_is_clean() -> None:

@@ -138,10 +138,5 @@
     "name": "retro:expired",
     "description": "Sentinel closed as not_planned after inactivity; weak fp signal, counted apart from tp/fp.",
     "color": "cfd3d7"
-  },
-  {
-    "name": "type:retrospective",
-    "description": "Auto-opened retrospective reviewing repair-free merge reproducibility after a merge.",
-    "color": "c5def5"
   }
 ]

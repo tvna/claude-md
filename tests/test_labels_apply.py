@@ -220,50 +220,12 @@ class TestLoadSotFromPolicy:
                 ]
             ),
         )
-        labels_json = write_sot(
-            tmp_path,
-            [{"name": "type:retrospective", "color": "c5def5", "description": "Auto-opened retrospective."}],
-        )
 
-        catalog = labels_apply.load_sot_from_policy(policy, labels_json)
+        catalog = labels_apply.load_sot_from_policy(policy)
 
         names = {entry["name"] for entry in catalog}
-        assert names == {"type:fix", "layer:p2-input-boundary", "type:retrospective"}
+        assert names == {"type:fix", "layer:p2-input-boundary"}
         assert "area:apm" not in names
-
-    def test_injects_type_retrospective_identity_from_labels_json(self, tmp_path: Path) -> None:
-        policy = self._write_policy(
-            tmp_path,
-            "\n".join(
-                [
-                    "[[labels]]",
-                    'name = "type:fix"',
-                    'status = "keep"',
-                    'description = "Defect or broken workflow."',
-                    'color = "d73a4a"',
-                ]
-            ),
-        )
-        labels_json = write_sot(
-            tmp_path,
-            [
-                {"name": "type:fix", "color": "d73a4a", "description": "Defect or broken workflow."},
-                {
-                    "name": "type:retrospective",
-                    "color": "c5def5",
-                    "description": "Auto-opened retrospective reviewing repair-free merge reproducibility after a merge.",
-                },
-            ],
-        )
-
-        catalog = labels_apply.load_sot_from_policy(policy, labels_json)
-
-        retro_entry = next(entry for entry in catalog if entry["name"] == "type:retrospective")
-        assert retro_entry == {
-            "name": "type:retrospective",
-            "color": "c5def5",
-            "description": "Auto-opened retrospective reviewing repair-free merge reproducibility after a merge.",
-        }
 
     def test_result_passes_validate_sot(self, tmp_path: Path) -> None:
         policy = self._write_policy(
@@ -278,70 +240,10 @@ class TestLoadSotFromPolicy:
                 ]
             ),
         )
-        labels_json = write_sot(
-            tmp_path,
-            [{"name": "type:retrospective", "color": "c5def5", "description": "Auto-opened retrospective."}],
-        )
 
-        catalog = labels_apply.load_sot_from_policy(policy, labels_json)
+        catalog = labels_apply.load_sot_from_policy(policy)
 
         labels_apply.validate_sot(catalog)  # must not raise
-
-    def test_missing_type_retrospective_in_labels_json_raises(self, tmp_path: Path) -> None:
-        policy = self._write_policy(
-            tmp_path,
-            "\n".join(
-                [
-                    "[[labels]]",
-                    'name = "type:fix"',
-                    'status = "keep"',
-                    'description = "Defect or broken workflow."',
-                    'color = "d73a4a"',
-                ]
-            ),
-        )
-        labels_json = write_sot(tmp_path, [])
-
-        with pytest.raises(ValueError, match="type:retrospective"):
-            labels_apply.load_sot_from_policy(policy, labels_json)
-
-    def test_type_retrospective_missing_color_raises_value_error(self, tmp_path: Path) -> None:
-        policy = self._write_policy(
-            tmp_path,
-            "\n".join(
-                [
-                    "[[labels]]",
-                    'name = "type:fix"',
-                    'status = "keep"',
-                    'description = "Defect or broken workflow."',
-                    'color = "d73a4a"',
-                ]
-            ),
-        )
-        labels_json = write_sot(
-            tmp_path, [{"name": "type:retrospective", "description": "Auto-opened retrospective."}]
-        )
-
-        with pytest.raises(ValueError, match="color"):
-            labels_apply.load_sot_from_policy(policy, labels_json)
-
-    def test_type_retrospective_missing_description_raises_value_error(self, tmp_path: Path) -> None:
-        policy = self._write_policy(
-            tmp_path,
-            "\n".join(
-                [
-                    "[[labels]]",
-                    'name = "type:fix"',
-                    'status = "keep"',
-                    'description = "Defect or broken workflow."',
-                    'color = "d73a4a"',
-                ]
-            ),
-        )
-        labels_json = write_sot(tmp_path, [{"name": "type:retrospective", "color": "c5def5"}])
-
-        with pytest.raises(ValueError, match="description"):
-            labels_apply.load_sot_from_policy(policy, labels_json)
 
     def test_duplicate_live_name_raises_value_error(self, tmp_path: Path) -> None:
         policy = self._write_policy(
@@ -362,13 +264,9 @@ class TestLoadSotFromPolicy:
                 ]
             ),
         )
-        labels_json = write_sot(
-            tmp_path,
-            [{"name": "type:retrospective", "color": "c5def5", "description": "Auto-opened retrospective."}],
-        )
 
         with pytest.raises(ValueError, match="type:fix"):
-            labels_apply.load_sot_from_policy(policy, labels_json)
+            labels_apply.load_sot_from_policy(policy)
 
     def test_unrecognized_status_raises_value_error(self, tmp_path: Path) -> None:
         policy = self._write_policy(
@@ -383,13 +281,9 @@ class TestLoadSotFromPolicy:
                 ]
             ),
         )
-        labels_json = write_sot(
-            tmp_path,
-            [{"name": "type:retrospective", "color": "c5def5", "description": "Auto-opened retrospective."}],
-        )
 
         with pytest.raises(ValueError, match="status"):
-            labels_apply.load_sot_from_policy(policy, labels_json)
+            labels_apply.load_sot_from_policy(policy)
 
 
 class TestDecidePruneAction:
@@ -420,7 +314,7 @@ def test_policy_derived_catalog_matches_labels_json_exactly() -> None:
     policy_path = repo_root / ".github" / "label-policy.toml"
     labels_json_path = repo_root / ".github" / "labels.json"
 
-    derived = labels_apply.load_sot_from_policy(policy_path, labels_json_path)
+    derived = labels_apply.load_sot_from_policy(policy_path)
     direct = labels_apply.load_sot(labels_json_path)
 
     def _key(entry: dict[str, object]) -> tuple[object, object, object]:
@@ -482,7 +376,7 @@ class TestResolveSot:
         assert sot_path == Path("a/labels.json")
         assert sot_loader is labels_apply.load_sot
 
-    def test_label_policy_binds_labels_json_path_for_retro_injection(self, tmp_path: Path) -> None:
+    def test_label_policy_uses_policy_derived_loader(self, tmp_path: Path) -> None:
         policy = tmp_path / "label-policy.toml"
         policy.write_text(
             "\n".join(
@@ -497,17 +391,14 @@ class TestResolveSot:
             encoding="utf-8",
         )
         labels_json = tmp_path / "labels.json"
-        labels_json.write_text(
-            json.dumps([{"name": "type:retrospective", "color": "c5def5", "description": "Auto-opened."}]),
-            encoding="utf-8",
-        )
         args = argparse.Namespace(source="label-policy", sot=labels_json, policy=policy)
 
         sot_path, sot_loader = labels_apply._resolve_sot(args)
 
         assert sot_path == policy
+        assert sot_loader is labels_apply.load_sot_from_policy
         names = {entry["name"] for entry in sot_loader(sot_path)}
-        assert names == {"type:fix", "type:retrospective"}
+        assert names == {"type:fix"}
 
 
 def test_source_flag_help_documents_staged_migration() -> None:
@@ -536,10 +427,7 @@ def test_main_source_label_policy_uses_policy_derived_catalog(
         encoding="utf-8",
     )
     labels_json = tmp_path / "labels.json"
-    labels_json.write_text(
-        json.dumps([{"name": "type:retrospective", "color": "c5def5", "description": "Auto-opened retrospective."}]),
-        encoding="utf-8",
-    )
+    labels_json.write_text(json.dumps([]), encoding="utf-8")
     summary = tmp_path / "summary.md"
     monkeypatch.setenv("GH_TOKEN", "token")
 
@@ -574,7 +462,6 @@ def test_main_source_label_policy_uses_policy_derived_catalog(
     text = summary.read_text(encoding="utf-8")
     assert result == 0
     assert "| `type:fix` | plan-only (POST) | n/a | n/a | dry-run |" in text
-    assert "| `type:retrospective` | plan-only (POST) | n/a | n/a | dry-run |" in text
 
 
 class TestCli:

@@ -5650,13 +5650,15 @@ class TestFetchPastRetroLabels:
         ar.fetch_past_retro_labels("o/r")
         assert "sort=created&order=desc" in captured[0]
 
-    def test_discovery_query_includes_type_retrospective_family(
+    def test_discovery_query_no_longer_includes_type_retrospective(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """type:retrospective is registered as a discovery-only label:
-        hand-triaged in-session retros carry it WITHOUT type:docs, so the
-        discovery query must OR it into the type: family clause instead of
-        structurally excluding that population (issue #2413 defect c)."""
+        """type:retrospective was a discovery-only label kept so hand-triaged
+        pre-migration retros (carrying it WITHOUT type:docs) stayed
+        discoverable (issue #2413 defect c). The #972 retirement batch
+        backfilled every open retro to type:docs and dropped the
+        discovery_only_labels registry entry, so the query now needs only the
+        type:docs identity label; it must not resurrect the retired name."""
         captured: list[str] = []
 
         def fake(method: str, path: str, *_a: Any, **_kw: Any) -> str:
@@ -5666,7 +5668,8 @@ class TestFetchPastRetroLabels:
         monkeypatch.setattr(ar, "gh_api", fake)
         ar.fetch_past_retro_labels("o/r")
         path = captured[0]
-        assert "label%3Atype%3Adocs%2Ctype%3Aretrospective" in path
+        assert "label%3Atype%3Adocs" in path
+        assert "type%3Aretrospective" not in path
 
     def test_type_retrospective_only_retro_is_counted(
         self, monkeypatch: pytest.MonkeyPatch

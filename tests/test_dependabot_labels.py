@@ -257,10 +257,7 @@ class TestLoadSotLabelNamesFromPolicy:
             (repo_root / ".github" / "labels.json").read_text(encoding="utf-8")
         )
 
-        from_policy = dl.load_sot_label_names_from_policy(
-            repo_root / ".github" / "label-policy.toml",
-            repo_root / ".github" / "labels.json",
-        )
+        from_policy = dl.load_sot_label_names_from_policy(repo_root / ".github" / "label-policy.toml")
 
         assert from_policy == from_json
 
@@ -278,15 +275,9 @@ class TestLoadSotLabelNamesFromPolicy:
             ),
             encoding="utf-8",
         )
-        labels_json_path = tmp_path / "labels.json"
-        labels_json_path.write_text(
-            json.dumps([{"name": "type:retrospective", "color": "c5def5", "description": "Auto-opened."}]),
-            encoding="utf-8",
-        )
+        names = dl.load_sot_label_names_from_policy(policy_path)
 
-        names = dl.load_sot_label_names_from_policy(policy_path, labels_json_path)
-
-        assert names == {"ops:dependencies", "type:retrospective"}
+        assert names == {"ops:dependencies"}
 
 
 # ---------------------------------------------------------------------------

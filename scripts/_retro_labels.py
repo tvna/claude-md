@@ -59,15 +59,14 @@ ALL_RETRO_LABELS: Final[frozenset[str]] = frozenset(
     {RETRO_TP, RETRO_FP, RETRO_FP_CANDIDATE, RETRO_TENTATIVE, RETRO_EXPIRED}
 )
 
-# The retrospective issue's identity label. Not a retro:* feedback-loop label,
-# so it is deliberately absent from ALL_RETRO_LABELS. Unlike the retro:* labels
-# (whose identity moved to label-policy.toml in #2442 batch 1), this one is NOT
-# folded into the policy: its SoT home stays here / labels.json pending its #972
-# retirement decision. It shares the labels.json prune-safety coupling
-# (tests/test_retro_labels_in_sot.py) and is defined here as the single source so
-# consumers (e.g. scripts/scan_label_sot_drift.py, which still exempts it) import
-# it instead of freezing the string.
-TYPE_RETROSPECTIVE: Final[str] = "type:retrospective"
+# ``type:retrospective`` (the retrospective issue's former identity label, not
+# a retro:* feedback-loop label) was retired outright by the #972 retirement
+# batch: every open issue that carried it was backfilled to type:docs (the
+# canonical retrospective kind label, see docs/standards/label-taxonomy.md),
+# it was pruned from the live catalog, and it was never folded into
+# label-policy.toml. No constant remains here since no code consumes the name
+# anymore; tests/test_retro_labels_in_policy.py references the retired string
+# directly.
 
 # Thresholds for the label-derived prior consumed by
 # ``scripts/auto_retro.py`` (PR2 of the TP/FP retrofit, refs #582).

@@ -13,20 +13,20 @@ for label identity and reconciling ``labels.json`` to it. This gate keeps them
 from drifting again: every ``labels.json`` entry must match a ``[[labels]]``
 entry in ``label-policy.toml`` by name, description, and color.
 
-One ``labels.json`` entry is still sourced from ``scripts/_retro_labels.py``
-instead of the policy file: ``type:retrospective``. Its SoT home stays with the
-Python constant / ``labels.json`` pending its #972 retirement decision, so this
-gate reads the exception from ``_retro_labels`` rather than hardcoding it and
-skips that entry. The five ``retro:*`` feedback-loop labels used to be exempt
-too; #2442 batch 1 folded them into ``label-policy.toml`` ``[[labels]]`` (under
-the ``retro`` family), so they are now validated like any other label and the
-name set is coupled to ``ALL_RETRO_LABELS`` by
-``tests/test_retro_labels_in_policy.py``. The 11 ``area:*`` labels declared only in ``[[labels]]``
-(not yet in the live catalog) are out of scope here: the gate validates
-``labels.json`` against the policy, not the reverse, so a policy-only label is
-not a drift.
+The five ``retro:*`` feedback-loop labels used to be exempt from this parity
+gate; #2442 batch 1 folded them into ``label-policy.toml`` ``[[labels]]``
+(under the ``retro`` family), so they are now validated like any other label
+and the name set is coupled to ``ALL_RETRO_LABELS`` by
+``tests/test_retro_labels_in_policy.py``. ``type:retrospective`` was the last
+remaining exemption (sourced from ``scripts/_retro_labels.py`` /
+``labels.json`` instead of the policy); the #972 retirement batch retired it
+outright (backfilled to ``type:docs``, pruned from the live catalog) rather
+than folding it into the policy, so this gate now has no exemptions left. The
+11 ``area:*`` labels declared only in ``[[labels]]`` (not yet in the live
+catalog) are out of scope here: the gate validates ``labels.json`` against the
+policy, not the reverse, so a policy-only label is not a drift.
 
-Invariant, for every ``labels.json`` entry that is not retro-sourced:
+Invariant, for every ``labels.json`` entry:
 - a ``[[labels]]`` entry with the same ``name`` exists in ``label-policy.toml``,
   and its ``description`` and ``color`` match. A missing counterpart, or a
   description/color mismatch, fails the run.
@@ -51,20 +51,9 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-import _retro_labels
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 LABELS_JSON_PATH = Path(".github/labels.json")
 LABEL_POLICY_PATH = Path(".github/label-policy.toml")
-
-# labels.json entries sourced from scripts/_retro_labels.py, not
-# label-policy.toml. Only type:retrospective remains: it is not a retro:*
-# feedback-loop label (so it is not in ALL_RETRO_LABELS), and its SoT home stays
-# with the Python constant / labels.json pending its #972 retirement decision.
-# The five retro:* labels were folded into label-policy.toml [[labels]] in #2442
-# batch 1 and are no longer exempt here. Read from the constant module so the
-# exception cannot drift, and no label literal is frozen in this scanned file.
-RETRO_SOURCED_LABELS = frozenset({_retro_labels.TYPE_RETROSPECTIVE})
 
 
 def load_json(path: Path) -> Any:
@@ -165,21 +154,6 @@ def verify_parity(catalog: Any, policy: dict[str, Any]) -> list[str]:
             )
             continue
         seen.add(name)
-
-        # Sourced from scripts/_retro_labels.py, not label-policy.toml. Such a
-        # label must NOT also be authored in the policy: two homes for one label
-        # is the same single-SoT drift this gate exists to prevent, in reverse.
-        if name in RETRO_SOURCED_LABELS:
-            if name in policy_index:
-                errors.append(
-                    _err(
-                        f"label {name!r} is sourced from scripts/_retro_labels.py but also "
-                        "has a [[labels]] entry in label-policy.toml; it must have exactly "
-                        "one authoritative home. Remove the policy entry.",
-                        LABEL_POLICY_PATH,
-                    )
-                )
-            continue
 
         policy_entry = policy_index.get(name)
         if policy_entry is None:

@@ -306,8 +306,9 @@ lifecycle = "Added after retrospective creation is confirmed; retained as durabl
 # scripts/_retro_labels.py (ALL_RETRO_LABELS), imported widely at runtime; this
 # file is the single source for their identity (description/color). The two are
 # coupled by tests/test_retro_labels_in_policy.py so the name set cannot drift.
-# type:retrospective is deliberately NOT here: its SoT home stays labels.json /
-# scripts/_retro_labels.py pending its #972 retirement decision (Refs #2442).
+# type:retrospective is deliberately NOT here: the #972 retirement batch
+# retired it outright (backfilled to type:docs, pruned from the live
+# catalog) rather than folding it into this policy (Refs #2442, #972).
 [[labels]]
 name = "retro:tp"
 family = "retro"
