@@ -48,6 +48,7 @@ from pathlib import Path
 from typing import Any
 
 import _ssot
+import labels_apply
 from _hook_runtime import build_deny, run_tool_hook
 
 _TARGET_TOOL = "mcp__github__issue_write"
@@ -87,6 +88,24 @@ def load_axis_labels(path: Path) -> dict[str, frozenset[str]]:
     if not isinstance(raw, list):
         raise ValueError("labels SoT must be a JSON array")
     names = [entry["name"] for entry in raw if isinstance(entry, dict) and isinstance(entry.get("name"), str)]
+    axes: dict[str, frozenset[str]] = {}
+    for axis, prefix in axis_prefixes():
+        axes[axis] = frozenset(name for name in names if name.startswith(prefix))
+    return axes
+
+
+def load_axis_labels_from_policy(policy_path: Path, labels_json_path: Path) -> dict[str, frozenset[str]]:
+    """Return the valid label names for each axis, derived from label-policy.toml.
+
+    Delegates to :func:`labels_apply.load_sot_from_policy` (#2442 Phase B
+    batch 1) instead of re-deriving the keep/rename/type:retrospective logic
+    a second time. Test-only proof of parity for now: :func:`decide` still
+    calls :func:`load_axis_labels` (the labels.json reader) by default, since
+    this is a PreToolUse hook with no CLI argv surface to add a --source flag
+    to, and changing its live default is out of scope for this batch.
+    """
+    catalog = labels_apply.load_sot_from_policy(policy_path, labels_json_path)
+    names = [str(entry["name"]) for entry in catalog]
     axes: dict[str, frozenset[str]] = {}
     for axis, prefix in axis_prefixes():
         axes[axis] = frozenset(name for name in names if name.startswith(prefix))

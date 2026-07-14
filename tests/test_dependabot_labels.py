@@ -245,6 +245,51 @@ class TestFindDrift:
 
 
 # ---------------------------------------------------------------------------
+# load_sot_label_names_from_policy
+# ---------------------------------------------------------------------------
+
+
+class TestLoadSotLabelNamesFromPolicy:
+    def test_matches_labels_json_derivation_on_real_repo_files(self) -> None:
+        """Integration proof for #2442 Phase B batch 2."""
+        repo_root = Path(__file__).resolve().parent.parent
+        from_json = dl.load_sot_label_names(
+            (repo_root / ".github" / "labels.json").read_text(encoding="utf-8")
+        )
+
+        from_policy = dl.load_sot_label_names_from_policy(
+            repo_root / ".github" / "label-policy.toml",
+            repo_root / ".github" / "labels.json",
+        )
+
+        assert from_policy == from_json
+
+    def test_matches_synthetic_fixture(self, tmp_path: Path) -> None:
+        policy_path = tmp_path / "label-policy.toml"
+        policy_path.write_text(
+            "\n".join(
+                [
+                    "[[labels]]",
+                    'name = "ops:dependencies"',
+                    'status = "keep"',
+                    'description = "Dependency update workflow state."',
+                    'color = "0366d6"',
+                ]
+            ),
+            encoding="utf-8",
+        )
+        labels_json_path = tmp_path / "labels.json"
+        labels_json_path.write_text(
+            json.dumps([{"name": "type:retrospective", "color": "c5def5", "description": "Auto-opened."}]),
+            encoding="utf-8",
+        )
+
+        names = dl.load_sot_label_names_from_policy(policy_path, labels_json_path)
+
+        assert names == {"ops:dependencies", "type:retrospective"}
+
+
+# ---------------------------------------------------------------------------
 # CLI: verify against the real repo files (regression guard)
 # ---------------------------------------------------------------------------
 
@@ -365,6 +410,48 @@ class TestVerifyCli:
         )
         assert rc == 0
         assert "all resolve" in capsys.readouterr().out
+
+    def test_source_label_policy_uses_policy_derived_names(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        dep = tmp_path / "dependabot.yml"
+        dep.write_text("    labels:\n      - \"ops:dependencies\"\n", encoding="utf-8")
+        policy = tmp_path / "label-policy.toml"
+        policy.write_text(
+            "\n".join(
+                [
+                    "[[labels]]",
+                    'name = "ops:dependencies"',
+                    'status = "keep"',
+                    'description = "Dependency update workflow state."',
+                    'color = "0366d6"',
+                ]
+            ),
+            encoding="utf-8",
+        )
+        labels = tmp_path / "labels.json"
+        labels.write_text(
+            json.dumps([{"name": "type:retrospective", "color": "c5def5", "description": "Auto-opened."}]),
+            encoding="utf-8",
+        )
+
+        rc = dl.main(
+            [
+                "verify",
+                "--dependabot",
+                str(dep),
+                "--labels",
+                str(labels),
+                "--label-policy",
+                str(policy),
+                "--source",
+                "label-policy",
+            ]
+        )
+
+        out = capsys.readouterr().out
+        assert rc == 0, out
+        assert "all resolve" in out
 
     def test_malformed_labels_json_returns_1(
         self,

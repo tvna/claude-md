@@ -30,6 +30,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import labels_apply
+
 
 def parse_dependabot_labels(yaml_text: str) -> list[str]:
     """Return every label string under any ``labels:`` block in *yaml_text*.
@@ -121,6 +123,18 @@ def load_sot_label_names(json_text: str) -> set[str]:
     return {label.name for label in load_sot_labels(json_text)}
 
 
+def load_sot_label_names_from_policy(policy_path: Path, labels_json_path: Path) -> set[str]:
+    """Return the live label name set, derived from label-policy.toml.
+
+    Delegates to :func:`labels_apply.load_sot_from_policy` (#2442 Phase B
+    batch 1) instead of re-deriving the keep/rename/type:retrospective logic
+    a second time. Not wired into the production CLI path by default; see
+    the ``--source`` flag on :func:`main`.
+    """
+    catalog = labels_apply.load_sot_from_policy(policy_path, labels_json_path)
+    return {str(entry["name"]) for entry in catalog}
+
+
 def find_drift(referenced: list[str], defined: set[str]) -> list[str]:
     """Return sorted-unique labels in *referenced* but not in *defined*."""
     return sorted({label for label in referenced if label not in defined})
@@ -149,6 +163,7 @@ def _required_string(
 def _cmd_verify(args: argparse.Namespace) -> int:
     dependabot_path = Path(args.dependabot)
     labels_path = Path(args.labels)
+    label_policy_path = Path(args.label_policy)
 
     if not dependabot_path.is_file():
         print(f"::error::dependabot file not found: {dependabot_path}")
@@ -156,12 +171,18 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     if not labels_path.is_file():
         print(f"::error::labels SoT not found: {labels_path}")
         return 1
+    if args.source == "label-policy" and not label_policy_path.is_file():
+        print(f"::error::label policy not found: {label_policy_path}")
+        return 1
 
     try:
         referenced = parse_dependabot_labels(
             dependabot_path.read_text(encoding="utf-8")
         )
-        defined = load_sot_label_names(labels_path.read_text(encoding="utf-8"))
+        if args.source == "label-policy":
+            defined = load_sot_label_names_from_policy(label_policy_path, labels_path)
+        else:
+            defined = load_sot_label_names(labels_path.read_text(encoding="utf-8"))
     except (OSError, ValueError, json.JSONDecodeError) as error:
         print(f"::error::{error}")
         return 1
@@ -206,6 +227,22 @@ def main(argv: list[str] | None = None) -> int:
         "--labels",
         default=".github/labels.json",
         help="Path to labels SoT JSON (default: .github/labels.json).",
+    )
+    p_verify.add_argument(
+        "--label-policy",
+        default=".github/label-policy.toml",
+        help="Path to label-policy.toml (default: .github/label-policy.toml).",
+    )
+    p_verify.add_argument(
+        "--source",
+        choices=["labels-json", "label-policy"],
+        default="labels-json",
+        help=(
+            "Which file supplies the defined label names. Default labels-json "
+            "preserves current behavior; label-policy derives names from "
+            "label-policy.toml [[labels]] instead (Refs #2442 Phase B batch 2; "
+            "not the production default yet)."
+        ),
     )
     p_verify.set_defaults(func=_cmd_verify)
 

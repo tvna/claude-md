@@ -62,6 +62,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import labels_apply
 from _json_schema_subset import SchemaError, validate_shape
 
 _SCRIPT = "scan_ssot_schema"
@@ -86,6 +87,18 @@ def live_label_names(labels_data: object) -> frozenset[str]:
         for entry in labels_data
         if isinstance(entry, dict) and isinstance(entry.get("name"), str)
     )
+
+
+def live_label_names_from_policy(policy_path: Path, labels_json_path: Path) -> frozenset[str]:
+    """Return the live catalog's label names, derived from label-policy.toml.
+
+    Delegates to :func:`labels_apply.load_sot_from_policy` (added in #2442
+    Phase B batch 1) instead of re-deriving the keep/rename/type:retrospective
+    logic here a second time. Not wired into the production CLI path by
+    default; see the ``--source`` flag on :func:`main`.
+    """
+    catalog = labels_apply.load_sot_from_policy(policy_path, labels_json_path)
+    return frozenset(str(entry["name"]) for entry in catalog)
 
 
 def consumer_label_universe(
@@ -343,6 +356,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--schema", default=_SCHEMA_PATH)
     parser.add_argument("--labels", default=_LABELS_PATH)
     parser.add_argument("--label-policy", default=_LABEL_POLICY_PATH)
+    parser.add_argument(
+        "--source",
+        choices=["labels-json", "label-policy"],
+        default="labels-json",
+        help=(
+            "Which file supplies the live label names for the label_routing/"
+            "label_consumers checks. Default labels-json preserves current "
+            "behavior; label-policy derives names from label-policy.toml "
+            "[[labels]] instead (Refs #2442 Phase B batch 2; not the "
+            "production default yet)."
+        ),
+    )
     args = parser.parse_args(argv)
 
     registry_path = _REPO_ROOT / args.registry
@@ -365,11 +390,14 @@ def main(argv: list[str] | None = None) -> int:
         schema = _load_json(schema_path)
         labels_data = _load_json(labels_path)
         label_policy = tomllib.loads(label_policy_path.read_text(encoding="utf-8"))
+        if args.source == "label-policy":
+            live_labels = live_label_names_from_policy(label_policy_path, labels_path)
+        else:
+            live_labels = live_label_names(labels_data)
     except (OSError, ValueError, tomllib.TOMLDecodeError) as exc:
         print(f"::error::{_SCRIPT}: cannot parse an input file: {exc}", file=sys.stderr)
         return 1
 
-    live_labels = live_label_names(labels_data)
     consumer_labels = consumer_label_universe(live_labels, label_policy)
     is_tracked = build_tracked_checker(_REPO_ROOT)
 

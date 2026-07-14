@@ -99,6 +99,47 @@ def _verify(registry: dict[str, Any]) -> list[str]:
     )
 
 
+class TestLiveLabelNamesFromPolicy:
+    def test_matches_labels_json_derivation_on_real_repo_files(self) -> None:
+        """Integration proof for #2442 Phase B batch 2: the TOML-derived name
+        set must equal the labels.json-derived name set for the real repo
+        files (mirrors test_labels_apply.py's
+        test_policy_derived_catalog_matches_labels_json_exactly)."""
+        labels_data = json.loads((_REPO_ROOT / ".github" / "labels.json").read_text())
+        from_json = gate.live_label_names(labels_data)
+
+        from_policy = gate.live_label_names_from_policy(
+            _REPO_ROOT / ".github" / "label-policy.toml",
+            _REPO_ROOT / ".github" / "labels.json",
+        )
+
+        assert from_policy == from_json
+
+    def test_matches_synthetic_fixture(self, tmp_path: Path) -> None:
+        policy_path = tmp_path / "label-policy.toml"
+        policy_path.write_text(
+            "\n".join(
+                [
+                    "[[labels]]",
+                    'name = "type:fix"',
+                    'status = "keep"',
+                    'description = "Defect or broken workflow."',
+                    'color = "d73a4a"',
+                ]
+            ),
+            encoding="utf-8",
+        )
+        labels_json_path = tmp_path / "labels.json"
+        labels_json_path.write_text(
+            json.dumps([{"name": "type:retrospective", "color": "c5def5", "description": "Auto-opened."}]),
+            encoding="utf-8",
+        )
+
+        names = gate.live_label_names_from_policy(policy_path, labels_json_path)
+
+        assert names == frozenset({"type:fix", "type:retrospective"})
+
+
 # ---------------------------------------------------------------------------
 # Happy path
 # ---------------------------------------------------------------------------
@@ -393,3 +434,105 @@ class TestMainCli:
         path = tmp_path / "r.json"
         path.write_text(json.dumps(reg))
         assert gate.main(["verify", "--registry", str(path)]) == 1
+
+
+class TestSourceFlag:
+    def test_source_label_policy_uses_policy_derived_live_labels(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        registry = _valid_registry()
+        registry["label_consumers"][0]["labels"] = ["type:fix"]
+        registry_path = tmp_path / "ssot.json"
+        registry_path.write_text(json.dumps(registry), encoding="utf-8")
+        schema_path = tmp_path / "ssot.schema.json"
+        schema_path.write_text((_REPO_ROOT / ".gitapex" / "ssot.schema.json").read_text(), encoding="utf-8")
+        policy_path = tmp_path / "label-policy.toml"
+        policy_path.write_text(
+            "\n".join(
+                [
+                    "[[labels]]",
+                    'name = "type:fix"',
+                    'status = "keep"',
+                    'description = "Defect or broken workflow."',
+                    'color = "d73a4a"',
+                ]
+            ),
+            encoding="utf-8",
+        )
+        labels_path = tmp_path / "labels.json"
+        labels_path.write_text(
+            json.dumps(
+                [
+                    {"name": "type:fix", "color": "d73a4a", "description": "Defect or broken workflow."},
+                    {"name": "type:retrospective", "color": "c5def5", "description": "Auto-opened."},
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        rc = gate.main(
+            [
+                "verify",
+                "--registry",
+                str(registry_path),
+                "--schema",
+                str(schema_path),
+                "--labels",
+                str(labels_path),
+                "--label-policy",
+                str(policy_path),
+                "--source",
+                "label-policy",
+            ]
+        )
+
+        assert rc == 0, capsys.readouterr().err
+
+    def test_source_label_policy_reports_malformed_policy_as_error_not_traceback(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A semantically invalid policy-derived catalog (here: an
+        unrecognized status) must exit 1 with an ::error:: line, the same
+        malformed-input contract every other input file already gets --
+        not an uncaught ValueError traceback."""
+        registry_path = tmp_path / "ssot.json"
+        registry_path.write_text(json.dumps(_valid_registry()), encoding="utf-8")
+        schema_path = tmp_path / "ssot.schema.json"
+        schema_path.write_text((_REPO_ROOT / ".gitapex" / "ssot.schema.json").read_text(), encoding="utf-8")
+        policy_path = tmp_path / "label-policy.toml"
+        policy_path.write_text(
+            "\n".join(
+                [
+                    "[[labels]]",
+                    'name = "type:fix"',
+                    'status = "Keep"',
+                    'description = "Typo-cased status."',
+                    'color = "d73a4a"',
+                ]
+            ),
+            encoding="utf-8",
+        )
+        labels_path = tmp_path / "labels.json"
+        labels_path.write_text(
+            json.dumps([{"name": "type:retrospective", "color": "c5def5", "description": "Auto-opened."}]),
+            encoding="utf-8",
+        )
+
+        rc = gate.main(
+            [
+                "verify",
+                "--registry",
+                str(registry_path),
+                "--schema",
+                str(schema_path),
+                "--labels",
+                str(labels_path),
+                "--label-policy",
+                str(policy_path),
+                "--source",
+                "label-policy",
+            ]
+        )
+
+        assert rc == 1
+        assert "::error::" in capsys.readouterr().err
