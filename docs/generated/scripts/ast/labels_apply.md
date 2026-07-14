@@ -155,26 +155,14 @@ flowchart TD
     N003["catalog = []"]
     N004["seen_names = set(...)"]
     N005["for entry in policy.get('<str>', []):     if not isinstance(entry, dict):         continue     status = entry.get('<str>')     if status not in _KNOWN_LABEL_STATUSES:         raise ValueError(f'<str>{entry.get('<str>')!r}<str>{status!r}<str>{sorted(_KNOWN_LABEL_STATUSES)}<str>')     if status == '<str>':         continue     name = entry.get('<str>')     if isinstance(name, str) and name in seen_names:         raise ValueError(f'<str>{name!r}<str>')     if isinstance(name, str):         seen_names.add(name)     catalog.append({'<str>': name, '<str>': entry.get('<str>'), '<str>': entry.get('<str>')})"]
-    N006["with labels_json_path.open(encoding='<str>') as handle:     labels_json = json.load(handle)"]
-    N007["retro_entry = next(...)"]
-    N008["if retro_entry is None"]
-    N009["raise ValueError(f'{_retro_labels.TYPE_RETROSPECTIVE!r}<str>{labels_json_path}<str>')"]
-    N010["for key in ('<str>', '<str>'):     if key not in retro_entry:         raise ValueError(f'{_retro_labels.TYPE_RETROSPECTIVE!r}<str>{labels_json_path}<str>{key!r}<str>')"]
-    N011["append(...)"]
-    N012["validate_sot(...)"]
-    N013["return catalog"]
+    N006["validate_sot(...)"]
+    N007["return catalog"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
     N004 --> N005
     N005 --> N006
     N006 --> N007
-    N007 --> N008
-    N008 -->|"true"| N009
-    N008 -->|"false"| N010
-    N010 --> N011
-    N011 --> N012
-    N012 --> N013
 ```
 
 ## run(...)
@@ -214,7 +202,7 @@ flowchart TD
 flowchart TD
     N001["_resolve_sot(...)"]
     N002["if args.source == 'label-policy'"]
-    N003["return (args.policy, functools.partial(load_sot_from_policy, labels_json_path=args.sot))"]
+    N003["return (args.policy, load_sot_from_policy)"]
     N004["return (args.sot, load_sot)"]
     N001 -->|"start"| N002
     N002 -->|"true"| N003
