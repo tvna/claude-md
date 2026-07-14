@@ -45,14 +45,13 @@ from its `[[labels]]` entries whose `status` is `keep` or `rename`
 (`labels_apply.load_sot_from_policy`); the retired `.github/labels.json` catalog
 (#2499) is no longer a separate SoT. `labels_apply.py` reads the `rename_from`
 map from this TOML to rename the live labels in place so existing
-assignments are preserved. Retirements and area additions are otherwise
-deferred to later #972 batches and must not be applied to the catalog before
-then. The one exception: `area:ci-ops`, `area:governance`, and
-`area:security-intel` were added to the live catalog ahead of that batch, per
-the owner's `layer:meta` successor decision (#1041 comment 4882932274, #2313)
-and the scoped `[rollout].area_addition_exception` entry in
-`.github/label-policy.toml`. No other area label is affected; the remaining
-#972 area batch stays deferred.
+assignments are preserved. The #972 area-additions batch has landed: every
+`area:*` label is now `status = "keep"` and in the derived catalog. (The first
+three, `area:ci-ops`, `area:governance`, and `area:security-intel`, were added
+ahead of the rest per the owner's `layer:meta` successor decision, #1041
+comment 4882932274, #2313; the remaining 11 followed in #2506.) Retirements are
+otherwise still deferred to their own later #972 batch and must not be applied
+to the catalog before then.
 
 `.github/label-policy.toml` `[[labels]]` is the single authored source of
 truth for label identity (name, description, color); the live GitHub catalog is
@@ -66,9 +65,10 @@ their identity lives in the TOML while their names remain a Python constant in
 the two so they cannot drift. `type:retrospective` was the last remaining
 exemption from the retired parity gate; the #972 retirement batch retired it
 outright (backfilled to `type:docs`, pruned from the live catalog) rather than
-folding it into the policy. The 11 `area:*` labels declared with
-`status = "add"` in `[[labels]]` remain design-only and are not yet in the live
-derived catalog.
+folding it into the policy. The 11 `area:*` labels previously declared with
+`status = "add"` were promoted to `status = "keep"` in #2506 and are now in the
+live derived catalog; the owner-dispatched `apply-labels.yml` creates them on
+GitHub.
 
 ## Final Label Families
 
@@ -340,7 +340,8 @@ retirement itself landed as a #972 batch: every open issue still carrying it
 was backfilled to `type:docs`, the `discovery_only_labels` registry entry for
 `scripts/auto_retro.py` was dropped, and the label was pruned from the live
 catalog (a bare `retrospective` label did not exist live at prune time, so
-nothing further was needed there). The remaining #972 work is unrelated to
-`type:retrospective`: dropping `layer:meta` from the live catalog, adding
-`ops:coverage-failure`, and adding the 11 declared-but-not-live `area:*`
-labels to the catalog. Refs #1060, #2313, #2383, #2393, #972.
+nothing further was needed there). The 11 declared-but-not-live `area:*` labels
+were promoted to `status = "keep"` and added to the catalog in #2506. The
+remaining #972 work is unrelated to `type:retrospective`: dropping `layer:meta`
+from the live catalog, and the `ops:coverage-failure` disposition. Refs #1060,
+#2313, #2383, #2393, #2506, #972.
