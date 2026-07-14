@@ -94,6 +94,55 @@ class TestLoadAxisLabels:
             assert axes.get(axis), f"required axis {axis!r} has no valid labels in the live SoT"
 
 
+class TestLoadAxisLabelsFromPolicy:
+    def test_matches_load_axis_labels_on_real_repo_files(self) -> None:
+        """Integration proof for #2442 Phase B batch 2: the TOML-derived axis
+        buckets must match the labels.json-derived buckets for the real repo
+        files. Not wired into decide()'s production path; test-only proof."""
+        repo_root = Path(__file__).resolve().parent.parent
+        policy_path = repo_root / ".github" / "label-policy.toml"
+        labels_path = repo_root / ".github" / "labels.json"
+
+        from_json = gate.load_axis_labels(labels_path)
+        from_policy = gate.load_axis_labels_from_policy(policy_path, labels_path)
+
+        assert from_policy == from_json
+
+    def test_groups_names_by_axis_prefix(self, tmp_path: Path) -> None:
+        policy_path = tmp_path / "label-policy.toml"
+        policy_path.write_text(
+            "\n".join(
+                [
+                    "[[labels]]",
+                    'name = "layer:p1-goal-plan"',
+                    'status = "keep"',
+                    'description = "x"',
+                    'color = "1d76db"',
+                    "",
+                    "[[labels]]",
+                    'name = "type:fix"',
+                    'status = "keep"',
+                    'description = "x"',
+                    'color = "d73a4a"',
+                ]
+            ),
+            encoding="utf-8",
+        )
+        labels_json_path = tmp_path / "labels.json"
+        labels_json_path.write_text(
+            json.dumps([{"name": "type:retrospective", "color": "c5def5", "description": "Auto-opened."}]),
+            encoding="utf-8",
+        )
+
+        axes = gate.load_axis_labels_from_policy(policy_path, labels_json_path)
+
+        assert axes["layer"] == frozenset({"layer:p1-goal-plan"})
+        # The injected retrospective label (see load_sot_from_policy) groups
+        # into the "type" axis purely by its name prefix, same as the
+        # labels.json-backed load_axis_labels would.
+        assert axes["type"] == frozenset({"type:fix", "type:retrospective"})
+
+
 class TestMissingAxes:
     def test_both_axes_present_is_empty(self, labels_path: Path) -> None:
         axes = gate.load_axis_labels(labels_path)
