@@ -123,15 +123,15 @@ def load_sot_label_names(json_text: str) -> set[str]:
     return {label.name for label in load_sot_labels(json_text)}
 
 
-def load_sot_label_names_from_policy(policy_path: Path, labels_json_path: Path) -> set[str]:
+def load_sot_label_names_from_policy(policy_path: Path) -> set[str]:
     """Return the live label name set, derived from label-policy.toml.
 
     Delegates to :func:`labels_apply.load_sot_from_policy` (#2442 Phase B
-    batch 1) instead of re-deriving the keep/rename/type:retrospective logic
-    a second time. Not wired into the production CLI path by default; see
-    the ``--source`` flag on :func:`main`.
+    batch 1) instead of re-deriving the keep/rename logic a second time. Not
+    wired into the production CLI path by default; see the ``--source`` flag
+    on :func:`main`.
     """
-    catalog = labels_apply.load_sot_from_policy(policy_path, labels_json_path)
+    catalog = labels_apply.load_sot_from_policy(policy_path)
     return {str(entry["name"]) for entry in catalog}
 
 
@@ -180,7 +180,7 @@ def _cmd_verify(args: argparse.Namespace) -> int:
             dependabot_path.read_text(encoding="utf-8")
         )
         if args.source == "label-policy":
-            defined = load_sot_label_names_from_policy(label_policy_path, labels_path)
+            defined = load_sot_label_names_from_policy(label_policy_path)
         else:
             defined = load_sot_label_names(labels_path.read_text(encoding="utf-8"))
     except (OSError, ValueError, json.JSONDecodeError) as error:

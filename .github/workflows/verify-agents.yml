@@ -237,8 +237,8 @@ jobs:
         # Refs #2442: fails when .github/labels.json drifts from
         # .github/label-policy.toml [[labels]] on name/description/color, so the
         # two label sources cannot diverge while the TOML is the single authored
-        # SoT. retro:* and type:retrospective are sourced from
-        # scripts/_retro_labels.py and are exempt.
+        # SoT. No exemptions remain since #972 retired type:retrospective, the
+        # last labels.json-only entry.
         run: uv run python scripts/scan_label_sot_drift.py verify
 
       - name: Verify test shard markers

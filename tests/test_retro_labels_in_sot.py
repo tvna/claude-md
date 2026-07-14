@@ -15,7 +15,14 @@ family stopped the bleeding, but only this test makes the coupling enforceable:
 if any retro label constant is ever missing from the JSON SoT, a future prune
 could delete it again; and this gate fails first.
 
-Refs #1121 (this gate), #1119 (root cause), #1120 (restore).
+``type:retrospective`` itself is deliberately NOT required here anymore: the
+#972 retirement batch intentionally pruned it (backfilling every open issue to
+``type:docs`` first), which is the one case where dropping a retro-adjacent
+label from the JSON SoT is correct rather than the #1119 accident repeating.
+Only the ``retro:*`` feedback-loop constants stay guarded.
+
+Refs #1121 (this gate), #1119 (root cause), #1120 (restore), #972 (the
+intentional type:retrospective prune).
 """
 
 from __future__ import annotations
@@ -35,12 +42,7 @@ pytestmark = pytest.mark.shard_ci_ops
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LABELS_JSON = REPO_ROOT / ".github" / "labels.json"
 
-# ``type:retrospective`` is not a ``retro:*`` feedback-loop label so it does not
-# live in ``ALL_RETRO_LABELS``, but it was deleted by the same prune and must
-# stay declared in the JSON SoT for the same reason. Guard it explicitly.
-TYPE_RETROSPECTIVE = "type:retrospective"
-
-REQUIRED_IN_SOT = sorted(_retro_labels.ALL_RETRO_LABELS | {TYPE_RETROSPECTIVE})
+REQUIRED_IN_SOT = sorted(_retro_labels.ALL_RETRO_LABELS)
 
 
 def _sot_label_names() -> set[str]:

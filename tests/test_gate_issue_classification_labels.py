@@ -104,7 +104,7 @@ class TestLoadAxisLabelsFromPolicy:
         labels_path = repo_root / ".github" / "labels.json"
 
         from_json = gate.load_axis_labels(labels_path)
-        from_policy = gate.load_axis_labels_from_policy(policy_path, labels_path)
+        from_policy = gate.load_axis_labels_from_policy(policy_path)
 
         assert from_policy == from_json
 
@@ -128,19 +128,10 @@ class TestLoadAxisLabelsFromPolicy:
             ),
             encoding="utf-8",
         )
-        labels_json_path = tmp_path / "labels.json"
-        labels_json_path.write_text(
-            json.dumps([{"name": "type:retrospective", "color": "c5def5", "description": "Auto-opened."}]),
-            encoding="utf-8",
-        )
-
-        axes = gate.load_axis_labels_from_policy(policy_path, labels_json_path)
+        axes = gate.load_axis_labels_from_policy(policy_path)
 
         assert axes["layer"] == frozenset({"layer:p1-goal-plan"})
-        # The injected retrospective label (see load_sot_from_policy) groups
-        # into the "type" axis purely by its name prefix, same as the
-        # labels.json-backed load_axis_labels would.
-        assert axes["type"] == frozenset({"type:fix", "type:retrospective"})
+        assert axes["type"] == frozenset({"type:fix"})
 
 
 class TestMissingAxes:

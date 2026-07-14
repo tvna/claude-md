@@ -58,11 +58,12 @@ is the deterministic gate that enforces this parity and fails on any drift
 under the `retro` family (Refs #2442, batch 1); their identity lives in the
 TOML while their names remain a Python constant in `scripts/_retro_labels.py`,
 and `tests/test_retro_labels_in_policy.py` couples the two so they cannot drift.
-Only `type:retrospective` is still exempt from the parity gate: its SoT home
-stays with `scripts/_retro_labels.py` / `labels.json` pending its #972
-retirement decision. The 11 `area:*` labels declared only in `[[labels]]` are
-not yet in the live catalog and are validated only in the labels.json-to-policy
-direction.
+`type:retrospective` was the last remaining exemption from the parity gate;
+the #972 retirement batch retired it outright (backfilled to `type:docs`,
+pruned from the live catalog) rather than folding it into the policy, so the
+gate now has no exemptions. The 11 `area:*` labels declared only in
+`[[labels]]` are not yet in the live catalog and are validated only in the
+labels.json-to-policy direction.
 
 ## Final Label Families
 
@@ -292,10 +293,10 @@ triage report. Source of truth: the label names are the Python constants in
 identity (description/color) is authored in `.github/label-policy.toml`
 `[[labels]]` under `family = "retro"`. `tests/test_retro_labels_in_policy.py`
 couples the two, and `scripts/scan_label_sot_drift.py` keeps `labels.json` in
-parity with the policy. The related `type:retrospective` label is not part of
-this family and is not authored in the policy; it awaits its #972 retirement
-decision (see the operator runbook `docs/runbooks/retro-labels.md`). Refs #2442,
-#558.
+parity with the policy. The related `type:retrospective` label was never part
+of this family and was never authored in the policy; the #972 retirement
+batch retired it outright rather than migrating it (see the operator runbook
+`docs/runbooks/retro-labels.md`). Refs #2442, #558, #972.
 
 ## Retired Labels
 
@@ -328,7 +329,12 @@ discovery in `scripts/auto_retro.py` (`fetch_past_retro_labels`,
 re-keyed onto a family-grouped OR of `layer:meta` and `layer:p3-harness`
 (via `_ssot.group_labels_by_family`), not the `is_retro_issue_title` predicate
 originally sketched here. The residual retro work is the live-catalog and
-registry removal of `layer:meta`, owned by #2393; the #963/#929/#957 backfill
-to `type:docs` (removing `type:tracking`, `retrospective`, and
-`type:retrospective`) and the prune of the undeclared `retrospective` /
-`type:retrospective` labels remain with #972. Refs #1060, #2313, #2383, #2393.
+registry removal of `layer:meta`, owned by #2393. The `type:retrospective`
+retirement itself landed as a #972 batch: every open issue still carrying it
+was backfilled to `type:docs`, the `discovery_only_labels` registry entry for
+`scripts/auto_retro.py` was dropped, and the label was pruned from the live
+catalog (a bare `retrospective` label did not exist live at prune time, so
+nothing further was needed there). The remaining #972 work is unrelated to
+`type:retrospective`: dropping `layer:meta` from the live catalog, adding
+`ops:coverage-failure`, and adding the 11 declared-but-not-live `area:*`
+labels to the catalog. Refs #1060, #2313, #2383, #2393, #972.

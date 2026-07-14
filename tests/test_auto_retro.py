@@ -5656,7 +5656,12 @@ class TestFetchPastRetroLabels:
         """type:retrospective is registered as a discovery-only label:
         hand-triaged in-session retros carry it WITHOUT type:docs, so the
         discovery query must OR it into the type: family clause instead of
-        structurally excluding that population (issue #2413 defect c)."""
+        structurally excluding that population (issue #2413 defect c). Kept
+        even after #972 backfilled the 2 open retros to type:docs, because
+        fetch_past_retro_population searches ALL issue states and the larger
+        closed historical population was not backfilled (Codex review on
+        #2492); dropping this would silently shrink the label-derived prior's
+        sample."""
         captured: list[str] = []
 
         def fake(method: str, path: str, *_a: Any, **_kw: Any) -> str:

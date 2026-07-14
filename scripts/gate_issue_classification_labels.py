@@ -94,17 +94,17 @@ def load_axis_labels(path: Path) -> dict[str, frozenset[str]]:
     return axes
 
 
-def load_axis_labels_from_policy(policy_path: Path, labels_json_path: Path) -> dict[str, frozenset[str]]:
+def load_axis_labels_from_policy(policy_path: Path) -> dict[str, frozenset[str]]:
     """Return the valid label names for each axis, derived from label-policy.toml.
 
     Delegates to :func:`labels_apply.load_sot_from_policy` (#2442 Phase B
-    batch 1) instead of re-deriving the keep/rename/type:retrospective logic
-    a second time. Test-only proof of parity for now: :func:`decide` still
-    calls :func:`load_axis_labels` (the labels.json reader) by default, since
-    this is a PreToolUse hook with no CLI argv surface to add a --source flag
-    to, and changing its live default is out of scope for this batch.
+    batch 1) instead of re-deriving the keep/rename logic a second time.
+    Test-only proof of parity for now: :func:`decide` still calls
+    :func:`load_axis_labels` (the labels.json reader) by default, since this
+    is a PreToolUse hook with no CLI argv surface to add a --source flag to,
+    and changing its live default is out of scope for this batch.
     """
-    catalog = labels_apply.load_sot_from_policy(policy_path, labels_json_path)
+    catalog = labels_apply.load_sot_from_policy(policy_path)
     names = [str(entry["name"]) for entry in catalog]
     axes: dict[str, frozenset[str]] = {}
     for axis, prefix in axis_prefixes():

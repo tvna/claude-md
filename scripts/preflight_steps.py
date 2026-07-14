@@ -532,8 +532,8 @@ STEPS: tuple[Step, ...] = (
         # Refs #2442. Fails when .github/labels.json drifts from
         # .github/label-policy.toml [[labels]] on name/description/color, so
         # the two label sources cannot silently diverge while the TOML is the
-        # single authored SoT. retro:* and type:retrospective are sourced from
-        # scripts/_retro_labels.py and are exempt.
+        # single authored SoT. No exemptions remain since #972 retired the
+        # retrospective identity label, the last labels.json-only entry.
         name="scan_label_sot_drift",
         argv=("python3", "scripts/scan_label_sot_drift.py", "verify"),
     ),

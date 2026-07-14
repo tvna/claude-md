@@ -108,10 +108,7 @@ class TestLiveLabelNamesFromPolicy:
         labels_data = json.loads((_REPO_ROOT / ".github" / "labels.json").read_text())
         from_json = gate.live_label_names(labels_data)
 
-        from_policy = gate.live_label_names_from_policy(
-            _REPO_ROOT / ".github" / "label-policy.toml",
-            _REPO_ROOT / ".github" / "labels.json",
-        )
+        from_policy = gate.live_label_names_from_policy(_REPO_ROOT / ".github" / "label-policy.toml")
 
         assert from_policy == from_json
 
@@ -129,15 +126,10 @@ class TestLiveLabelNamesFromPolicy:
             ),
             encoding="utf-8",
         )
-        labels_json_path = tmp_path / "labels.json"
-        labels_json_path.write_text(
-            json.dumps([{"name": "type:retrospective", "color": "c5def5", "description": "Auto-opened."}]),
-            encoding="utf-8",
-        )
 
-        names = gate.live_label_names_from_policy(policy_path, labels_json_path)
+        names = gate.live_label_names_from_policy(policy_path)
 
-        assert names == frozenset({"type:fix", "type:retrospective"})
+        assert names == frozenset({"type:fix"})
 
 
 # ---------------------------------------------------------------------------

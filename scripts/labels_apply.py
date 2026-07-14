@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import functools
 import json
 import os
 import re
@@ -13,7 +12,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
-import _retro_labels
 from _github_api import API_VERSION
 from _github_api import apply_call as github_apply_call
 
@@ -191,7 +189,7 @@ def _load_toml(path: Path) -> dict[str, Any]:
         return tomllib.load(handle)
 
 
-def load_sot_from_policy(policy_path: Path, labels_json_path: Path) -> list[dict[str, Any]]:
+def load_sot_from_policy(policy_path: Path) -> list[dict[str, Any]]:
     """Derive the live label catalog from label-policy.toml ``[[labels]]``.
 
     Only ``status in {"keep", "rename"}`` entries are live (``status ==
@@ -202,10 +200,10 @@ def load_sot_from_policy(policy_path: Path, labels_json_path: Path) -> list[dict
     live catalog, since a silently dropped live label would look like a
     prune candidate to a caller that runs with ``prune=true``.
 
-    ``type:retrospective`` has no ``[[labels]]`` entry (its identity stays
-    in labels.json pending its own #972 retirement decision, see the policy
-    file's comment above the ``retro`` family), so it is injected here from
-    ``labels_json_path``.
+    ``type:retrospective`` was injected here from ``labels.json`` prior to
+    its #972 retirement; the retirement batch retired the label outright
+    (backfilled to ``type:docs``, pruned from the live catalog) rather than
+    folding it into the policy, so nothing takes its place here.
     """
     policy = _load_toml(policy_path)
 
@@ -231,31 +229,6 @@ def load_sot_from_policy(policy_path: Path, labels_json_path: Path) -> list[dict
         if isinstance(name, str):
             seen_names.add(name)
         catalog.append({"name": name, "color": entry.get("color"), "description": entry.get("description")})
-
-    with labels_json_path.open(encoding="utf-8") as handle:
-        labels_json = json.load(handle)
-    retro_entry = next(
-        (
-            entry
-            for entry in labels_json
-            if isinstance(entry, dict) and entry.get("name") == _retro_labels.TYPE_RETROSPECTIVE
-        ),
-        None,
-    )
-    if retro_entry is None:
-        raise ValueError(
-            f"{_retro_labels.TYPE_RETROSPECTIVE!r} not found in {labels_json_path}; "
-            "its identity is sourced from labels.json pending its #972 retirement decision."
-        )
-    for key in ("color", "description"):
-        if key not in retro_entry:
-            raise ValueError(
-                f"{_retro_labels.TYPE_RETROSPECTIVE!r} entry in {labels_json_path} is missing "
-                f"required key {key!r}."
-            )
-    catalog.append(
-        {"name": retro_entry["name"], "color": retro_entry["color"], "description": retro_entry["description"]}
-    )
 
     validate_sot(catalog)
     return catalog
@@ -378,7 +351,7 @@ def _resolve_sot(args: argparse.Namespace) -> tuple[Path, Callable[[Path], list[
     from one source and the loader from the other.
     """
     if args.source == "label-policy":
-        return args.policy, functools.partial(load_sot_from_policy, labels_json_path=args.sot)
+        return args.policy, load_sot_from_policy
     return args.sot, load_sot
 
 

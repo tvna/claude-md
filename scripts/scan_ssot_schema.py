@@ -89,15 +89,15 @@ def live_label_names(labels_data: object) -> frozenset[str]:
     )
 
 
-def live_label_names_from_policy(policy_path: Path, labels_json_path: Path) -> frozenset[str]:
+def live_label_names_from_policy(policy_path: Path) -> frozenset[str]:
     """Return the live catalog's label names, derived from label-policy.toml.
 
     Delegates to :func:`labels_apply.load_sot_from_policy` (added in #2442
-    Phase B batch 1) instead of re-deriving the keep/rename/type:retrospective
-    logic here a second time. Not wired into the production CLI path by
-    default; see the ``--source`` flag on :func:`main`.
+    Phase B batch 1) instead of re-deriving the keep/rename logic here a
+    second time. Not wired into the production CLI path by default; see the
+    ``--source`` flag on :func:`main`.
     """
-    catalog = labels_apply.load_sot_from_policy(policy_path, labels_json_path)
+    catalog = labels_apply.load_sot_from_policy(policy_path)
     return frozenset(str(entry["name"]) for entry in catalog)
 
 
@@ -391,7 +391,7 @@ def main(argv: list[str] | None = None) -> int:
         labels_data = _load_json(labels_path)
         label_policy = tomllib.loads(label_policy_path.read_text(encoding="utf-8"))
         if args.source == "label-policy":
-            live_labels = live_label_names_from_policy(label_policy_path, labels_path)
+            live_labels = live_label_names_from_policy(label_policy_path)
         else:
             live_labels = live_label_names(labels_data)
     except (OSError, ValueError, tomllib.TOMLDecodeError) as exc:

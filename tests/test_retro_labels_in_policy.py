@@ -73,12 +73,13 @@ def test_policy_retro_family_matches_name_sot() -> None:
     )
 
 
-def test_type_retrospective_is_not_in_policy() -> None:
-    """type:retrospective stays out of policy pending its #972 retirement (defer)."""
+def test_type_retrospective_stays_retired_from_policy() -> None:
+    """type:retrospective was retired outright by #972, never folded into policy."""
     policy_names = {entry.get("name") for entry in _policy_labels()}
-    assert _retro_labels.TYPE_RETROSPECTIVE not in policy_names, (
-        f"{_retro_labels.TYPE_RETROSPECTIVE!r} was added to label-policy.toml, but "
-        "#2442 batch 1 deferred its SoT home to #972; it must not be folded in yet."
+    assert "type:retrospective" not in policy_names, (
+        "'type:retrospective' was added to label-policy.toml, but #972 retired it "
+        "outright (backfilled to type:docs, pruned from the live catalog); it must "
+        "not be re-added."
     )
 
 
