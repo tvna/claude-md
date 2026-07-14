@@ -33,6 +33,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 import _retro_labels
+import labels_apply
 
 pytestmark = pytest.mark.shard_ci_ops
 
@@ -93,3 +94,27 @@ def test_retro_family_entries_carry_identity(field: str) -> None:
             f"retro label {entry.get('name')!r} is missing a non-empty {field!r} "
             "in label-policy.toml"
         )
+
+
+def test_retro_labels_are_in_derived_live_catalog() -> None:
+    """Prune-safety (#1119): every retro:* constant must appear in the live
+    catalog derived from the policy by ``labels_apply.load_sot_from_policy``,
+    which keeps only ``status in {keep, rename}`` entries.
+
+    ``test_policy_retro_family_matches_name_sot`` above only couples the retro
+    NAMES; it stays green if a future edit keeps ``family = "retro"`` and the
+    name but flips a retro entry to ``status = "add"``. That regression would
+    silently drop the label from the derived catalog, letting an
+    ``apply-labels.yml`` ``prune=true`` run delete the live retro label again
+    (the #1119 accident). This test asserts the live-status condition directly,
+    so such drift fails here first. Refs #2499, #1119.
+    """
+    catalog_names = {
+        str(entry["name"]) for entry in labels_apply.load_sot_from_policy(LABEL_POLICY)
+    }
+    missing = sorted(set(_retro_labels.ALL_RETRO_LABELS) - catalog_names)
+    assert not missing, (
+        f"retro labels {missing} are not in the policy-derived live catalog; they "
+        "must be status keep/rename so an apply-labels.yml prune run cannot delete "
+        "them (#1119)."
+    )
