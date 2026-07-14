@@ -28,9 +28,9 @@ Read every file fully before writing a single line.
 2. `docs/proposals/config-ssot-duplicate-fact-inventory.md`: the #1984
    constraint (references, not values); the registry must never restate a
    value owned elsewhere.
-3. `.github/label-policy.toml` and `.github/labels.json`: label catalog
-   plus rename/retired tables the validator resolves label strings
-   against.
+3. `.github/label-policy.toml`: the single label SoT (derived catalog
+   plus rename/retired tables) the validator resolves label strings
+   against; the prior `.github/labels.json` catalog was retired in #2499.
 4. `docs/runbooks/issue-triage.md` (section "Agent routing"): the prose
    routing table the `label_routing` block encodes verbatim.
 5. `scripts/scan_doc_graph_registration.py`: the closest existing
@@ -58,8 +58,9 @@ Deliverables, all in one PR:
   commentary in description fields.
 - `scripts/scan_ssot_schema.py`: verify subcommand; validates shape
   against the schema AND referential integrity (paths tracked, ids
-  resolve; `label_routing` labels resolve against labels.json ONLY,
-  `label_consumers` labels resolve against labels.json unioned with
+  resolve; `label_routing` labels resolve against the label-policy.toml
+  derived catalog ONLY, `label_consumers` labels resolve against that
+  derived catalog unioned with
   label-policy rename_from and retired tables; `gates[].kind` is
   script or native, with `script` respectively `native_rule` present
   per kind). Fail loud, exit 1 with

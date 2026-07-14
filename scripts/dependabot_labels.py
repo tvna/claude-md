@@ -1,17 +1,23 @@
 #!/usr/bin/env python3
-"""Verify every label string in ``.github/dependabot.yml`` is defined in
-``.github/labels.json`` (the labels source of truth).
+"""Verify every label string in ``.github/dependabot.yml`` is defined in the
+label catalog derived from ``.github/label-policy.toml`` (the single label SoT).
 
 Closes the deterministic gate gap that produced #138: Dependabot's
 ``The following labels could not be found: 'dependencies'`` comment on
 every PR (reproducer: PR #119) stemmed from a label referenced in
-``dependabot.yml`` but missing from ``labels.json``.
+``dependabot.yml`` but missing from the label catalog.
+
+The label identity SoT is ``.github/label-policy.toml`` ``[[labels]]``
+(Refs #2499, #2442); the defined names are derived via
+``labels_apply.load_sot_from_policy`` (``status in {keep, rename}``). The
+old ``.github/labels.json`` reader was retired once every consumer read the
+policy directly.
 
 Avoids a PyYAML dependency by parsing the narrow subset of YAML used
 by Dependabot's ``labels:`` list: a key named exactly ``labels`` at
 any indent, followed by a contiguous run of ``- value`` items at a
 deeper indent. Inline comments and ``#`` characters inside label
-values are NOT supported; the repo's labels.json names contain no
+values are NOT supported; the repo's label names contain no
 ``#``, and Dependabot's schema has no inline-comment idiom here.
 
 Exit codes:
@@ -25,10 +31,7 @@ Tested by ``tests/test_dependabot_labels.py``. CLAUDE.md section 3
 from __future__ import annotations
 
 import argparse
-import json
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import labels_apply
 
@@ -70,66 +73,12 @@ def parse_dependabot_labels(yaml_text: str) -> list[str]:
     return labels
 
 
-@dataclass(frozen=True)
-class LabelDefinition:
-    """Typed boundary model for one .github/labels.json entry."""
-
-    name: str
-    color: str
-    description: str
-
-    @classmethod
-    def from_raw(cls, raw: Any, index: int) -> LabelDefinition:
-        path = f"labels.json[{index}]"
-        if not isinstance(raw, dict):
-            raise ValueError(f"{path} must be an object")
-
-        expected = {"name", "color", "description"}
-        missing = sorted(expected - raw.keys())
-        if missing:
-            raise ValueError(
-                f"{path} missing required field(s): {', '.join(missing)}"
-            )
-        unexpected = sorted(raw.keys() - expected)
-        if unexpected:
-            raise ValueError(
-                f"{path} has unsupported field(s): {', '.join(unexpected)}"
-            )
-
-        name = _required_string(raw, "name", path)
-        color = _required_string(raw, "color", path)
-        description = _required_string(raw, "description", path, allow_empty=True)
-        if len(color) != 6 or any(
-            char not in "0123456789abcdefABCDEF" for char in color
-        ):
-            raise ValueError(f"{path}.color must be exactly six hexadecimal digits")
-
-        return cls(name=name, color=color, description=description)
-
-
-def load_sot_labels(json_text: str) -> list[LabelDefinition]:
-    """Return typed label definitions from a labels.json document."""
-    raw_labels = json.loads(json_text)
-    if not isinstance(raw_labels, list):
-        raise ValueError("labels.json must be a JSON array")
-    return [
-        LabelDefinition.from_raw(raw_label, index)
-        for index, raw_label in enumerate(raw_labels)
-    ]
-
-
-def load_sot_label_names(json_text: str) -> set[str]:
-    """Return the set of ``name`` fields from a labels.json document."""
-    return {label.name for label in load_sot_labels(json_text)}
-
-
 def load_sot_label_names_from_policy(policy_path: Path) -> set[str]:
     """Return the live label name set, derived from label-policy.toml.
 
-    Delegates to :func:`labels_apply.load_sot_from_policy` (#2442 Phase B
-    batch 1) instead of re-deriving the keep/rename logic a second time. Not
-    wired into the production CLI path by default; see the ``--source`` flag
-    on :func:`main`.
+    Delegates to :func:`labels_apply.load_sot_from_policy` (the ``status in
+    {keep, rename}`` catalog) so this gate reads the single authored label SoT
+    rather than a second copy.
     """
     catalog = labels_apply.load_sot_from_policy(policy_path)
     return {str(entry["name"]) for entry in catalog}
@@ -146,32 +95,14 @@ def _unquote(value: str) -> str:
     return value
 
 
-def _required_string(
-    raw: dict[str, Any],
-    key: str,
-    path: str,
-    *,
-    allow_empty: bool = False,
-) -> str:
-    value = raw[key]
-    if not isinstance(value, str) or (not allow_empty and not value):
-        empty = "" if allow_empty else "non-empty "
-        raise ValueError(f"{path}.{key} must be a {empty}string")
-    return value
-
-
 def _cmd_verify(args: argparse.Namespace) -> int:
     dependabot_path = Path(args.dependabot)
-    labels_path = Path(args.labels)
     label_policy_path = Path(args.label_policy)
 
     if not dependabot_path.is_file():
         print(f"::error::dependabot file not found: {dependabot_path}")
         return 1
-    if not labels_path.is_file():
-        print(f"::error::labels SoT not found: {labels_path}")
-        return 1
-    if args.source == "label-policy" and not label_policy_path.is_file():
+    if not label_policy_path.is_file():
         print(f"::error::label policy not found: {label_policy_path}")
         return 1
 
@@ -179,11 +110,8 @@ def _cmd_verify(args: argparse.Namespace) -> int:
         referenced = parse_dependabot_labels(
             dependabot_path.read_text(encoding="utf-8")
         )
-        if args.source == "label-policy":
-            defined = load_sot_label_names_from_policy(label_policy_path)
-        else:
-            defined = load_sot_label_names(labels_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError, json.JSONDecodeError) as error:
+        defined = load_sot_label_names_from_policy(label_policy_path)
+    except (OSError, ValueError) as error:
         print(f"::error::{error}")
         return 1
 
@@ -193,11 +121,11 @@ def _cmd_verify(args: argparse.Namespace) -> int:
             print(
                 f"::error file={dependabot_path}::"
                 f"Label '{name}' referenced in {dependabot_path} "
-                f"is not defined in {labels_path}."
+                f"is not defined in {label_policy_path}."
             )
         print(
             f"::error::Dependabot label drift: {len(drift)} label(s) "
-            f"missing from {labels_path}. Add them to the SoT (then run "
+            f"missing from {label_policy_path}. Add them to the policy (then run "
             f"apply-labels.yml workflow_dispatch) or remove them from "
             f"{dependabot_path}. See #138."
         )
@@ -205,7 +133,7 @@ def _cmd_verify(args: argparse.Namespace) -> int:
 
     print(
         f"OK: {len(set(referenced))} unique label(s) from "
-        f"{dependabot_path} all resolve in {labels_path}."
+        f"{dependabot_path} all resolve in {label_policy_path}."
     )
     return 0
 
@@ -216,7 +144,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p_verify = sub.add_parser(
         "verify",
-        help="Verify every label in dependabot.yml is defined in labels.json.",
+        help="Verify every label in dependabot.yml is defined in label-policy.toml.",
     )
     p_verify.add_argument(
         "--dependabot",
@@ -224,25 +152,9 @@ def main(argv: list[str] | None = None) -> int:
         help="Path to dependabot.yml (default: .github/dependabot.yml).",
     )
     p_verify.add_argument(
-        "--labels",
-        default=".github/labels.json",
-        help="Path to labels SoT JSON (default: .github/labels.json).",
-    )
-    p_verify.add_argument(
         "--label-policy",
         default=".github/label-policy.toml",
         help="Path to label-policy.toml (default: .github/label-policy.toml).",
-    )
-    p_verify.add_argument(
-        "--source",
-        choices=["labels-json", "label-policy"],
-        default="labels-json",
-        help=(
-            "Which file supplies the defined label names. Default labels-json "
-            "preserves current behavior; label-policy derives names from "
-            "label-policy.toml [[labels]] instead (Refs #2442 Phase B batch 2; "
-            "not the production default yet)."
-        ),
     )
     p_verify.set_defaults(func=_cmd_verify)
 

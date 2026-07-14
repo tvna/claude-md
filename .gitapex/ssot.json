@@ -10,13 +10,7 @@
       "id": "label-policy",
       "path": ".github/label-policy.toml",
       "format": "toml",
-      "authority": "label taxonomy design: families, renames, retirements, area paths"
-    },
-    {
-      "id": "labels-live",
-      "path": ".github/labels.json",
-      "format": "json",
-      "authority": "live label catalog applied to GitHub"
+      "authority": "single label SoT: families, identity, renames, retirements, area paths, and the live catalog applied to GitHub"
     },
     {
       "id": "agent-hooks-source",
@@ -169,7 +163,6 @@
       ],
       "trigger": "mcp__github__issue_write create",
       "policy_refs": [
-        "labels-live",
         "label-policy"
       ],
       "cluster": null,
@@ -538,14 +531,14 @@
       "id": "dependabot-labels",
       "kind": "script",
       "script": "scripts/dependabot_labels.py",
-      "rule": "verify every label string in .github/dependabot.yml is defined in .github/labels.json (the labels source of truth)",
+      "rule": "verify every label string in .github/dependabot.yml is defined in .github/label-policy.toml (the single label SoT)",
       "planes": [
         "pre-push",
         "ci"
       ],
       "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
       "policy_refs": [
-        "labels-live"
+        "label-policy"
       ],
       "cluster": null,
       "tracking_issue": null
@@ -826,23 +819,6 @@
       ],
       "cluster": null,
       "tracking_issue": null
-    },
-    {
-      "id": "scan-label-sot-drift",
-      "kind": "script",
-      "script": "scripts/scan_label_sot_drift.py",
-      "rule": "deterministic gate: labels.json name/description/color stays in parity with label-policy.toml [[labels]]",
-      "planes": [
-        "pre-push",
-        "ci"
-      ],
-      "trigger": "git push (scripts/preflight_all.py) and CI (pull_request workflow)",
-      "policy_refs": [
-        "labels-live",
-        "label-policy"
-      ],
-      "cluster": null,
-      "tracking_issue": 2442
     },
     {
       "id": "scan-compile-from-source",

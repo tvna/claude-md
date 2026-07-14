@@ -1,9 +1,12 @@
 # Label Taxonomy Standard
 
 This standard is the adopted design contract for repository labels after
-issue #970. The live label catalog remains `.github/labels.json` until the
-migration issue #972 applies the design. The machine-readable design source
-is `.github/label-policy.toml`.
+issue #970. The machine-readable design source and single authored source of
+truth is `.github/label-policy.toml`; the live GitHub catalog is derived from
+its `[[labels]]` entries (`status` in keep/rename) by
+`labels_apply.load_sot_from_policy`. The prior `.github/labels.json` catalog
+was retired in #2499. The migration issue #972 still owns applying the wider
+design (renames, retirements, area additions).
 
 ## Scope
 
@@ -32,15 +35,16 @@ after the terminal PR event. That exception does not create `area:retro`.
 
 | File | Role |
 |---|---|
-| `.github/label-policy.toml` | Adopted design contract and target label policy |
-| `.github/labels.json` | Live GitHub label apply source; the #972 renames batch (#2139) flips its five renamed entries |
+| `.github/label-policy.toml` | Adopted design contract, target label policy, and single authored source of truth for the applied catalog |
 | `docs/standards/label-taxonomy.md` | Human-readable taxonomy standard |
 | `docs/runbooks/issue-triage.md` | Operator procedure and routing runbook |
 
 The TOML policy records target labels, family cardinality, rename sources,
-retired labels, and area-to-path mappings. The JSON catalog now carries the
-five final rename names (#972 renames batch, #2139); `labels_apply.py` reads the
-`rename_from` map from this TOML to rename the live labels in place so existing
+retired labels, and area-to-path mappings. The live GitHub catalog is derived
+from its `[[labels]]` entries whose `status` is `keep` or `rename`
+(`labels_apply.load_sot_from_policy`); the retired `.github/labels.json` catalog
+(#2499) is no longer a separate SoT. `labels_apply.py` reads the `rename_from`
+map from this TOML to rename the live labels in place so existing
 assignments are preserved. Retirements and area additions are otherwise
 deferred to later #972 batches and must not be applied to the catalog before
 then. The one exception: `area:ci-ops`, `area:governance`, and
@@ -50,20 +54,21 @@ and the scoped `[rollout].area_addition_exception` entry in
 `.github/label-policy.toml`. No other area label is affected; the remaining
 #972 area batch stays deferred.
 
-For the labels shared by both files, `.github/label-policy.toml` `[[labels]]`
-is the single authored source of truth for label identity (name, description,
-color); `.github/labels.json` must match it. `scripts/scan_label_sot_drift.py`
-is the deterministic gate that enforces this parity and fails on any drift
-(Refs #2442, Phase A). The five `retro:*` labels are authored in `[[labels]]`
-under the `retro` family (Refs #2442, batch 1); their identity lives in the
-TOML while their names remain a Python constant in `scripts/_retro_labels.py`,
-and `tests/test_retro_labels_in_policy.py` couples the two so they cannot drift.
-`type:retrospective` was the last remaining exemption from the parity gate;
-the #972 retirement batch retired it outright (backfilled to `type:docs`,
-pruned from the live catalog) rather than folding it into the policy, so the
-gate now has no exemptions. The 11 `area:*` labels declared only in
-`[[labels]]` are not yet in the live catalog and are validated only in the
-labels.json-to-policy direction.
+`.github/label-policy.toml` `[[labels]]` is the single authored source of
+truth for label identity (name, description, color); the live GitHub catalog is
+derived from it, so there is no second file to keep in parity. The former
+`scripts/scan_label_sot_drift.py` gate compared `.github/labels.json` to the
+policy and was removed together with `labels.json` in #2499 (Refs #2442, Phase
+A), since the drift it guarded can no longer occur. The five `retro:*` labels
+are authored in `[[labels]]` under the `retro` family (Refs #2442, batch 1);
+their identity lives in the TOML while their names remain a Python constant in
+`scripts/_retro_labels.py`, and `tests/test_retro_labels_in_policy.py` couples
+the two so they cannot drift. `type:retrospective` was the last remaining
+exemption from the retired parity gate; the #972 retirement batch retired it
+outright (backfilled to `type:docs`, pruned from the live catalog) rather than
+folding it into the policy. The 11 `area:*` labels declared with
+`status = "add"` in `[[labels]]` remain design-only and are not yet in the live
+derived catalog.
 
 ## Final Label Families
 
@@ -192,7 +197,7 @@ single idempotent comment on the #178 security umbrella (posted weekly by the
 instead of stamping a label onto whichever item triggered a run. The
 `intel-needed` / `response-needed` *classifications* survive only as descriptors
 in that aggregated comment, not as live labels. The label definitions were
-removed from `.github/labels.json` and `.github/label-policy.toml`, and the
+removed from the label SoT `.github/label-policy.toml`, and the
 live per-item assignments are swept by the owner-driven prune dispatch. Source
 outages do not prove safety. See
 [`docs/runbooks/issue-triage.md`](../runbooks/issue-triage.md#threat-retired)
@@ -292,8 +297,9 @@ triage report. Source of truth: the label names are the Python constants in
 `scripts/_retro_labels.py` (`ALL_RETRO_LABELS`), imported at runtime; their
 identity (description/color) is authored in `.github/label-policy.toml`
 `[[labels]]` under `family = "retro"`. `tests/test_retro_labels_in_policy.py`
-couples the two, and `scripts/scan_label_sot_drift.py` keeps `labels.json` in
-parity with the policy. The related `type:retrospective` label was never part
+couples the two; the policy is the single authored catalog SoT, so no separate
+`labels.json` parity gate is needed (the former `scripts/scan_label_sot_drift.py`
+was retired with `labels.json` in #2499). The related `type:retrospective` label was never part
 of this family and was never authored in the policy; the #972 retirement
 batch retired it outright rather than migrating it (see the operator runbook
 `docs/runbooks/retro-labels.md`). Refs #2442, #558, #972.

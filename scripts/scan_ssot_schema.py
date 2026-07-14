@@ -20,10 +20,11 @@ Referential-integrity checks (which JSON Schema cannot express) then enforce:
   ``label_consumers[].path`` resolves to a tracked file;
 - every ``gates[].policy_refs[]`` names an existing ``policy_sources[].id``;
 - every non-null ``gates[].cluster`` names an existing ``clusters[].id``;
-- every label in ``label_routing`` resolves against the live catalog
-  ``.github/labels.json`` ONLY (a renamed-away or retired name would validate
-  but never match, silently falling through to the default route);
-- every label in ``label_consumers`` resolves against ``.github/labels.json``
+- every label in ``label_routing`` resolves against the live catalog derived
+  from ``.github/label-policy.toml`` (``status in {keep, rename}``) ONLY (a
+  renamed-away or retired name would validate but never match, silently
+  falling through to the default route);
+- every label in ``label_consumers`` resolves against that derived catalog
   unioned with the ``rename_from`` and ``retired_labels`` tables of
   ``.github/label-policy.toml`` (a legacy name may legitimately be recorded
   mid-migration);
@@ -40,8 +41,8 @@ draft-2020-12 subset engine (schema-shape validation) lives in the shared
 Contract:
 - Inputs: the ``verify`` subcommand; ``--registry`` (default
   ``.gitapex/ssot.json``); ``--schema`` (default ``.gitapex/ssot.schema.json``);
-  ``--labels`` (default ``.github/labels.json``); ``--label-policy`` (default
-  ``.github/label-policy.toml``).
+  ``--label-policy`` (default ``.github/label-policy.toml``, the single label
+  SoT).
 - Outputs: ``::error::`` annotations on stderr, one per violation; an ``OK:``
   line on success; exit 0 when the registry validates, exit 1 on any
   violation, exit 64 on an unrecognised subcommand.
@@ -69,7 +70,6 @@ _SCRIPT = "scan_ssot_schema"
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _REGISTRY_PATH = ".gitapex/ssot.json"
 _SCHEMA_PATH = ".gitapex/ssot.schema.json"
-_LABELS_PATH = ".github/labels.json"
 _LABEL_POLICY_PATH = ".github/label-policy.toml"
 
 
@@ -78,24 +78,13 @@ _LABEL_POLICY_PATH = ".github/label-policy.toml"
 # ---------------------------------------------------------------------------
 
 
-def live_label_names(labels_data: object) -> frozenset[str]:
-    """Return the set of label names in the live catalog (``labels.json``)."""
-    if not isinstance(labels_data, list):
-        return frozenset()
-    return frozenset(
-        entry["name"]
-        for entry in labels_data
-        if isinstance(entry, dict) and isinstance(entry.get("name"), str)
-    )
-
-
 def live_label_names_from_policy(policy_path: Path) -> frozenset[str]:
     """Return the live catalog's label names, derived from label-policy.toml.
 
-    Delegates to :func:`labels_apply.load_sot_from_policy` (added in #2442
-    Phase B batch 1) instead of re-deriving the keep/rename logic here a
-    second time. Not wired into the production CLI path by default; see the
-    ``--source`` flag on :func:`main`.
+    Delegates to :func:`labels_apply.load_sot_from_policy` (the ``status in
+    {keep, rename}`` catalog) instead of re-deriving the keep/rename logic
+    here a second time. ``.github/label-policy.toml`` is the single label SoT
+    (Refs #2499, #2442); the old ``.github/labels.json`` catalog was retired.
     """
     catalog = labels_apply.load_sot_from_policy(policy_path)
     return frozenset(str(entry["name"]) for entry in catalog)
@@ -240,7 +229,7 @@ def _check_routing(registry: dict[str, object], live_labels: frozenset[str]) -> 
         if label not in live_labels:
             errors.append(
                 f"label_routing: label {label!r} does not resolve against the live "
-                f"catalog {_LABELS_PATH}"
+                f"catalog derived from {_LABEL_POLICY_PATH}"
             )
 
     rules = _as_list(routing.get("rules"))
@@ -268,8 +257,8 @@ def _check_consumers(
                 if label not in consumer_labels:
                     errors.append(
                         f"label_consumers[{i}] ({con.get('path')!r}): {field} label "
-                        f"{label!r} does not resolve against {_LABELS_PATH} unioned "
-                        f"with the label-policy rename_from and retired tables"
+                        f"{label!r} does not resolve against the catalog derived from "
+                        f"{_LABEL_POLICY_PATH} unioned with its rename_from and retired tables"
                     )
     return errors
 
@@ -354,31 +343,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("command", help="Must be 'verify'.")
     parser.add_argument("--registry", default=_REGISTRY_PATH)
     parser.add_argument("--schema", default=_SCHEMA_PATH)
-    parser.add_argument("--labels", default=_LABELS_PATH)
     parser.add_argument("--label-policy", default=_LABEL_POLICY_PATH)
-    parser.add_argument(
-        "--source",
-        choices=["labels-json", "label-policy"],
-        default="labels-json",
-        help=(
-            "Which file supplies the live label names for the label_routing/"
-            "label_consumers checks. Default labels-json preserves current "
-            "behavior; label-policy derives names from label-policy.toml "
-            "[[labels]] instead (Refs #2442 Phase B batch 2; not the "
-            "production default yet)."
-        ),
-    )
     args = parser.parse_args(argv)
 
     registry_path = _REPO_ROOT / args.registry
     schema_path = _REPO_ROOT / args.schema
-    labels_path = _REPO_ROOT / args.labels
     label_policy_path = _REPO_ROOT / args.label_policy
 
     for label, path in (
         ("registry", registry_path),
         ("schema", schema_path),
-        ("labels", labels_path),
         ("label-policy", label_policy_path),
     ):
         if not path.exists():
@@ -388,12 +362,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         registry = _load_json(registry_path)
         schema = _load_json(schema_path)
-        labels_data = _load_json(labels_path)
         label_policy = tomllib.loads(label_policy_path.read_text(encoding="utf-8"))
-        if args.source == "label-policy":
-            live_labels = live_label_names_from_policy(label_policy_path)
-        else:
-            live_labels = live_label_names(labels_data)
+        live_labels = live_label_names_from_policy(label_policy_path)
     except (OSError, ValueError, tomllib.TOMLDecodeError) as exc:
         print(f"::error::{_SCRIPT}: cannot parse an input file: {exc}", file=sys.stderr)
         return 1

@@ -153,21 +153,13 @@ def fetch_live_labels(
     return labels
 
 
-def load_sot(path: Path) -> list[dict[str, Any]]:
-    with path.open(encoding="utf-8") as handle:
-        sot = json.load(handle)
-    validate_sot(sot)
-    return sot
-
-
 def load_rename_map(policy_path: Path) -> dict[str, str]:
     """Return ``{final_name: rename_from}`` for every renamed label in policy.
 
-    The live catalog (labels.json) keeps a strict ``{name,color,description}``
-    schema (``scripts/dependabot_labels.py`` rejects extra keys), so the
-    old->new rename intent lives only in ``.github/label-policy.toml`` (the
-    adopted design contract). ``run`` consults this map to rename a label in
-    place instead of dropping and recreating it.
+    The rename intent (old->new) is authored only in ``.github/label-policy.toml``
+    (the single label SoT, Refs #2499) via the ``rename_from`` field on the
+    renamed entries. ``run`` consults this map to rename a label in place instead
+    of dropping and recreating it.
     """
     policy = _load_toml(policy_path)
     rename_map: dict[str, str] = {}
@@ -246,7 +238,7 @@ def run(
     live_labels: list[dict[str, Any]] | None = None,
     rename_map: dict[str, str] | None = None,
     apply_call: Callable[..., tuple[int, str]] = github_apply_call,
-    sot_loader: Callable[[Path], list[dict[str, Any]]] = load_sot,
+    sot_loader: Callable[[Path], list[dict[str, Any]]] = load_sot_from_policy,
 ) -> int:
     sot = sot_loader(sot_path)
     live = live_labels if live_labels is not None else fetch_live_labels(repo, token)
@@ -343,18 +335,6 @@ def run(
     return 0
 
 
-def _resolve_sot(args: argparse.Namespace) -> tuple[Path, Callable[[Path], list[dict[str, Any]]]]:
-    """Resolve the ``(sot_path, sot_loader)`` pair for ``--source``.
-
-    Single place deciding the label-policy vs labels-json pairing, so
-    ``validate`` and ``plan``/``apply`` in ``main()`` cannot pick the path
-    from one source and the loader from the other.
-    """
-    if args.source == "label-policy":
-        return args.policy, load_sot_from_policy
-    return args.sot, load_sot
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -364,9 +344,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        sot_path, sot_loader = _resolve_sot(args)
+        # label-policy.toml is the single label SoT (Refs #2499, #2442); the
+        # live catalog is derived from its status in {keep, rename} entries.
         if args.command == "validate":
-            sot_loader(sot_path)
+            load_sot_from_policy(args.policy)
             return 0
         token = os.environ.get("GH_TOKEN", "")
         if not token:
@@ -375,13 +356,13 @@ def main(argv: list[str] | None = None) -> int:
         return run(
             mode=args.command,
             repo=args.repo,
-            sot_path=sot_path,
+            sot_path=args.policy,
             prune=_parse_bool(args.prune),
             dry_run=_parse_bool(args.dry_run),
             summary_file=args.summary_file,
             token=token,
             rename_map=load_rename_map(args.policy),
-            sot_loader=sot_loader,
+            sot_loader=load_sot_from_policy,
         )
     except (OSError, json.JSONDecodeError, RuntimeError, ValueError) as error:
         print(f"::error::{error}")
@@ -390,20 +371,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def _add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--repo", default=os.environ.get("REPO", ""))
-    parser.add_argument("--sot", type=Path, default=Path(".github/labels.json"))
     parser.add_argument("--policy", type=Path, default=Path(".github/label-policy.toml"))
-    parser.add_argument(
-        "--source",
-        choices=["labels-json", "label-policy"],
-        default="labels-json",
-        help=(
-            "Which file supplies the live label catalog. Default labels-json "
-            "preserves current apply-labels.yml behavior; label-policy derives "
-            "the catalog from label-policy.toml [[labels]] instead (Refs #2442 "
-            "Phase B batch 1; not yet wired into apply-labels.yml, which stays "
-            "on labels-json until a later batch)."
-        ),
-    )
     parser.add_argument("--prune", default="false")
     parser.add_argument("--dry-run", default="true")
     parser.add_argument("--summary-file", type=Path, default=Path(os.environ.get("GITHUB_STEP_SUMMARY", "/dev/null")))

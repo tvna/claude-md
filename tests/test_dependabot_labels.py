@@ -7,12 +7,11 @@ The ``scripts/`` directory is added to ``sys.path`` via the
 Mirrors the structure of ``tests/test_issue_link.py``: pure
 functions get focused unit tests; the CLI/file boundary is exercised
 via tmp_path. See #138 (deterministic harness for dependabot label
-drift).
+drift) and #2499 (label-policy.toml is the single label SoT).
 """
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import dependabot_labels as dl
@@ -123,109 +122,6 @@ class TestParseDependabotLabels:
 
 
 # ---------------------------------------------------------------------------
-# load_sot_label_names
-# ---------------------------------------------------------------------------
-
-
-class TestLoadSotLabelNames:
-    def test_empty_array(self) -> None:
-        assert dl.load_sot_label_names("[]") == set()
-
-    def test_load_sot_labels_returns_typed_models(self) -> None:
-        src = json.dumps(
-            [{"name": "dependencies", "color": "0366d6", "description": "x"}]
-        )
-        assert dl.load_sot_labels(src) == [
-            dl.LabelDefinition(
-                name="dependencies",
-                color="0366d6",
-                description="x",
-            )
-        ]
-
-    def test_single_entry(self) -> None:
-        src = json.dumps([{"name": "dependencies", "color": "0366d6", "description": "x"}])
-        assert dl.load_sot_label_names(src) == {"dependencies"}
-
-    def test_multiple_entries(self) -> None:
-        src = json.dumps(
-            [
-                {"name": "a", "color": "000000", "description": ""},
-                {"name": "b", "color": "ffffff", "description": ""},
-            ]
-        )
-        assert dl.load_sot_label_names(src) == {"a", "b"}
-
-    def test_not_a_list_raises(self) -> None:
-        with pytest.raises(ValueError, match="must be a JSON array"):
-            dl.load_sot_label_names('{"name": "x"}')
-
-    def test_entry_missing_name_raises(self) -> None:
-        with pytest.raises(
-            ValueError,
-            match=r"labels\.json\[0\] missing required field\(s\): name",
-        ):
-            dl.load_sot_label_names('[{"color": "000000", "description": "x"}]')
-
-    def test_entry_empty_name_raises(self) -> None:
-        with pytest.raises(
-            ValueError,
-            match=r"labels\.json\[0\]\.name must be a non-empty string",
-        ):
-            dl.load_sot_label_names(
-                '[{"name": "", "color": "000000", "description": "x"}]'
-            )
-
-    def test_entry_not_object_raises(self) -> None:
-        with pytest.raises(ValueError, match=r"labels\.json\[0\] must be an object"):
-            dl.load_sot_label_names('["just-a-string"]')
-
-    def test_entry_missing_multiple_fields_raises(self) -> None:
-        with pytest.raises(
-            ValueError,
-            match=r"labels\.json\[0\] missing required field\(s\): color, description",
-        ):
-            dl.load_sot_label_names('[{"name": "dependencies"}]')
-
-    def test_entry_unexpected_field_raises(self) -> None:
-        src = json.dumps(
-            [
-                {
-                    "name": "dependencies",
-                    "color": "0366d6",
-                    "description": "x",
-                    "aliases": [],
-                }
-            ]
-        )
-        with pytest.raises(
-            ValueError,
-            match=r"labels\.json\[0\] has unsupported field\(s\): aliases",
-        ):
-            dl.load_sot_label_names(src)
-
-    def test_entry_invalid_color_raises(self) -> None:
-        src = json.dumps(
-            [{"name": "dependencies", "color": "not-hex", "description": "x"}]
-        )
-        with pytest.raises(
-            ValueError,
-            match=r"labels\.json\[0\]\.color must be exactly six hexadecimal digits",
-        ):
-            dl.load_sot_label_names(src)
-
-    def test_entry_non_string_description_raises(self) -> None:
-        src = json.dumps(
-            [{"name": "dependencies", "color": "0366d6", "description": None}]
-        )
-        with pytest.raises(
-            ValueError,
-            match=r"labels\.json\[0\]\.description must be a string",
-        ):
-            dl.load_sot_label_names(src)
-
-
-# ---------------------------------------------------------------------------
 # find_drift
 # ---------------------------------------------------------------------------
 
@@ -250,17 +146,6 @@ class TestFindDrift:
 
 
 class TestLoadSotLabelNamesFromPolicy:
-    def test_matches_labels_json_derivation_on_real_repo_files(self) -> None:
-        """Integration proof for #2442 Phase B batch 2."""
-        repo_root = Path(__file__).resolve().parent.parent
-        from_json = dl.load_sot_label_names(
-            (repo_root / ".github" / "labels.json").read_text(encoding="utf-8")
-        )
-
-        from_policy = dl.load_sot_label_names_from_policy(repo_root / ".github" / "label-policy.toml")
-
-        assert from_policy == from_json
-
     def test_matches_synthetic_fixture(self, tmp_path: Path) -> None:
         policy_path = tmp_path / "label-policy.toml"
         policy_path.write_text(
@@ -271,6 +156,30 @@ class TestLoadSotLabelNamesFromPolicy:
                     'status = "keep"',
                     'description = "Dependency update workflow state."',
                     'color = "0366d6"',
+                ]
+            ),
+            encoding="utf-8",
+        )
+        names = dl.load_sot_label_names_from_policy(policy_path)
+
+        assert names == {"ops:dependencies"}
+
+    def test_status_add_excluded(self, tmp_path: Path) -> None:
+        policy_path = tmp_path / "label-policy.toml"
+        policy_path.write_text(
+            "\n".join(
+                [
+                    "[[labels]]",
+                    'name = "ops:dependencies"',
+                    'status = "keep"',
+                    'description = "x"',
+                    'color = "0366d6"',
+                    "",
+                    "[[labels]]",
+                    'name = "area:apm"',
+                    'status = "add"',
+                    'description = "Design-only, not live yet."',
+                    'color = "5319e7"',
                 ]
             ),
             encoding="utf-8",
@@ -293,15 +202,15 @@ class TestVerifyRepoFiles:
         """The actual files in this repo must not drift; this is the gate.
 
         If this test fails, either add the missing label to
-        .github/labels.json or remove it from .github/dependabot.yml.
+        .github/label-policy.toml or remove it from .github/dependabot.yml.
         """
         rc = dl.main(
             [
                 "verify",
                 "--dependabot",
                 str(REPO_ROOT / ".github" / "dependabot.yml"),
-                "--labels",
-                str(REPO_ROOT / ".github" / "labels.json"),
+                "--label-policy",
+                str(REPO_ROOT / ".github" / "label-policy.toml"),
             ]
         )
         captured = capsys.readouterr()
@@ -309,26 +218,43 @@ class TestVerifyRepoFiles:
 
 
 class TestVerifyCli:
+    @staticmethod
+    def _write_policy(path: Path, names: list[str]) -> None:
+        blocks = []
+        for name in names:
+            blocks.append(
+                "\n".join(
+                    [
+                        "[[labels]]",
+                        f'name = "{name}"',
+                        'status = "keep"',
+                        'description = "x"',
+                        'color = "0366d6"',
+                    ]
+                )
+            )
+        path.write_text("\n\n".join(blocks) or "", encoding="utf-8")
+
     def test_missing_dependabot_returns_1(
         self,
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        labels = tmp_path / "labels.json"
-        labels.write_text("[]", encoding="utf-8")
+        policy = tmp_path / "label-policy.toml"
+        self._write_policy(policy, ["dependencies"])
         rc = dl.main(
             [
                 "verify",
                 "--dependabot",
                 str(tmp_path / "missing.yml"),
-                "--labels",
-                str(labels),
+                "--label-policy",
+                str(policy),
             ]
         )
         assert rc == 1
         assert "dependabot file not found" in capsys.readouterr().out
 
-    def test_missing_labels_returns_1(
+    def test_missing_policy_returns_1(
         self,
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
@@ -340,12 +266,12 @@ class TestVerifyCli:
                 "verify",
                 "--dependabot",
                 str(dep),
-                "--labels",
-                str(tmp_path / "missing.json"),
+                "--label-policy",
+                str(tmp_path / "missing.toml"),
             ]
         )
         assert rc == 1
-        assert "labels SoT not found" in capsys.readouterr().out
+        assert "label policy not found" in capsys.readouterr().out
 
     def test_drift_detected_returns_1(
         self,
@@ -357,15 +283,15 @@ class TestVerifyCli:
             "    labels:\n      - \"ghost\"\n",
             encoding="utf-8",
         )
-        labels = tmp_path / "labels.json"
-        labels.write_text("[]", encoding="utf-8")
+        policy = tmp_path / "label-policy.toml"
+        self._write_policy(policy, ["dependencies"])
         rc = dl.main(
             [
                 "verify",
                 "--dependabot",
                 str(dep),
-                "--labels",
-                str(labels),
+                "--label-policy",
+                str(policy),
             ]
         )
         assert rc == 1
@@ -383,117 +309,51 @@ class TestVerifyCli:
             "    labels:\n      - \"dependencies\"\n",
             encoding="utf-8",
         )
-        labels = tmp_path / "labels.json"
-        labels.write_text(
-            json.dumps(
-                [{"name": "dependencies", "color": "0366d6", "description": "x"}]
-            ),
-            encoding="utf-8",
-        )
+        policy = tmp_path / "label-policy.toml"
+        self._write_policy(policy, ["dependencies"])
         rc = dl.main(
             [
                 "verify",
                 "--dependabot",
                 str(dep),
-                "--labels",
-                str(labels),
+                "--label-policy",
+                str(policy),
             ]
         )
         assert rc == 0
         assert "all resolve" in capsys.readouterr().out
 
-    def test_source_label_policy_uses_policy_derived_names(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    def test_malformed_policy_returns_1(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         dep = tmp_path / "dependabot.yml"
-        dep.write_text("    labels:\n      - \"ops:dependencies\"\n", encoding="utf-8")
+        dep.write_text("", encoding="utf-8")
         policy = tmp_path / "label-policy.toml"
         policy.write_text(
             "\n".join(
                 [
                     "[[labels]]",
-                    'name = "ops:dependencies"',
-                    'status = "keep"',
-                    'description = "Dependency update workflow state."',
+                    'name = "dependencies"',
+                    'status = "bogus"',
+                    'description = "x"',
                     'color = "0366d6"',
                 ]
             ),
             encoding="utf-8",
         )
-        labels = tmp_path / "labels.json"
-        labels.write_text(
-            json.dumps([{"name": "type:retrospective", "color": "c5def5", "description": "Auto-opened."}]),
-            encoding="utf-8",
-        )
-
         rc = dl.main(
             [
                 "verify",
                 "--dependabot",
                 str(dep),
-                "--labels",
-                str(labels),
                 "--label-policy",
                 str(policy),
-                "--source",
-                "label-policy",
-            ]
-        )
-
-        out = capsys.readouterr().out
-        assert rc == 0, out
-        assert "all resolve" in out
-
-    def test_malformed_labels_json_returns_1(
-        self,
-        tmp_path: Path,
-        capsys: pytest.CaptureFixture[str],
-    ) -> None:
-        dep = tmp_path / "dependabot.yml"
-        dep.write_text("", encoding="utf-8")
-        labels = tmp_path / "labels.json"
-        labels.write_text("{not json", encoding="utf-8")
-        rc = dl.main(
-            [
-                "verify",
-                "--dependabot",
-                str(dep),
-                "--labels",
-                str(labels),
             ]
         )
         assert rc == 1
         assert "::error::" in capsys.readouterr().out
-
-    def test_invalid_labels_schema_returns_1_with_clear_message(
-        self,
-        tmp_path: Path,
-        capsys: pytest.CaptureFixture[str],
-    ) -> None:
-        dep = tmp_path / "dependabot.yml"
-        dep.write_text("", encoding="utf-8")
-        labels = tmp_path / "labels.json"
-        labels.write_text(
-            json.dumps(
-                [{"name": "dependencies", "color": "not-hex", "description": "x"}]
-            ),
-            encoding="utf-8",
-        )
-        rc = dl.main(
-            [
-                "verify",
-                "--dependabot",
-                str(dep),
-                "--labels",
-                str(labels),
-            ]
-        )
-        assert rc == 1
-        out = capsys.readouterr().out
-        assert (
-            "::error::labels.json[0].color must be exactly six hexadecimal digits"
-            in out
-        )
 
 
 def test_main_block_exits_via_runpy(monkeypatch: pytest.MonkeyPatch) -> None:

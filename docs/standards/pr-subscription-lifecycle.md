@@ -29,9 +29,10 @@ human operators have a single deterministic mark to read.
 
 The label `ops:retro-opened` is added to the source PR by
 `scripts/auto_retro.py::apply_terminal_label` immediately after
-`post_back_link_comment` returns successfully. The SoT entry lives in
-[`.github/labels.json`](../../.github/labels.json) and is reconciled onto
-the repository by `apply-labels.yml`.
+`post_back_link_comment` returns successfully. The label's identity is
+authored in [`.github/label-policy.toml`](../../.github/label-policy.toml), from
+which the live catalog is derived and reconciled onto the repository by
+`apply-labels.yml`.
 
 A PR carrying this label has, by construction:
 
@@ -47,8 +48,8 @@ pipeline ran end-to-end.
 
 - Emission is the harness's responsibility. The constant
   `_TERMINAL_LABEL` in `scripts/auto_retro.py` and the SoT entry in
-  `.github/labels.json` are kept aligned by
-  `tests/test_auto_retro.py::test_terminal_label_aligned_with_labels_json`.
+  `.github/label-policy.toml` are kept aligned by
+  `tests/test_auto_retro.py::test_terminal_primary_label_aligned_with_policy_catalog`.
 - Label add is naturally idempotent at the GitHub API layer, so a
   re-run on the same PR is a no-op.
 - Failure to add the label is downgraded to `::warning::` and does

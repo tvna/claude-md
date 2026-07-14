@@ -2,11 +2,12 @@
 
 Verifies that:
 - An ``mcp__github__issue_write`` ``create`` lacking a ``layer:*`` or ``type:*``
-  label (validated against the labels SoT) is denied, naming the missing axis.
+  label (validated against the label-policy.toml catalog) is denied, naming the
+  missing axis.
 - A create carrying both axes passes through.
 - Non-create methods, off-target tools, and a labels value that is absent or the
   wrong type behave correctly.
-- A missing / malformed labels SoT fails open (no decision).
+- A missing / malformed policy SoT fails open (no decision).
 - The stdin/stdout boundary works end-to-end.
 """
 
@@ -36,20 +37,36 @@ def _reset_ssot_cache() -> Iterator[None]:
 
 
 _SOT = [
-    {"name": "layer:p1-goal-plan", "color": "1d76db", "description": "x"},
-    {"name": "layer:p4-safety-boundary", "color": "fbca04", "description": "x"},
-    {"name": "layer:meta", "color": "c5def5", "description": "x"},
-    {"name": "type:feat", "color": "a2eeef", "description": "x"},
-    {"name": "type:fix", "color": "d73a4a", "description": "x"},
-    {"name": "severity:security", "color": "b60205", "description": "x"},
-    {"name": "threat:intel-needed", "color": "000000", "description": "x"},
+    ("layer:p1-goal-plan", "1d76db"),
+    ("layer:p4-safety-boundary", "fbca04"),
+    ("layer:meta", "c5def5"),
+    ("type:feat", "a2eeef"),
+    ("type:fix", "d73a4a"),
+    ("severity:security", "b60205"),
 ]
 
 
+def _policy_toml(entries: list[tuple[str, str]]) -> str:
+    blocks = []
+    for name, color in entries:
+        blocks.append(
+            "\n".join(
+                [
+                    "[[labels]]",
+                    f'name = "{name}"',
+                    'status = "keep"',
+                    'description = "x"',
+                    f'color = "{color}"',
+                ]
+            )
+        )
+    return "\n\n".join(blocks)
+
+
 @pytest.fixture
-def labels_path(tmp_path: Path) -> Path:
-    path = tmp_path / "labels.json"
-    path.write_text(json.dumps(_SOT), encoding="utf-8")
+def policy_path(tmp_path: Path) -> Path:
+    path = tmp_path / "label-policy.toml"
+    path.write_text(_policy_toml(_SOT), encoding="utf-8")
     return path
 
 
@@ -67,97 +84,68 @@ class TestAxisPrefixes:
         assert gate.axis_prefixes() == (("layer", "layer:"), ("type", "type:"))
 
 
-class TestLoadAxisLabels:
-    def test_groups_names_by_axis_prefix(self, labels_path: Path) -> None:
-        axes = gate.load_axis_labels(labels_path)
+class TestLoadAxisLabelsFromPolicy:
+    def test_groups_names_by_axis_prefix(self, policy_path: Path) -> None:
+        axes = gate.load_axis_labels_from_policy(policy_path)
         assert axes["layer"] == frozenset(
             {"layer:p1-goal-plan", "layer:p4-safety-boundary", "layer:meta"}
         )
         assert axes["type"] == frozenset({"type:feat", "type:fix"})
 
-    def test_rejects_non_array(self, tmp_path: Path) -> None:
-        path = tmp_path / "labels.json"
-        path.write_text(json.dumps({"name": "layer:meta"}), encoding="utf-8")
-        with pytest.raises(ValueError, match="JSON array"):
-            gate.load_axis_labels(path)
+    def test_rejects_unknown_status(self, tmp_path: Path) -> None:
+        path = tmp_path / "label-policy.toml"
+        path.write_text(
+            "\n".join(
+                [
+                    "[[labels]]",
+                    'name = "layer:meta"',
+                    'status = "bogus"',
+                    'description = "x"',
+                    'color = "c5def5"',
+                ]
+            ),
+            encoding="utf-8",
+        )
+        with pytest.raises(ValueError, match="unrecognized"):
+            gate.load_axis_labels_from_policy(path)
 
     def test_every_required_axis_has_live_labels(self) -> None:
         # DRIFT GUARD (#3): the gate assumes each required axis's labels use the
         # "<axis>:" prefix. If a future label-policy family were made create-
         # mandatory but its labels used another naming convention (or had no
-        # labels defined in labels.json yet), load_axis_labels would return an
-        # empty valid set, missing_axes would silently skip it, and that axis
-        # would go unenforced. Assert every derived required axis resolves to at
-        # least one live label so such drift fails deterministically here.
-        axes = gate.load_axis_labels(gate._DEFAULT_LABELS_PATH)
+        # labels defined in the policy yet), load_axis_labels_from_policy would
+        # return an empty valid set, missing_axes would silently skip it, and that
+        # axis would go unenforced. Assert every derived required axis resolves to
+        # at least one live label so such drift fails deterministically here.
+        axes = gate.load_axis_labels_from_policy(gate._DEFAULT_POLICY_PATH)
         for axis, _prefix in gate.axis_prefixes():
-            assert axes.get(axis), f"required axis {axis!r} has no valid labels in the live SoT"
-
-
-class TestLoadAxisLabelsFromPolicy:
-    def test_matches_load_axis_labels_on_real_repo_files(self) -> None:
-        """Integration proof for #2442 Phase B batch 2: the TOML-derived axis
-        buckets must match the labels.json-derived buckets for the real repo
-        files. Not wired into decide()'s production path; test-only proof."""
-        repo_root = Path(__file__).resolve().parent.parent
-        policy_path = repo_root / ".github" / "label-policy.toml"
-        labels_path = repo_root / ".github" / "labels.json"
-
-        from_json = gate.load_axis_labels(labels_path)
-        from_policy = gate.load_axis_labels_from_policy(policy_path)
-
-        assert from_policy == from_json
-
-    def test_groups_names_by_axis_prefix(self, tmp_path: Path) -> None:
-        policy_path = tmp_path / "label-policy.toml"
-        policy_path.write_text(
-            "\n".join(
-                [
-                    "[[labels]]",
-                    'name = "layer:p1-goal-plan"',
-                    'status = "keep"',
-                    'description = "x"',
-                    'color = "1d76db"',
-                    "",
-                    "[[labels]]",
-                    'name = "type:fix"',
-                    'status = "keep"',
-                    'description = "x"',
-                    'color = "d73a4a"',
-                ]
-            ),
-            encoding="utf-8",
-        )
-        axes = gate.load_axis_labels_from_policy(policy_path)
-
-        assert axes["layer"] == frozenset({"layer:p1-goal-plan"})
-        assert axes["type"] == frozenset({"type:fix"})
+            assert axes.get(axis), f"required axis {axis!r} has no valid labels in the policy SoT"
 
 
 class TestMissingAxes:
-    def test_both_axes_present_is_empty(self, labels_path: Path) -> None:
-        axes = gate.load_axis_labels(labels_path)
+    def test_both_axes_present_is_empty(self, policy_path: Path) -> None:
+        axes = gate.load_axis_labels_from_policy(policy_path)
         assert gate.missing_axes(["layer:p4-safety-boundary", "type:fix"], axes) == []
 
-    def test_no_labels_reports_both(self, labels_path: Path) -> None:
-        axes = gate.load_axis_labels(labels_path)
+    def test_no_labels_reports_both(self, policy_path: Path) -> None:
+        axes = gate.load_axis_labels_from_policy(policy_path)
         assert gate.missing_axes([], axes) == ["layer", "type"]
 
-    def test_only_layer_reports_type(self, labels_path: Path) -> None:
-        axes = gate.load_axis_labels(labels_path)
+    def test_only_layer_reports_type(self, policy_path: Path) -> None:
+        axes = gate.load_axis_labels_from_policy(policy_path)
         assert gate.missing_axes(["layer:meta"], axes) == ["type"]
 
-    def test_only_type_reports_layer(self, labels_path: Path) -> None:
-        axes = gate.load_axis_labels(labels_path)
+    def test_only_type_reports_layer(self, policy_path: Path) -> None:
+        axes = gate.load_axis_labels_from_policy(policy_path)
         assert gate.missing_axes(["type:feat"], axes) == ["layer"]
 
-    def test_unregistered_axis_label_does_not_satisfy(self, labels_path: Path) -> None:
-        axes = gate.load_axis_labels(labels_path)
+    def test_unregistered_axis_label_does_not_satisfy(self, policy_path: Path) -> None:
+        axes = gate.load_axis_labels_from_policy(policy_path)
         assert gate.missing_axes(["layer:bogus", "type:fix"], axes) == ["layer"]
 
-    def test_unrelated_labels_ignored(self, labels_path: Path) -> None:
-        axes = gate.load_axis_labels(labels_path)
-        assert gate.missing_axes(["threat:intel-needed", "severity:security"], axes) == [
+    def test_unrelated_labels_ignored(self, policy_path: Path) -> None:
+        axes = gate.load_axis_labels_from_policy(policy_path)
+        assert gate.missing_axes(["severity:security"], axes) == [
             "layer",
             "type",
         ]
@@ -168,9 +156,9 @@ class TestMissingAxes:
 
 
 class TestDecide:
-    def test_under_labeled_create_is_denied(self, labels_path: Path) -> None:
+    def test_under_labeled_create_is_denied(self, policy_path: Path) -> None:
         decision = gate.decide(
-            "mcp__github__issue_write", _create_input(["type:fix"]), labels_path=labels_path
+            "mcp__github__issue_write", _create_input(["type:fix"]), policy_path=policy_path
         )
         assert decision is not None
         out = decision["hookSpecificOutput"]
@@ -178,31 +166,31 @@ class TestDecide:
         assert "layer:*" in out["permissionDecisionReason"]
         assert "#1246" in out["permissionDecisionReason"]
 
-    def test_fully_labeled_create_passes(self, labels_path: Path) -> None:
+    def test_fully_labeled_create_passes(self, policy_path: Path) -> None:
         decision = gate.decide(
             "mcp__github__issue_write",
             _create_input(["layer:p4-safety-boundary", "type:fix"]),
-            labels_path=labels_path,
+            policy_path=policy_path,
         )
         assert decision is None
 
-    def test_missing_labels_key_is_denied(self, labels_path: Path) -> None:
+    def test_missing_labels_key_is_denied(self, policy_path: Path) -> None:
         tool_input = {"method": "create", "owner": "o", "repo": "r"}
         decision = gate.decide(
-            "mcp__github__issue_write", tool_input, labels_path=labels_path
+            "mcp__github__issue_write", tool_input, policy_path=policy_path
         )
         assert decision is not None
 
-    def test_labels_wrong_type_treated_as_empty(self, labels_path: Path) -> None:
+    def test_labels_wrong_type_treated_as_empty(self, policy_path: Path) -> None:
         decision = gate.decide(
-            "mcp__github__issue_write", _create_input("type:fix"), labels_path=labels_path
+            "mcp__github__issue_write", _create_input("type:fix"), policy_path=policy_path
         )
         assert decision is not None
 
-    def test_update_method_passes(self, labels_path: Path) -> None:
+    def test_update_method_passes(self, policy_path: Path) -> None:
         tool_input = {"method": "update", "owner": "o", "repo": "r", "labels": []}
         assert (
-            gate.decide("mcp__github__issue_write", tool_input, labels_path=labels_path)
+            gate.decide("mcp__github__issue_write", tool_input, policy_path=policy_path)
             is None
         )
 
@@ -214,14 +202,14 @@ class TestDecide:
             "Bash",
         ],
     )
-    def test_off_target_tools_pass(self, tool_name: str, labels_path: Path) -> None:
-        assert gate.decide(tool_name, _create_input([]), labels_path=labels_path) is None
+    def test_off_target_tools_pass(self, tool_name: str, policy_path: Path) -> None:
+        assert gate.decide(tool_name, _create_input([]), policy_path=policy_path) is None
 
     def test_missing_sot_fails_open(self, tmp_path: Path) -> None:
         decision = gate.decide(
             "mcp__github__issue_write",
             _create_input([]),
-            labels_path=tmp_path / "absent.json",
+            policy_path=tmp_path / "absent.toml",
         )
         assert decision is None
 

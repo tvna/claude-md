@@ -90,7 +90,6 @@ import scan_hook_coverage_drift
 import scan_hook_predicate_surface_drift
 import scan_input_contract_drift
 import scan_issue_anchor_drift
-import scan_label_sot_drift
 import scan_maintainability_metrics
 import scan_markdown_links
 import scan_mermaid_syntax
@@ -251,7 +250,6 @@ CONTRACT_REGISTRY: dict[tuple[str, str | None], str] = {
     ("scan_apm_lock_drift.py", "verify"): "test_scan_apm_lock_drift_verify_matches_workflow_args",
     ("scan_compile_from_source.py", "verify"): "test_scan_compile_from_source_verify_matches_workflow_args",
     ("scan_commit_type_label_drift.py", "verify"): "test_scan_commit_type_label_drift_verify_matches_workflow_args",
-    ("scan_label_sot_drift.py", "verify"): "test_scan_label_sot_drift_verify_matches_workflow_args",
     ("scan_devcontainer_tool_drift.py", "verify"): "test_scan_devcontainer_tool_drift_verify_matches_workflow_args",
     ("scan_doc_workflow_refs.py", "verify"): "test_scan_doc_workflow_refs_verify_matches_workflow_args",
     ("scan_docs_inventory.py", "verify"): "test_scan_docs_inventory_verify_matches_workflow_args",
@@ -986,17 +984,23 @@ def test_dependabot_disable_automerge_matches_workflow_args(
 
 def test_dependabot_labels_verify_matches_workflow_paths(tmp_path: Path) -> None:
     dependabot = tmp_path / "dependabot.yml"
-    labels = tmp_path / "labels.json"
+    policy = tmp_path / "label-policy.toml"
     dependabot.write_text("updates:\n  - labels:\n      - dependencies\n", encoding="utf-8")
-    labels.write_text(
-        json.dumps(
-            [{"name": "dependencies", "color": "0366d6", "description": ""}]
+    policy.write_text(
+        "\n".join(
+            [
+                "[[labels]]",
+                'name = "dependencies"',
+                'status = "keep"',
+                'description = "Dependency update workflow state."',
+                'color = "0366d6"',
+            ]
         ),
         encoding="utf-8",
     )
 
     assert dependabot_labels.main(
-        ["verify", "--dependabot", str(dependabot), "--labels", str(labels)]
+        ["verify", "--dependabot", str(dependabot), "--label-policy", str(policy)]
     ) == 0
 
 
@@ -1023,22 +1027,30 @@ def test_issue_link_verify_matches_workflow_body_file_and_author(
 def test_labels_apply_validate_and_plan_match_workflow_args(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    sot = tmp_path / "labels.json"
-    sot.write_text(
-        json.dumps([{"name": "type:fix", "color": "d73a4a", "description": "Bug fix"}]),
+    policy = tmp_path / "label-policy.toml"
+    policy.write_text(
+        "\n".join(
+            [
+                "[[labels]]",
+                'name = "type:fix"',
+                'status = "keep"',
+                'description = "Bug fix"',
+                'color = "d73a4a"',
+            ]
+        ),
         encoding="utf-8",
     )
     monkeypatch.setenv("GH_TOKEN", "token")
     monkeypatch.setattr(labels_apply, "fetch_live_labels", lambda repo, token: [])
 
-    assert labels_apply.main(["validate", "--sot", str(sot)]) == 0
+    assert labels_apply.main(["validate", "--policy", str(policy)]) == 0
     assert labels_apply.main(
         [
             "plan",
             "--repo",
             REPO,
-            "--sot",
-            str(sot),
+            "--policy",
+            str(policy),
             "--prune",
             "false",
             "--dry-run",
@@ -1857,12 +1869,6 @@ def test_scan_commit_type_label_drift_verify_matches_workflow_args() -> None:
     """Mirrors the ``Verify type:* labels match title-policy commit types``
     step in ``.github/workflows/verify-agents.yml`` (issue #2081)."""
     assert scan_commit_type_label_drift.main(["verify"]) == 0
-
-
-def test_scan_label_sot_drift_verify_matches_workflow_args() -> None:
-    """Mirrors the ``Verify labels.json matches label-policy.toml`` step in
-    ``.github/workflows/verify-agents.yml`` (issue #2442)."""
-    assert scan_label_sot_drift.main(["verify"]) == 0
 
 
 def test_scan_devcontainer_tool_drift_verify_matches_workflow_args() -> None:
@@ -3344,8 +3350,8 @@ def test_scan_session_path_drift_verify_matches_workflow_args() -> None:
                     "plan",
                     "--repo",
                     REPO,
-                    "--sot",
-                    str(tmp / "missing.json"),
+                    "--policy",
+                    str(tmp / "missing.toml"),
                     "--prune",
                     "maybe",
                     "--dry-run",

@@ -6,19 +6,20 @@ Couples the two homes of the retro:* labels so they cannot drift apart:
   (``ALL_RETRO_LABELS``), a side-effect-free Python constant imported widely at
   runtime.
 * ``.github/label-policy.toml`` ``[[labels]]`` under ``family == "retro"``; the
-  labels' IDENTITY (name/description/color), the single authored source that
-  ``.github/labels.json`` reconciles to and ``scripts/scan_label_sot_drift.py``
-  validates.
+  labels' IDENTITY (name/description/color) in the single label SoT, from which
+  ``apply-labels.yml`` derives the live catalog it reconciles to GitHub.
 
 Before #2442 batch 1 the retro:* identity lived only in ``labels.json`` and was
-exempt from the parity gate. Folding it into ``label-policy.toml`` closed that
-gap, but the name set now exists in two files; this test is the enforceable
-coupling that keeps them identical. Its sibling
-``tests/test_retro_labels_in_sot.py`` guards the separate prune-safety invariant
-(the names must also stay in ``labels.json`` so an ``apply-labels.yml``
-``prune=true`` run cannot delete them).
+exempt from the old parity gate. Folding it into ``label-policy.toml`` closed
+that gap, and #2499 retired ``labels.json`` entirely so the policy is now the
+one authored home; this test is the enforceable coupling that keeps the policy
+``retro`` family and the ``ALL_RETRO_LABELS`` constant identical. Because the
+retro:* entries are ``status = "keep"`` in the policy, they are in the derived
+live catalog, so an ``apply-labels.yml`` ``prune=true`` run cannot delete them
+(the prune-safety invariant #1119 first exposed).
 
-Refs #2442 (this coupling), #558 (the retro:* constants).
+Refs #2442 (this coupling), #558 (the retro:* constants), #1119 (prune safety),
+#2499 (labels.json retirement).
 """
 
 from __future__ import annotations
