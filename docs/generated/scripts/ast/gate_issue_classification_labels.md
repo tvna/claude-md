@@ -11,27 +11,6 @@ flowchart TD
     N001 -->|"start"| N002
 ```
 
-## load_axis_labels(...)
-
-```mermaid
-flowchart TD
-    N001["load_axis_labels(...)"]
-    N002["raw = loads(...)"]
-    N003["if not isinstance(raw, list)"]
-    N004["raise ValueError('<str>')"]
-    N005["names = [entry['<str>'] for entry in raw if isinstance(entry, dict) and isinstance(entry.get('<str>'), str)]"]
-    N006["axes = {}"]
-    N007["for axis, prefix in axis_prefixes():     axes[axis] = frozenset((name for name in names if name.startswith(prefix)))"]
-    N008["return axes"]
-    N001 -->|"start"| N002
-    N002 --> N003
-    N003 -->|"true"| N004
-    N003 -->|"false"| N005
-    N005 --> N006
-    N006 --> N007
-    N007 --> N008
-```
-
 ## load_axis_labels_from_policy(...)
 
 ```mermaid
@@ -89,7 +68,7 @@ flowchart TD
     N004["if tool_input.get('method') != _CREATE_METHOD"]
     N005["return None"]
     N006["try"]
-    N007["axes = load_axis_labels(...)"]
+    N007["axes = load_axis_labels_from_policy(...)"]
     N008["except (OSError, ValueError, LookupError, TypeError, RuntimeError)"]
     N009["print(...)"]
     N010["return None"]

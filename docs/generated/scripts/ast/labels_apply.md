@@ -107,19 +107,6 @@ flowchart TD
     N007 -->|"false"| N009
 ```
 
-## load_sot(...)
-
-```mermaid
-flowchart TD
-    N001["load_sot(...)"]
-    N002["with path.open(encoding='<str>') as handle:     sot = json.load(handle)"]
-    N003["validate_sot(...)"]
-    N004["return sot"]
-    N001 -->|"start"| N002
-    N002 --> N003
-    N003 --> N004
-```
-
 ## load_rename_map(...)
 
 ```mermaid
@@ -196,19 +183,6 @@ flowchart TD
     N012 --> N013
 ```
 
-## _resolve_sot(...)
-
-```mermaid
-flowchart TD
-    N001["_resolve_sot(...)"]
-    N002["if args.source == 'label-policy'"]
-    N003["return (args.policy, load_sot_from_policy)"]
-    N004["return (args.sot, load_sot)"]
-    N001 -->|"start"| N002
-    N002 -->|"true"| N003
-    N002 -->|"false"| N004
-```
-
 ## main(...)
 
 ```mermaid
@@ -221,18 +195,17 @@ flowchart TD
     N006["_add_common_args(...)"]
     N007["args = parse_args(...)"]
     N008["try"]
-    N009["(sot_path, sot_loader) = _resolve_sot(...)"]
-    N010["if args.command == 'validate'"]
-    N011["sot_loader(...)"]
-    N012["return 0"]
-    N013["token = get(...)"]
-    N014["if not token"]
-    N015["print(...)"]
-    N016["return 1"]
-    N017["return run(mode=args.command, repo=args.repo, sot_path=sot_path, prune=_parse_bool(args.prune), dry_run=_parse_bool(args.dry_run), summary_file=args.summary_file, token=token, rename_map=load_rename_map(args.policy), sot_loader=sot_loader)"]
-    N018["except (OSError, json.JSONDecodeError, RuntimeError, ValueError)"]
-    N019["print(...)"]
-    N020["return 1"]
+    N009["if args.command == 'validate'"]
+    N010["load_sot_from_policy(...)"]
+    N011["return 0"]
+    N012["token = get(...)"]
+    N013["if not token"]
+    N014["print(...)"]
+    N015["return 1"]
+    N016["return run(mode=args.command, repo=args.repo, sot_path=args.policy, prune=_parse_bool(args.prune), dry_run=_parse_bool(args.dry_run), summary_file=args.summary_file, token=token, rename_map=load_rename_map(args.policy), sot_loader=load_sot_from_policy)"]
+    N017["except (OSError, json.JSONDecodeError, RuntimeError, ValueError)"]
+    N018["print(...)"]
+    N019["return 1"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
@@ -241,17 +214,16 @@ flowchart TD
     N006 --> N007
     N007 --> N008
     N008 -->|"try"| N009
-    N009 --> N010
-    N010 -->|"true"| N011
-    N011 --> N012
-    N010 -->|"false"| N013
-    N013 --> N014
-    N014 -->|"true"| N015
-    N015 --> N016
-    N014 -->|"false"| N017
-    N008 -->|"raises"| N018
+    N009 -->|"true"| N010
+    N010 --> N011
+    N009 -->|"false"| N012
+    N012 --> N013
+    N013 -->|"true"| N014
+    N014 --> N015
+    N013 -->|"false"| N016
+    N008 -->|"raises"| N017
+    N017 --> N018
     N018 --> N019
-    N019 --> N020
 ```
 
 ## _add_common_args(...)
@@ -264,17 +236,13 @@ flowchart TD
     N004["add_argument(...)"]
     N005["add_argument(...)"]
     N006["add_argument(...)"]
-    N007["add_argument(...)"]
-    N008["add_argument(...)"]
-    N009["end"]
+    N007["end"]
     N001 -->|"start"| N002
     N002 --> N003
     N003 --> N004
     N004 --> N005
     N005 --> N006
     N006 --> N007
-    N007 --> N008
-    N008 --> N009
 ```
 
 ## _write_summary_header(...)
