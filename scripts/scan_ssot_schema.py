@@ -62,9 +62,8 @@ from collections.abc import Callable
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _json_schema_subset import SchemaError, validate_shape
-
 import labels_apply
+from _json_schema_subset import SchemaError, validate_shape
 
 _SCRIPT = "scan_ssot_schema"
 _REPO_ROOT = Path(__file__).resolve().parent.parent
