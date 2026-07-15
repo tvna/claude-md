@@ -124,10 +124,10 @@ record as a snapshot in time.
 ## Scanner behaviour summary
 
 The scanner under `scripts/scan_retro_followup_drift.py` runs daily at
-06:37 UTC. For each open retro issue (filtered by `type:docs` plus a
-family-grouped OR of `layer:meta` and `layer:p3-harness`, resolved from
-the SSoT registry per the `auto_retro.issue_labels` successor migration
-at #2313) it:
+06:37 UTC. For each open retro issue (filtered by `type:docs` plus
+`layer:p3-harness`, resolved from the SSoT registry per the
+`auto_retro.issue_labels` successor migration at #2313; the retired
+`layer:meta` was dropped from this registry entry by #2393) it:
 
 1. Parses the retro body for follow-up `#N` references in checkbox
    bullet form (`- [ ]` or `- [x]` with a `#N` somewhere on the same

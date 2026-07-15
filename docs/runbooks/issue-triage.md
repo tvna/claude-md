@@ -45,7 +45,11 @@ Slug names are stable historical layer keys; descriptions track the current `mas
 | `layer:p4-safety-boundary` | §4 | Safety boundary; simplicity, tool scope, secret exposure |
 | `layer:p5-scale-quality` | §5 | Change scope, agent split, and quality proportional to scale |
 | `layer:p6-handoff` | §6 | Handoff & communication |
-| `layer:meta` | (none) | Repo infrastructure governing the meta-document itself (labels, rulesets, workflows). NOT a CLAUDE.md principle. |
+
+`layer:meta` (repo infrastructure governing the meta-document itself:
+labels, rulesets, workflows) is retired; it was dropped from the live
+catalog and every registry entry by #2393. Use the concrete layer plus
+`area:area-policy` when needed instead.
 
 Multi-layer issues (e.g. an RFC that moves a rule from §1 to §3) carry every applicable `layer:*` label. Coverage check is cardinality ≥ 1.
 
