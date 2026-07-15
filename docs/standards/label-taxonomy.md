@@ -340,14 +340,20 @@ live catalog, so discovery now keys on `layer:p3-harness` alone. The
 issue still carrying it was backfilled to `type:docs`, and the label was
 pruned from the live catalog (a bare `retrospective` label did not exist
 live at prune time, so nothing further was needed there). The
-`discovery_only_labels` registry entry for `scripts/auto_retro.py` was
-deliberately kept, not dropped: `fetch_past_retro_population` /
-`fetch_past_retro_labels` search all issue states (not just open) to feed
-the label-derived prior and the triage report, and only the open retros
-were backfilled to `type:docs` by #972, not the larger closed historical
-population, so dropping the entry would silently shrink that population's
-sample (caught by Codex review on #2492). It stays until the closed
-historical retros are backfilled to `type:docs` (see #2413). The 11
+`discovery_only_labels` registry entry for `scripts/auto_retro.py` still
+lists `type:retrospective`, but it is currently inert: deleting a label
+removes it from every issue that carried it, open or closed, not only the
+ones a batch chose to relabel, so the #972 prune already stripped
+`type:retrospective` from the closed historical retros too, not just the
+open ones backfilled to `type:docs`. A `label:type:retrospective` search
+therefore cannot surface any issue today, closed or open (caught by Codex
+review on PR #2510, correcting an earlier assumption in this doc and in
+the registry entry's own note). `fetch_past_retro_population` /
+`fetch_past_retro_labels` (which search all issue states to feed the
+label-derived prior and the triage report) get no benefit from this entry
+right now; recovering the closed historical population, if still wanted,
+needs a different mechanism than this label (e.g. the `is_retro_issue_title`
+title pattern) and is an open follow-up (see #2413). The 11
 declared-but-not-live `area:*` labels were promoted to `status = "keep"`
 and added to the catalog in #2506. The remaining #972 work is the
 `ops:coverage-failure` disposition. Refs #1060, #2313, #2383, #2393,
