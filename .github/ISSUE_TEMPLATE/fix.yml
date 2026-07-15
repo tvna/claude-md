@@ -86,7 +86,6 @@ body:
         - "layer:p4-safety-boundary"
         - "layer:p5-scale-quality"
         - "layer:p6-handoff"
-        - "layer:meta"
     validations:
       required: true
   - type: input

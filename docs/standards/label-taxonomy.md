@@ -168,17 +168,17 @@ that closes or references a retro issue, so triage cannot be skipped.
 As of PR #2383, `scripts/auto_retro.py` no longer emits the retired
 `layer:meta` on a newly opened retro: its create-time identity set
 (`_identity_labels`) is `layer:p3-harness` + `area:ci-ops` alongside
-`type:docs` (successor decided at #1041 comment 4882932274). The
-retro-discovery queries in `fetch_past_retro_labels`,
+`type:docs` (successor decided at #1041 comment 4882932274). #2393
+completed the retirement: every open retro was backfilled with
+`layer:p3-harness`, `layer:meta` was dropped from the
+`scripts/auto_retro.py` and `scripts/scan_retro_followup_drift.py`
+registry entries, and the label was pruned from the live GitHub catalog.
+The retro-discovery queries in `fetch_past_retro_labels`,
 `search_open_retro_issues`, and `scripts/scan_retro_followup_drift.py`
-no longer key on a bare `label:layer:meta`; they now use a family-grouped
-OR of `layer:meta` and `layer:p3-harness` (via
-`_ssot.group_labels_by_family`, since `_discovery_labels` retains the
-retired label for search only) so retros filed before and after the
-migration both stay discoverable. `layer:meta` therefore survives in the
-registry entry as a deliberate transition aid; its removal from the live
-catalog and the registry is tracked by #2393. Refs #1060, #1050, #2313,
-#1041, #2383.
+now key on `layer:p3-harness` alone (still routed through
+`_ssot.group_labels_by_family`, kept as a single-member group so the
+mechanism stays reusable if a future migration needs it again).
+Refs #1060, #1050, #2313, #1041, #2383, #2393.
 
 ## Severity Labels
 
@@ -326,22 +326,35 @@ templates, tests, backfill assignments, and then run `apply-labels.yml` with
 `prune=true` only after the dry-run plan contains exactly the authorized
 delete set.
 
-For retrospectives specifically, the label re-key has already landed ahead
-of the broader #972 rollout, via #2313 (PR #2383):
-`scripts/auto_retro.py` no longer emits `layer:meta` on a newly opened retro
-(`_identity_labels` now yields `layer:p3-harness` + `area:ci-ops`), and retro
-discovery in `scripts/auto_retro.py` (`fetch_past_retro_labels`,
+For retrospectives specifically, the label re-key landed ahead of the
+broader #972 rollout, via #2313 (PR #2383): `scripts/auto_retro.py` no
+longer emits `layer:meta` on a newly opened retro (`_identity_labels` now
+yields `layer:p3-harness` + `area:ci-ops`), and retro discovery in
+`scripts/auto_retro.py` (`fetch_past_retro_labels`,
 `search_open_retro_issues`) and `scripts/scan_retro_followup_drift.py` was
-re-keyed onto a family-grouped OR of `layer:meta` and `layer:p3-harness`
-(via `_ssot.group_labels_by_family`), not the `is_retro_issue_title` predicate
-originally sketched here. The residual retro work is the live-catalog and
-registry removal of `layer:meta`, owned by #2393. The `type:retrospective`
-retirement itself landed as a #972 batch: every open issue still carrying it
-was backfilled to `type:docs`, the `discovery_only_labels` registry entry for
-`scripts/auto_retro.py` was dropped, and the label was pruned from the live
-catalog (a bare `retrospective` label did not exist live at prune time, so
-nothing further was needed there). The 11 declared-but-not-live `area:*` labels
-were promoted to `status = "keep"` and added to the catalog in #2506. The
-remaining #972 work is unrelated to `type:retrospective`: dropping `layer:meta`
-from the live catalog, and the `ops:coverage-failure` disposition. Refs #1060,
-#2313, #2383, #2393, #2506, #972.
+re-keyed onto `_ssot.group_labels_by_family`, not the `is_retro_issue_title`
+predicate originally sketched here. #2393 completed the retirement:
+`layer:meta` was dropped from both registry entries and pruned from the
+live catalog, so discovery now keys on `layer:p3-harness` alone. The
+`type:retrospective` retirement itself landed as a #972 batch: every open
+issue still carrying it was backfilled to `type:docs`, and the label was
+pruned from the live catalog (a bare `retrospective` label did not exist
+live at prune time, so nothing further was needed there). The
+`discovery_only_labels` registry entry for `scripts/auto_retro.py` still
+lists `type:retrospective`, but it is currently inert: deleting a label
+removes it from every issue that carried it, open or closed, not only the
+ones a batch chose to relabel, so the #972 prune already stripped
+`type:retrospective` from the closed historical retros too, not just the
+open ones backfilled to `type:docs`. A `label:type:retrospective` search
+therefore cannot surface any issue today, closed or open (caught by Codex
+review on PR #2510, correcting an earlier assumption in this doc and in
+the registry entry's own note). `fetch_past_retro_population` /
+`fetch_past_retro_labels` (which search all issue states to feed the
+label-derived prior and the triage report) get no benefit from this entry
+right now; recovering the closed historical population, if still wanted,
+needs a different mechanism than this label (e.g. the `is_retro_issue_title`
+title pattern) and is an open follow-up (see #2413). The 11
+declared-but-not-live `area:*` labels were promoted to `status = "keep"`
+and added to the catalog in #2506. The remaining #972 work is the
+`ops:coverage-failure` disposition. Refs #1060, #2313, #2383, #2393,
+#2413, #2492, #2506, #972.
