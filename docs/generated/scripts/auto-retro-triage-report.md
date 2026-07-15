@@ -8,11 +8,11 @@ Open untriaged: **43**
 
 ## Anomalies
 
-- **unlabelled ratio 0.95**: 98 of 103 observed retros carry no `retro:*` label (>= 0.50, n >= 5); retros are being opened faster than they are triaged.
+- **unlabelled ratio 0.94**: 97 of 103 observed retros carry no `retro:*` label (>= 0.50, n >= 5); retros are being opened faster than they are triaged.
 
 ## Loop health
 
-- Triage rate: **5 / 103** (5%) of observed retros carry a `retro:*` label; **98** (95%) remain unlabelled.
+- Triage rate: **6 / 103** (6%) of observed retros carry a `retro:*` label; **97** (94%) remain unlabelled.
 - Sentinel disposal: **0** (0%) auto-closed via `retro:expired` without operator engagement.
 
 ## Triage status
@@ -21,11 +21,11 @@ Open untriaged: **43**
 pie showData
     title Triage status
     "retro:tp" : 5
-    "retro:fp" : 0
+    "retro:fp" : 1
     "retro:fp-candidate" : 0
     "retro:tentative" : 0
     "retro:expired" : 0
-    "unlabelled" : 98
+    "unlabelled" : 97
 ```
 
 ## Signal occurrence and false-positive rates
@@ -38,7 +38,7 @@ pie showData
 
 ## False-positive rate trend
 
-- All-time: 0.00 (n=5 triaged)
+- All-time: 0.17 (n=6 triaged)
 - Last 20 retros: 0.00 (n=0 triaged); n/a
 
 ## Recent retros
