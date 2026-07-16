@@ -1,5 +1,5 @@
 name: claude-md
-version: 2.0.0
+version: 2.0.1
 description: Personal universal agent instructions, compiled to CLAUDE.md,
   AGENTS.md and GEMINI.md for every apm-cli-supported tool via `apm compile
   --target all` (#2210).

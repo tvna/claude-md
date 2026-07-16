@@ -250,6 +250,79 @@ class TestScanLinePatternC:
 
 
 # ---------------------------------------------------------------------------
+# scan_line: Pattern D (bare issue-number reference)
+# ---------------------------------------------------------------------------
+
+
+class TestScanLinePatternD:
+    @pytest.mark.parametrize(
+        "line,ref",
+        [
+            # The exact regression this pattern was added for: a stray
+            # issue citation left in the resolve-review-thread
+            # instruction (section 3), caught by no prior pattern.
+            ("resolve the thread before closing the turn. Refs #1932.", "#1932"),
+            ("closes #230", "#230"),
+            ("see issue #1", "#1"),
+        ],
+    )
+    def test_issue_ref_detected(self, line: str, ref: str) -> None:
+        hits = sap.scan_line(line)
+        assert hits == [f"{sap.ISSUE_REF_HIT_PREFIX}{ref}"]
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            # Markdown headings: "#" is followed by a space, not a digit.
+            "## 3. Use Git Ecosystem Effectively",
+            # A canonical URL names the issue by path, not by "#digits".
+            "see https://github.com/tvna/claude-md/issues/230",
+            # Generic English/code near the concept but not the shorthand.
+            "C# is a language",
+            "APM Version: 0.12.1",
+            # Empty / whitespace.
+            "",
+            "   ",
+        ],
+    )
+    def test_issue_ref_no_false_positive(self, line: str) -> None:
+        assert sap.scan_line(line) == []
+
+    def test_issue_ref_not_suppressed_by_ack_marker(self) -> None:
+        # Regression guard (Codex review on PR #2516): the ack marker
+        # must not bypass Pattern D. The original leaked line needed the
+        # marker for its mcp__github__ token; a co-located issue-number
+        # reference must still be caught.
+        line = "Refs #1932. <!-- portability-ack -->"
+        assert sap.scan_line(line) == [f"{sap.ISSUE_REF_HIT_PREFIX}#1932"]
+
+    def test_issue_ref_not_suppressed_by_ack_marker_with_pattern_a_token(self) -> None:
+        # The exact shape of the original regression: a Pattern A token
+        # (mcp__github__) legitimately needs the marker on the same line
+        # as the leaked issue reference. Pattern A is suppressed by the
+        # marker; Pattern D is not.
+        line = "call mcp__github__resolve_review_thread. Refs #1234. <!-- portability-ack -->"
+        assert sap.scan_line(line) == [f"{sap.ISSUE_REF_HIT_PREFIX}#1234"]
+
+    def test_multiple_issue_refs_in_one_line(self) -> None:
+        line = "Refs #1768, #1923, #1931."
+        hits = sap.scan_line(line)
+        assert sorted(hits) == sorted(
+            [
+                f"{sap.ISSUE_REF_HIT_PREFIX}#1768",
+                f"{sap.ISSUE_REF_HIT_PREFIX}#1923",
+                f"{sap.ISSUE_REF_HIT_PREFIX}#1931",
+            ]
+        )
+
+    def test_issue_ref_and_token_both_detected(self) -> None:
+        line = "see scripts/foo.py, refs #1932"
+        hits = sap.scan_line(line)
+        assert "scripts/" in hits
+        assert f"{sap.ISSUE_REF_HIT_PREFIX}#1932" in hits
+
+
+# ---------------------------------------------------------------------------
 # scan_text
 # ---------------------------------------------------------------------------
 
