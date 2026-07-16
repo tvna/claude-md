@@ -7,18 +7,22 @@ This file is generated from `scripts/scan_apm_portability.py` by `python3 script
 ```mermaid
 flowchart TD
     N001["scan_line(...)"]
-    N002["if ACK_MARKER in line"]
-    N003["return []"]
-    N004["hits = [token for token in FORBIDDEN_TOKENS if token in line]"]
-    N005["for pattern in FORBIDDEN_PHRASE_PATTERNS:     match = pattern.search(line)     if match is not None:         hits.append(f'{PHRASE_HIT_PREFIX}{match.group(0)}')"]
-    N006["extend(...)"]
-    N007["return hits"]
+    N002["issue_ref_hits = [f'{ISSUE_REF_HIT_PREFIX}{match.group(0)}' for match in FORBIDDEN_ISSUE_REF_PATTERN.finditer(line)]"]
+    N003["if ACK_MARKER in line"]
+    N004["return issue_ref_hits"]
+    N005["hits = [token for token in FORBIDDEN_TOKENS if token in line]"]
+    N006["for pattern in FORBIDDEN_PHRASE_PATTERNS:     match = pattern.search(line)     if match is not None:         hits.append(f'{PHRASE_HIT_PREFIX}{match.group(0)}')"]
+    N007["extend(...)"]
+    N008["extend(...)"]
+    N009["return hits"]
     N001 -->|"start"| N002
-    N002 -->|"true"| N003
-    N002 -->|"false"| N004
-    N004 --> N005
+    N002 --> N003
+    N003 -->|"true"| N004
+    N003 -->|"false"| N005
     N005 --> N006
     N006 --> N007
+    N007 --> N008
+    N008 --> N009
 ```
 
 ## scan_text(...)
@@ -49,7 +53,7 @@ flowchart TD
 flowchart TD
     N001["_verify(...)"]
     N002["total = 0"]
-    N003["for path in paths:     if not path.exists():         print(f'<str>{path}', file=sys.stderr)         total += 1         continue     for lineno, hit in scan_file(path):         if hit.startswith(PHRASE_HIT_PREFIX):             snippet = hit[len(PHRASE_HIT_PREFIX):]             kind = '<str>'             payload = repr(snippet)         elif hit.startswith(HARNESS_HIT_PREFIX):             snippet = hit[len(HARNESS_HIT_PREFIX):]             kind = '<str>'             payload = repr(snippet)         else:             kind = '<str>'             payload = repr(hit)         print(f'<str>{path}<str>{lineno}<str>{kind}<str>{payload}<str>{ACK_MARKER}<str>', file=sys.stderr)         total += 1"]
+    N003["for path in paths:     if not path.exists():         print(f'<str>{path}', file=sys.stderr)         total += 1         continue     for lineno, hit in scan_file(path):         if hit.startswith(PHRASE_HIT_PREFIX):             snippet = hit[len(PHRASE_HIT_PREFIX):]             kind = '<str>'             payload = repr(snippet)         elif hit.startswith(HARNESS_HIT_PREFIX):             snippet = hit[len(HARNESS_HIT_PREFIX):]             kind = '<str>'             payload = repr(snippet)         elif hit.startswith(ISSUE_REF_HIT_PREFIX):             snippet = hit[len(ISSUE_REF_HIT_PREFIX):]             kind = '<str>'             payload = repr(snippet)         else:             kind = '<str>'             payload = repr(hit)         print(f'<str>{path}<str>{lineno}<str>{kind}<str>{payload}<str>{ACK_MARKER}<str>', file=sys.stderr)         total += 1"]
     N004["if total"]
     N005["print(...)"]
     N006["return 1"]
