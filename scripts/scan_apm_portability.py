@@ -45,9 +45,9 @@ The contract is:
     :data:`FORBIDDEN_ISSUE_REF_PATTERN` (e.g. ``#1932``). A downstream
     consumer of the compiled universal text has no such issue in its own
     tracker, so the reference is meaningless once copied out of this
-    repo -- the same portability-violation class Pattern A guards
+    repo (the same portability-violation class Pattern A guards
     against, and the standard CLAUDE.md section 6 itself sets for
-    decision briefs ("never bare repository-local numbers"). Introduced
+    decision briefs: "never bare repository-local numbers"). Introduced
     after a stray "Refs #1932." leaked into section 3's
     resolve-review-thread instruction and passed Patterns A-C
     undetected.
@@ -113,7 +113,7 @@ ISSUE_REF_HIT_PREFIX = "issue-ref:"
 # Bare GitHub issue-number shorthand, e.g. ``#1932``. A downstream
 # consumer of the compiled universal text has no such issue in its own
 # tracker, so the reference is meaningless once copied out of this repo
-# -- the same portability-violation class Pattern A guards against.
+# (the same portability-violation class Pattern A guards against).
 # CLAUDE.md section 6 states the same rule for decision briefs ("never
 # bare repository-local numbers"); this pattern holds the universal text
 # to that standard. Introduced after a stray "Refs #1932." leaked into
