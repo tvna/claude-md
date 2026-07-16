@@ -250,6 +250,65 @@ class TestScanLinePatternC:
 
 
 # ---------------------------------------------------------------------------
+# scan_line: Pattern D (bare issue-number reference)
+# ---------------------------------------------------------------------------
+
+
+class TestScanLinePatternD:
+    @pytest.mark.parametrize(
+        "line,ref",
+        [
+            # The exact regression this pattern was added for: a stray
+            # issue citation left in the resolve-review-thread
+            # instruction (section 3), caught by no prior pattern.
+            ("resolve the thread before closing the turn. Refs #1932.", "#1932"),
+            ("closes #230", "#230"),
+            ("see issue #1", "#1"),
+        ],
+    )
+    def test_issue_ref_detected(self, line: str, ref: str) -> None:
+        hits = sap.scan_line(line)
+        assert hits == [f"{sap.ISSUE_REF_HIT_PREFIX}{ref}"]
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            # Markdown headings: "#" is followed by a space, not a digit.
+            "## 3. Use Git Ecosystem Effectively",
+            # A canonical URL names the issue by path, not by "#digits".
+            "see https://github.com/tvna/claude-md/issues/230",
+            # Generic English/code near the concept but not the shorthand.
+            "C# is a language",
+            "APM Version: 0.12.1",
+            # The ack marker on a line that names an issue.
+            "Refs #1932. <!-- portability-ack -->",
+            # Empty / whitespace.
+            "",
+            "   ",
+        ],
+    )
+    def test_issue_ref_no_false_positive(self, line: str) -> None:
+        assert sap.scan_line(line) == []
+
+    def test_multiple_issue_refs_in_one_line(self) -> None:
+        line = "Refs #1768, #1923, #1931."
+        hits = sap.scan_line(line)
+        assert sorted(hits) == sorted(
+            [
+                f"{sap.ISSUE_REF_HIT_PREFIX}#1768",
+                f"{sap.ISSUE_REF_HIT_PREFIX}#1923",
+                f"{sap.ISSUE_REF_HIT_PREFIX}#1931",
+            ]
+        )
+
+    def test_issue_ref_and_token_both_detected(self) -> None:
+        line = "see scripts/foo.py, refs #1932"
+        hits = sap.scan_line(line)
+        assert "scripts/" in hits
+        assert f"{sap.ISSUE_REF_HIT_PREFIX}#1932" in hits
+
+
+# ---------------------------------------------------------------------------
 # scan_text
 # ---------------------------------------------------------------------------
 

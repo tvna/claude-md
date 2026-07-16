@@ -16,7 +16,7 @@ The contract is:
   ``.apm/instructions/master.instructions.md``, ``CLAUDE.md``, and
   ``AGENTS.md`` (defense in depth: scan source and both compiled
   outputs).
-* Each line is scanned for three violation classes:
+* Each line is scanned for four violation classes:
 
   - **Pattern A**; forbidden literal substrings in
     :data:`FORBIDDEN_TOKENS` (case-sensitive). Concrete repo-local
@@ -41,6 +41,16 @@ The contract is:
     Pattern A/B, and was caught only by owner review. Claude-only hook
     scripts and settings may name these tools freely; this layer scans
     only the universal/compiled artifacts.
+  - **Pattern D**; bare GitHub issue-number shorthand matched by
+    :data:`FORBIDDEN_ISSUE_REF_PATTERN` (e.g. ``#1932``). A downstream
+    consumer of the compiled universal text has no such issue in its own
+    tracker, so the reference is meaningless once copied out of this
+    repo -- the same portability-violation class Pattern A guards
+    against, and the standard CLAUDE.md section 6 itself sets for
+    decision briefs ("never bare repository-local numbers"). Introduced
+    after a stray "Refs #1932." leaked into section 3's
+    resolve-review-thread instruction and passed Patterns A-C
+    undetected.
 
 * Lines containing :data:`ACK_MARKER` are skipped for all layers. This
   mirrors the ``ACK_MARKER`` escape hatch in
@@ -54,7 +64,7 @@ The contract is:
   identifies itself in the error message so the operator knows which
   layer fired.
 
-Tested by ``tests/test_scan_apm_portability.py``. Refs #230, #535, #1048.
+Tested by ``tests/test_scan_apm_portability.py``. Refs #230, #535, #1048, #2515.
 """
 
 from __future__ import annotations
@@ -94,6 +104,22 @@ PHRASE_HIT_PREFIX = "phrase:"
 # :data:`PHRASE_HIT_PREFIX`. The bare tool name follows the prefix so
 # callers recover it by stripping the prefix.
 HARNESS_HIT_PREFIX = "harness:"
+
+# Prefix marking Pattern D (bare issue-number reference) hits, mirroring
+# :data:`PHRASE_HIT_PREFIX`. The matched ``#<digits>`` token follows the
+# prefix so callers recover it by stripping the prefix.
+ISSUE_REF_HIT_PREFIX = "issue-ref:"
+
+# Bare GitHub issue-number shorthand, e.g. ``#1932``. A downstream
+# consumer of the compiled universal text has no such issue in its own
+# tracker, so the reference is meaningless once copied out of this repo
+# -- the same portability-violation class Pattern A guards against.
+# CLAUDE.md section 6 states the same rule for decision briefs ("never
+# bare repository-local numbers"); this pattern holds the universal text
+# to that standard. Introduced after a stray "Refs #1932." leaked into
+# section 3's resolve-review-thread instruction and passed Patterns A-C
+# undetected.
+FORBIDDEN_ISSUE_REF_PATTERN: re.Pattern[str] = re.compile(r"#\d+")
 
 # Harness-specific tool identifiers forbidden in the universal artifacts.
 # Case-sensitive CamelCase identifiers, matched as literal substrings
@@ -151,9 +177,10 @@ def scan_line(line: str) -> list[str]:
 
     Pattern A hits are returned as the matching literal token from
     :data:`FORBIDDEN_TOKENS`. Pattern B hits are returned as
-    ``f"{PHRASE_HIT_PREFIX}{matched-snippet}"`` and Pattern C hits as
-    ``f"{HARNESS_HIT_PREFIX}{tool-name}"`` so callers can tell the
-    layers apart without a second pass.
+    ``f"{PHRASE_HIT_PREFIX}{matched-snippet}"``, Pattern C hits as
+    ``f"{HARNESS_HIT_PREFIX}{tool-name}"``, and Pattern D hits as
+    ``f"{ISSUE_REF_HIT_PREFIX}{matched-snippet}"`` so callers can tell
+    the layers apart without a second pass.
 
     Lines carrying :data:`ACK_MARKER` are treated as explicitly allowed
     and return an empty list.
@@ -166,6 +193,9 @@ def scan_line(line: str) -> list[str]:
         if match is not None:
             hits.append(f"{PHRASE_HIT_PREFIX}{match.group(0)}")
     hits.extend(f"{HARNESS_HIT_PREFIX}{tool}" for tool in FORBIDDEN_HARNESS_TOOLS if tool in line)
+    hits.extend(
+        f"{ISSUE_REF_HIT_PREFIX}{match.group(0)}" for match in FORBIDDEN_ISSUE_REF_PATTERN.finditer(line)
+    )
     return hits
 
 
@@ -205,6 +235,10 @@ def _verify(paths: Iterable[Path]) -> int:
             elif hit.startswith(HARNESS_HIT_PREFIX):
                 snippet = hit[len(HARNESS_HIT_PREFIX) :]
                 kind = "harness-specific tool name"
+                payload = repr(snippet)
+            elif hit.startswith(ISSUE_REF_HIT_PREFIX):
+                snippet = hit[len(ISSUE_REF_HIT_PREFIX) :]
+                kind = "bare issue-number reference"
                 payload = repr(snippet)
             else:
                 kind = "forbidden repo-local reference"
