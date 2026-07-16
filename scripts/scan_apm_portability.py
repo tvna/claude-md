@@ -183,19 +183,28 @@ def scan_line(line: str) -> list[str]:
     the layers apart without a second pass.
 
     Lines carrying :data:`ACK_MARKER` are treated as explicitly allowed
-    and return an empty list.
+    for Patterns A-C and return no hits for those layers. Pattern D is
+    exempt from the marker: unlike a repo-local token or tool name, a
+    bare issue-number reference has no downstream-safe use CLAUDE.md
+    section 6 recognizes ("never bare repository-local numbers"), so it
+    cannot be acknowledged away. Without this exemption, a line that
+    already needs the marker for an unrelated Pattern A/B/C hit (as the
+    original leaked line did, for its `mcp__github__` token) would let a
+    co-located issue-number reference pass silently, reproducing the
+    exact regression Pattern D exists to catch.
     """
+    issue_ref_hits = [
+        f"{ISSUE_REF_HIT_PREFIX}{match.group(0)}" for match in FORBIDDEN_ISSUE_REF_PATTERN.finditer(line)
+    ]
     if ACK_MARKER in line:
-        return []
+        return issue_ref_hits
     hits: list[str] = [token for token in FORBIDDEN_TOKENS if token in line]
     for pattern in FORBIDDEN_PHRASE_PATTERNS:
         match = pattern.search(line)
         if match is not None:
             hits.append(f"{PHRASE_HIT_PREFIX}{match.group(0)}")
     hits.extend(f"{HARNESS_HIT_PREFIX}{tool}" for tool in FORBIDDEN_HARNESS_TOOLS if tool in line)
-    hits.extend(
-        f"{ISSUE_REF_HIT_PREFIX}{match.group(0)}" for match in FORBIDDEN_ISSUE_REF_PATTERN.finditer(line)
-    )
+    hits.extend(issue_ref_hits)
     return hits
 
 

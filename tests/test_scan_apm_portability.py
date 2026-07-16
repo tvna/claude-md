@@ -280,8 +280,6 @@ class TestScanLinePatternD:
             # Generic English/code near the concept but not the shorthand.
             "C# is a language",
             "APM Version: 0.12.1",
-            # The ack marker on a line that names an issue.
-            "Refs #1932. <!-- portability-ack -->",
             # Empty / whitespace.
             "",
             "   ",
@@ -289,6 +287,22 @@ class TestScanLinePatternD:
     )
     def test_issue_ref_no_false_positive(self, line: str) -> None:
         assert sap.scan_line(line) == []
+
+    def test_issue_ref_not_suppressed_by_ack_marker(self) -> None:
+        # Regression guard (Codex review on PR #2516): the ack marker
+        # must not bypass Pattern D. The original leaked line needed the
+        # marker for its mcp__github__ token; a co-located issue-number
+        # reference must still be caught.
+        line = "Refs #1932. <!-- portability-ack -->"
+        assert sap.scan_line(line) == [f"{sap.ISSUE_REF_HIT_PREFIX}#1932"]
+
+    def test_issue_ref_not_suppressed_by_ack_marker_with_pattern_a_token(self) -> None:
+        # The exact shape of the original regression: a Pattern A token
+        # (mcp__github__) legitimately needs the marker on the same line
+        # as the leaked issue reference. Pattern A is suppressed by the
+        # marker; Pattern D is not.
+        line = "call mcp__github__resolve_review_thread. Refs #1234. <!-- portability-ack -->"
+        assert sap.scan_line(line) == [f"{sap.ISSUE_REF_HIT_PREFIX}#1234"]
 
     def test_multiple_issue_refs_in_one_line(self) -> None:
         line = "Refs #1768, #1923, #1931."
