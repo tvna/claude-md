@@ -37,7 +37,7 @@ jobs:
         # created via the GitHub API (createCommitOnBranch) using the App token,
         # not `git push`, so it is signed/Verified. `persist-credentials: false`
         # here would strip the ls-remote credential. Refs #696, #1137, #1437.
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Mint a short-lived GitHub App installation token so the superseding pin
       # PR is authored by the App bot (not a human PAT owner), its push to main
