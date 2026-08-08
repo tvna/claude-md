@@ -4,6 +4,6 @@
   "description": "Pinned bun toolchain for the deterministic Mermaid syntax validation gate (scripts/scan_mermaid_syntax.py). See issue #1597.",
   "dependencies": {
     "jsdom": "29.1.1",
-    "mermaid": "10.9.6"
+    "mermaid": "10.9.8"
   }
 }
