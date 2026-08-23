@@ -23,7 +23,7 @@
           };
           claudeCodeVersion = "2.1.154";
           codexCliVersion = "0.135.0";
-          apmVersion = "0.12.1";
+          apmVersion = "0.28.0";
           wazaVersion = "0.33.0";
           rtkVersion = "0.42.1";
           actionlintVersion = "1.7.7";
@@ -67,11 +67,11 @@
           apmNative = {
             aarch64-linux = {
               archive = "apm-linux-arm64";
-              hash = "sha256-NkplG444MzHPCumW09V7fxZLON40VjSuCP5xFMT546c=";
+              hash = "sha256-CzpkTWBzEG0aBmI+C6oMTXWlrl/+VcMO7ZJ7ukhgARk=";
             };
             x86_64-linux = {
               archive = "apm-linux-x86_64";
-              hash = "sha256-oLiW6MvdEEQRJemJqhnRgMYgUu2nyKqFD+s2eAXRJW8=";
+              hash = "sha256-ftqzurqWZYogEg/I8wEuMiPaeSSTeoy/Fpv5gFhTuNc=";
             };
           }.${system};
           uvNative = {
