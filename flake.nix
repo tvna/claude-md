@@ -25,7 +25,7 @@
           codexCliVersion = "0.135.0";
           apmVersion = "0.12.1";
           wazaVersion = "0.33.0";
-          rtkVersion = "0.42.1";
+          rtkVersion = "0.45.0";
           actionlintVersion = "1.7.7";
           ccusageVersion = "20.0.6";
           # zizmor / lychee / betterleaks are provisioned ONLY by the
@@ -101,11 +101,11 @@
           rtkNative = {
             aarch64-linux = {
               asset = "rtk-aarch64-unknown-linux-gnu.tar.gz";
-              hash = "sha256-MvTXh2bi9bQ3Vu/OPGmdxNqL7vUpbesC+ndW8yV+slw=";
+              hash = "sha256-gKdG3TBe+UT/UO8BGuTOOHjdW6iN/jXYWdBUmBkWN8M=";
             };
             x86_64-linux = {
               asset = "rtk-x86_64-unknown-linux-musl.tar.gz";
-              hash = "sha256-o3yjAKQlEKlkRT8rwuIXdp7whyeAr4AtuKfWmPHaJGU=";
+              hash = "sha256-xMA2+/GB/FXvMpeGyMF+DUJ5crBTuCWUTZaKaq/vG6Q=";
             };
           }.${system};
           # actionlint (rhysd/actionlint) ships per-target release tarballs, each
